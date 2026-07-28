@@ -1,0 +1,2562 @@
+[
+  {
+    "event": "EnableRegion",
+    "service": "account",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Enabling a dormant region is often legitimate expansion; sensitive when an attacker enables an unused region to operate where monitoring/guardrails are absent."
+  },
+  {
+    "event": "PutAlternateContact",
+    "service": "account",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine for ops; sensitive when billing/security/operations contacts are repointed to attacker addresses to divert notifications."
+  },
+  {
+    "event": "PutContactInformation",
+    "service": "account",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Changing primary account contact/address is rare and a classic account-takeover / recovery-abuse precursor."
+  },
+  {
+    "event": "ImportCertificate",
+    "service": "acm",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Common in normal cert management; sensitive when an attacker-supplied cert enables TLS interception or serving content under a trusted name."
+  },
+  {
+    "event": "DeleteBackupPlan",
+    "service": "backup",
+    "category": "impact",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Halting future backups degrades recoverability ahead of a destructive/ransomware attack."
+  },
+  {
+    "event": "DeleteBackupVault",
+    "service": "backup",
+    "category": "impact",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Wipes stored recovery points wholesale; anti-recovery hallmark."
+  },
+  {
+    "event": "DeleteRecoveryPoint",
+    "service": "backup",
+    "category": "impact",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Destroying recovery points removes restore capability; classic ransomware/anti-recovery move."
+  },
+  {
+    "event": "PutBackupVaultAccessPolicy",
+    "service": "backup",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "A permissive vault policy can grant an external account rights to restore/copy backup data."
+  },
+  {
+    "event": "CreateComputeEnvironment",
+    "service": "batch",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Normal for batch workloads; a favored resource-hijacking/cryptomining mechanism when unexpected."
+  },
+  {
+    "event": "RegisterJobDefinition",
+    "service": "batch",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when it attaches a powerful job IAM role or privileged settings to stage role abuse/container escape."
+  },
+  {
+    "event": "SubmitJob",
+    "service": "batch",
+    "category": "impact",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Ubiquitous compute execution; a cryptomining/resource-hijack signal in volume or from unexpected principals."
+  },
+  {
+    "event": "CreateStack",
+    "service": "cloudformation",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine IaC; sensitive when deployed with a passed service role that provisions privileged resources the caller could not create directly."
+  },
+  {
+    "event": "CreateStackInstances",
+    "service": "cloudformation",
+    "category": "lateral-movement",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Normal in StackSet orgs; a powerful cross-account/region push worth review when the actor or targets are unexpected."
+  },
+  {
+    "event": "UpdateStack",
+    "service": "cloudformation",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine IaC; sensitive when the stack's execution role is abused to inject backdoors or escalate."
+  },
+  {
+    "event": "DeleteEventDataStore",
+    "service": "cloudtrail",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Destroys CloudTrail Lake long-retention query evidence used for investigations."
+  },
+  {
+    "event": "DeleteTrail",
+    "service": "cloudtrail",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Destroys the audit trail to blind detection; IaC teardown can also trigger it, but presence always warrants a look."
+  },
+  {
+    "event": "PutEventSelectors",
+    "service": "cloudtrail",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Narrows what management/data events are logged, letting an attacker carve out their activity while the trail stays 'on'."
+  },
+  {
+    "event": "StopLogging",
+    "service": "cloudtrail",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Halts CloudTrail delivery so subsequent activity is unrecorded; almost never legitimate in a monitored account."
+  },
+  {
+    "event": "UpdateTrail",
+    "service": "cloudtrail",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Can scope a trail to one region, break multi-region logging, or repoint delivery to a hijacked bucket."
+  },
+  {
+    "event": "DeleteAlarms",
+    "service": "cloudwatch",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Common in IaC/ops churn; sensitive when it removes alarms that would notify on suspicious thresholds."
+  },
+  {
+    "event": "DisableAlarmActions",
+    "service": "cloudwatch",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Leaves alarms in place but suppresses notifications/actions; quietly defeats alerting when abused."
+  },
+  {
+    "event": "AdminAddUserToGroup",
+    "service": "cognito-idp",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine user administration; sensitive when adding a user to a privileged group mapped to IAM roles."
+  },
+  {
+    "event": "AdminCreateUser",
+    "service": "cognito-idp",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Normal app onboarding; sensitive as a foothold identity for application access."
+  },
+  {
+    "event": "AdminSetUserPassword",
+    "service": "cognito-idp",
+    "category": "credential-access",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Legitimate admin password resets occur; enables takeover of any Cognito account when abused."
+  },
+  {
+    "event": "SetUserPoolMfaConfig",
+    "service": "cognito-idp",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Weakening or disabling MFA on a user pool strips a key auth control for all its users."
+  },
+  {
+    "event": "UpdateUserPoolClient",
+    "service": "cognito-idp",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when it changes allowed auth flows, callback URLs, or token lifetimes to enable token theft."
+  },
+  {
+    "event": "DeleteConfigRule",
+    "service": "config",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Occurs in normal rule management; sensitive when it removes a rule so attacker misconfigs stop flagging as non-compliant."
+  },
+  {
+    "event": "DeleteConfigurationRecorder",
+    "service": "config",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Permanently removes Config recording, eliminating the configuration timeline attackers evade."
+  },
+  {
+    "event": "DeleteDeliveryChannel",
+    "service": "config",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Breaks Config's export of snapshots/history to S3, cutting off downstream evidence delivery."
+  },
+  {
+    "event": "StopConfigurationRecorder",
+    "service": "config",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Stops Config from recording resource changes, blinding drift and compliance detection."
+  },
+  {
+    "event": "DeleteLandingZone",
+    "service": "controltower",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Tears down Control Tower governance and baseline controls for the org."
+  },
+  {
+    "event": "DisableControl",
+    "service": "controltower",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Removes a preventive/detective guardrail across an OU."
+  },
+  {
+    "event": "CreateBackup",
+    "service": "dynamodb",
+    "category": "exfiltration",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Routine backups; can precede a cross-account restore used to copy table data."
+  },
+  {
+    "event": "DeleteBackup",
+    "service": "dynamodb",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Removing backups destroys recovery points; can be anti-forensic tampering."
+  },
+  {
+    "event": "DeleteTable",
+    "service": "dynamodb",
+    "category": "impact",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Immediate, irreversible destruction of a table and its data; benign in dev/IaC teardown."
+  },
+  {
+    "event": "ExportTableToPointInTime",
+    "service": "dynamodb",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Exports full table data to an S3 bucket the actor controls, bypassing table-level IAM entirely."
+  },
+  {
+    "event": "RestoreTableFromBackup",
+    "service": "dynamodb",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Legitimate for DR; sensitive when recreating table contents into an actor-controlled table to sidestep controls."
+  },
+  {
+    "event": "RestoreTableToPointInTime",
+    "service": "dynamodb",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Legitimate for DR/cloning; sensitive when restoring into a new (possibly cross-account) table the attacker can read."
+  },
+  {
+    "event": "Scan",
+    "service": "dynamodb",
+    "category": "data-access",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Extremely common full-table read (data event); consistent with bulk exfiltration only in anomalous volume or from new principals."
+  },
+  {
+    "event": "UpdateContinuousBackups",
+    "service": "dynamodb",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Disabling PITR removes recovery capability; enabling can set up a point-in-time export."
+  },
+  {
+    "event": "AcceptVpcPeeringConnection",
+    "service": "ec2",
+    "category": "lateral-movement",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Normal networking; sensitive when completing a cross-VPC/cross-account path for pivoting."
+  },
+  {
+    "event": "AttachInternetGateway",
+    "service": "ec2",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine VPC setup; sensitive when it exposes a previously private subnet directly to the internet."
+  },
+  {
+    "event": "AuthorizeSecurityGroupEgress",
+    "service": "ec2",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Very common; sensitive when it loosens outbound rules to permit C2 callbacks or data exfiltration."
+  },
+  {
+    "event": "AuthorizeSecurityGroupIngress",
+    "service": "ec2",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Highly routine; sensitive when opening 0.0.0.0/0 on 22/3389/DB ports, exposing resources to the attacker."
+  },
+  {
+    "event": "CopySnapshot",
+    "service": "ec2",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Legitimate for backups/migration; sensitive when copying cross-region/account to stage data outside monitored boundaries."
+  },
+  {
+    "event": "CreateImage",
+    "service": "ec2",
+    "category": "data-access",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Normal AMI baking; captures a full disk image including embedded secrets, ready for sharing/exfil."
+  },
+  {
+    "event": "CreateKeyPair",
+    "service": "ec2",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine; sensitive when baked into launches for durable instance access."
+  },
+  {
+    "event": "CreateNetworkAclEntry",
+    "service": "ec2",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Normal networking; sensitive when a subnet-level rule broadly allows traffic and weakens segmentation."
+  },
+  {
+    "event": "CreateRoute",
+    "service": "ec2",
+    "category": "lateral-movement",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine; sensitive when a route redirects traffic through an attacker instance or opens an exfil path."
+  },
+  {
+    "event": "CreateSnapshot",
+    "service": "ec2",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Very common backup step; the first link of the snapshot-share-copy data-theft chain when paired with sharing."
+  },
+  {
+    "event": "CreateTrafficMirrorSession",
+    "service": "ec2",
+    "category": "credential-access",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Mirrors VPC traffic to capture in-transit credentials, tokens, and sensitive data; rarely legitimate."
+  },
+  {
+    "event": "CreateTrafficMirrorTarget",
+    "service": "ec2",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Defines the (often attacker-controlled) destination that mirrored packet captures are sent to."
+  },
+  {
+    "event": "CreateTransitGatewayVpcAttachment",
+    "service": "ec2",
+    "category": "lateral-movement",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Normal in hub-spoke networks; sensitive when bridging into networks spanning many accounts."
+  },
+  {
+    "event": "CreateVpcPeeringConnection",
+    "service": "ec2",
+    "category": "lateral-movement",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine; sensitive when peering to an attacker-controlled VPC/account to bridge networks."
+  },
+  {
+    "event": "DeleteFlowLogs",
+    "service": "ec2",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Deletes VPC Flow Logs, an anti-forensic move that blinds network-level telemetry for lateral movement/exfil."
+  },
+  {
+    "event": "DeleteNetworkAclEntry",
+    "service": "ec2",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when removing a NACL deny rule that was blocking traffic."
+  },
+  {
+    "event": "DescribeInstances",
+    "service": "ec2",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Ubiquitous in normal ops; recon signal in bulk from a new/unexpected principal enumerating instances, IPs, and roles."
+  },
+  {
+    "event": "DescribeSecurityGroups",
+    "service": "ec2",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Routine read; recon of firewall rules to find exposed ports before an attack."
+  },
+  {
+    "event": "DisableEbsEncryptionByDefault",
+    "service": "ec2",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Turns off default EBS encryption, weakening data-at-rest protection for new volumes; rarely legitimate."
+  },
+  {
+    "event": "GetPasswordData",
+    "service": "ec2",
+    "category": "credential-access",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sometimes used legitimately; retrieves the encrypted Windows Administrator password, decryptable with the key pair."
+  },
+  {
+    "event": "ImportKeyPair",
+    "service": "ec2",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when importing an attacker-controlled public key for persistent instance access."
+  },
+  {
+    "event": "ModifyImageAttribute",
+    "service": "ec2",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Cross-account AMI sharing happens in orgs; sensitive when sharing an AMI externally or making it public via launchPermission."
+  },
+  {
+    "event": "ModifyInstanceAttribute",
+    "service": "ec2",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Occurs in normal ops; sensitive when editing userData to plant a root script, disabling source/dest check, or swapping the instance profile."
+  },
+  {
+    "event": "ModifyNetworkInterfaceAttribute",
+    "service": "ec2",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when it changes an ENI's security groups or disables source/dest check to enable routing/pivoting."
+  },
+  {
+    "event": "ModifySnapshotAttribute",
+    "service": "ec2",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Cross-account snapshot sharing occurs legitimately; a classic volume-data exfil path when createVolumePermission is added for an external account or 'all'."
+  },
+  {
+    "event": "ReplaceRoute",
+    "service": "ec2",
+    "category": "lateral-movement",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when rewriting a route to hijack/MITM traffic via an attacker-controlled next hop."
+  },
+  {
+    "event": "ResetSnapshotAttribute",
+    "service": "ec2",
+    "category": "defense-evasion",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Low signal alone; relevant alongside snapshot-sharing abuse when resetting share permissions."
+  },
+  {
+    "event": "RevokeSecurityGroupIngress",
+    "service": "ec2",
+    "category": "defense-evasion",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Usually benign; can disrupt services or tamper with existing controls during an intrusion."
+  },
+  {
+    "event": "RunInstances",
+    "service": "ec2",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Highly routine; cryptomining/attacker-infra signal, and can escalate via an attached instance profile (iam:PassRole)."
+  },
+  {
+    "event": "SharedSnapshotCopyInitiated",
+    "service": "ec2",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Fires in the owning account when an external account copies your shared snapshot, evidencing active data theft."
+  },
+  {
+    "event": "SharedSnapshotVolumeCreated",
+    "service": "ec2",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "External account created a volume from your shared snapshot, confirming access to your disk data."
+  },
+  {
+    "event": "TerminateInstances",
+    "service": "ec2",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Common in autoscaling/ops; sensitive as outage-causing sabotage or anti-forensic removal of a compromised host."
+  },
+  {
+    "event": "BatchGetImage",
+    "service": "ecr",
+    "category": "exfiltration",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Extremely noisy in CI/CD; the signal for exfiltration of proprietary private container images when from unexpected principals."
+  },
+  {
+    "event": "GetAuthorizationToken",
+    "service": "ecr",
+    "category": "credential-access",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Ubiquitous docker-login token; the necessary precursor to any image pull or push."
+  },
+  {
+    "event": "PutImage",
+    "service": "ecr",
+    "category": "persistence",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Constant in CI/CD; sensitive when re-tagging a trusted tag (e.g. :latest) so downstream deployments pull backdoored images."
+  },
+  {
+    "event": "SetRepositoryPolicy",
+    "service": "ecr",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when granting cross-account pull/push, exposing private images."
+  },
+  {
+    "event": "CreateService",
+    "service": "ecs",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine deployment; sensitive as self-healing persistence keeping a malicious container alive."
+  },
+  {
+    "event": "ExecuteCommand",
+    "service": "ecs",
+    "category": "lateral-movement",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "ECS Exec opens an interactive shell into a running container (hands-on-keyboard access)."
+  },
+  {
+    "event": "RegisterTaskDefinition",
+    "service": "ecs",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine; sensitive when specifying a powerful task role, privileged mode, or host mounts to set up role theft/container escape."
+  },
+  {
+    "event": "RunTask",
+    "service": "ecs",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Normal workload launch; paired with a crafted task definition it exposes task-role credentials."
+  },
+  {
+    "event": "UpdateService",
+    "service": "ecs",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine redeploy; sensitive when pointing a trusted service at a malicious task definition."
+  },
+  {
+    "event": "CreateAccessPoint",
+    "service": "efs",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive as an additional application-level entry path into file system data."
+  },
+  {
+    "event": "CreateMountTarget",
+    "service": "efs",
+    "category": "lateral-movement",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when exposing an EFS file system to another subnet reachable by attacker hosts."
+  },
+  {
+    "event": "PutFileSystemPolicy",
+    "service": "efs",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when granting cross-account or overly broad mount access to file data."
+  },
+  {
+    "event": "AssociateAccessPolicy",
+    "service": "eks",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Grants a Kubernetes RBAC policy (e.g. cluster-admin) to an IAM principal, a direct path to cluster takeover."
+  },
+  {
+    "event": "CreateAccessEntry",
+    "service": "eks",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Maps an arbitrary IAM principal into the cluster's access model, prerequisite for granting attacker identities Kubernetes access."
+  },
+  {
+    "event": "CreateCluster",
+    "service": "eks",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Legitimate provisioning; a resource-hijacking/cryptomining signal when not routine."
+  },
+  {
+    "event": "UpdateClusterConfig",
+    "service": "eks",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when disabling control-plane audit logging or opening the API server's public endpoint."
+  },
+  {
+    "event": "DeleteRule",
+    "service": "events",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Heavy benign use; sensitive when removing automated detection/response wiring."
+  },
+  {
+    "event": "PutPermission",
+    "service": "events",
+    "category": "lateral-movement",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Opens an event bus to another account, enabling cross-account event injection or exfiltration."
+  },
+  {
+    "event": "PutRule",
+    "service": "events",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Common serverless wiring; a scheduled/API-event rule is a frequent persistence/trigger mechanism."
+  },
+  {
+    "event": "PutTargets",
+    "service": "events",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when attaching a Lambda/other target to wire up an event-driven persistence payload."
+  },
+  {
+    "event": "CreateFilter",
+    "service": "guardduty",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Legitimate tuning exists; sensitive when a suppression filter with auto-archive silently hides the attacker's own findings."
+  },
+  {
+    "event": "CreateIPSet",
+    "service": "guardduty",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when a trusted-IP list whitelists attacker infrastructure so GuardDuty stops flagging it."
+  },
+  {
+    "event": "DeleteDetector",
+    "service": "guardduty",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Deletes the GuardDuty detector, fully disabling threat detection for the account/region."
+  },
+  {
+    "event": "DeletePublishingDestination",
+    "service": "guardduty",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Removes export of findings to S3/SIEM, cutting central visibility while the detector appears healthy."
+  },
+  {
+    "event": "DisassociateMembers",
+    "service": "guardduty",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when a delegated admin detaches member accounts from centralized GuardDuty monitoring."
+  },
+  {
+    "event": "UpdateDetector",
+    "service": "guardduty",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Can suspend GuardDuty or slow finding publishing; presence warrants confirming it is benign tuning vs disabling."
+  },
+  {
+    "event": "AddClientIDToOpenIDConnectProvider",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when adding an audience that widens who can federate into roles."
+  },
+  {
+    "event": "AddRoleToInstanceProfile",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine for EC2 provisioning; enables EC2 credential abuse and lateral movement when abused."
+  },
+  {
+    "event": "AddUserToGroup",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Common user admin; sensitive when adding a user to a privileged group to inherit its permissions."
+  },
+  {
+    "event": "AttachGroupPolicy",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Attaches a managed policy to a group, elevating every member at once."
+  },
+  {
+    "event": "AttachRolePolicy",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Attaches a managed policy (e.g. AdministratorAccess) to a role, broadening effective permissions."
+  },
+  {
+    "event": "AttachUserPolicy",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Attaches a managed policy directly to a user; classic privilege escalation."
+  },
+  {
+    "event": "ChangePassword",
+    "service": "iam",
+    "category": "credential-access",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine hygiene; can lock out the legitimate owner post-compromise."
+  },
+  {
+    "event": "CreateAccessKey",
+    "service": "iam",
+    "category": "credential-access",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Mints long-lived programmatic credentials; a top attacker action, especially when created on another principal."
+  },
+  {
+    "event": "CreateLoginProfile",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Adds console password access to a principal that had none (often programmatic-only), a classic backdoor."
+  },
+  {
+    "event": "CreateOpenIDConnectProvider",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Registers an OIDC IdP; a federated backdoor into the account if attacker-controlled."
+  },
+  {
+    "event": "CreatePolicy",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Common in policy management; sensitive when staging a permissive policy for later broad attachment."
+  },
+  {
+    "event": "CreatePolicyVersion",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Frequent in IaC policy updates; sensitive when a new default version silently widens a managed policy's permissions."
+  },
+  {
+    "event": "CreateRole",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine; sensitive when created with a permissive trust policy for later assumption."
+  },
+  {
+    "event": "CreateSAMLProvider",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Registers a SAML IdP; a rogue provider becomes a federated backdoor into the account."
+  },
+  {
+    "event": "CreateServiceSpecificCredential",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Mints service-specific credentials (e.g. CodeCommit) as a stealthy secondary credential; uncommon enough to review."
+  },
+  {
+    "event": "CreateUser",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "IaC/legacy IAM use is common; a new principal is a classic backdoor identity, especially in SSO-first orgs, so correlate with who created it."
+  },
+  {
+    "event": "CreateVirtualMFADevice",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Normal user/root onboarding; can be attacker persistence binding their own device on a compromised identity."
+  },
+  {
+    "event": "DeactivateMFADevice",
+    "service": "iam",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Removes MFA from a user, weakening authentication to enable takeover; rarely part of routine ops."
+  },
+  {
+    "event": "DeleteAccessKey",
+    "service": "iam",
+    "category": "defense-evasion",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Usually benign key rotation; can erase attacker credential traces."
+  },
+  {
+    "event": "DeleteAccountPasswordPolicy",
+    "service": "iam",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Removes the password policy entirely, lowering credential hygiene account-wide; rarely legitimate."
+  },
+  {
+    "event": "DeleteLoginProfile",
+    "service": "iam",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Can be cleanup or a deliberate lockout of a user, or covering tracks after abuse."
+  },
+  {
+    "event": "DeleteRole",
+    "service": "iam",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine teardown; can destroy evidence of a backdoor trust relationship."
+  },
+  {
+    "event": "DeleteRolePermissionsBoundary",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Removes a role's permissions boundary, uncapping its effective permissions; uncommon and security-relevant."
+  },
+  {
+    "event": "DeleteSAMLProvider",
+    "service": "iam",
+    "category": "defense-evasion",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Can disrupt federation or clean up a rogue provider."
+  },
+  {
+    "event": "DeleteUser",
+    "service": "iam",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine offboarding; can destroy evidence of a rogue identity."
+  },
+  {
+    "event": "DeleteUserPermissionsBoundary",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Removes a user's permissions boundary, uncapping their effective permissions; uncommon and security-relevant."
+  },
+  {
+    "event": "DeleteVirtualMFADevice",
+    "service": "iam",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Occurs during legitimate device rotation; can strip an auth protection ahead of takeover."
+  },
+  {
+    "event": "DetachRolePolicy",
+    "service": "iam",
+    "category": "defense-evasion",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Routine; can remove an explicit Deny or weaken a guardrail on a role."
+  },
+  {
+    "event": "DetachUserPolicy",
+    "service": "iam",
+    "category": "defense-evasion",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Routine; can remove an explicit Deny or weaken least-privilege on a user."
+  },
+  {
+    "event": "EnableMFADevice",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Normal account hardening; an attacker registering their own device locks in access, so correlate who/when."
+  },
+  {
+    "event": "GetAccountAuthorizationDetails",
+    "service": "iam",
+    "category": "discovery",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Generated by audit/compliance tooling; a prime enumeration signal that dumps the entire IAM config in one call from an unexpected principal."
+  },
+  {
+    "event": "GetLoginProfile",
+    "service": "iam",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Heavily generated by tooling/audits; recon for whether a user has console access when picking privesc targets."
+  },
+  {
+    "event": "ListAccessKeys",
+    "service": "iam",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Common audit read; credential reconnaissance when enumerated broadly by an unusual principal."
+  },
+  {
+    "event": "ListRoles",
+    "service": "iam",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Ubiquitous read; enumerates roles and trust policies to find assumable targets."
+  },
+  {
+    "event": "ListUsers",
+    "service": "iam",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Ubiquitous read; a staple of automated enumeration toolkits."
+  },
+  {
+    "event": "PutGroupPolicy",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Inlines an arbitrary permissions policy onto a group, elevating all members."
+  },
+  {
+    "event": "PutRolePolicy",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Inlines an arbitrary permissions policy onto a role."
+  },
+  {
+    "event": "PutUserPermissionsBoundary",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Can add an intended guardrail (benign) or relax one; sensitive when it removes an intended ceiling."
+  },
+  {
+    "event": "PutUserPolicy",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Inlines an arbitrary permissions policy onto a user."
+  },
+  {
+    "event": "ResyncMFADevice",
+    "service": "iam",
+    "category": "credential-access",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Usually a benign self-service fix; can accompany an attacker taking control of a token during takeover."
+  },
+  {
+    "event": "SetDefaultPolicyVersion",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Occurs in IaC policy updates; a stealthy privesc when switching to a pre-staged permissive version."
+  },
+  {
+    "event": "SimulatePrincipalPolicy",
+    "service": "iam",
+    "category": "discovery",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when used to hunt for privilege-escalation paths by testing a principal's effective permissions."
+  },
+  {
+    "event": "TagRole",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "In ABAC environments, adding tags to a role can grant tag-conditioned access; otherwise benign."
+  },
+  {
+    "event": "TagUser",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "In ABAC environments, adding tags to a user can grant tag-conditioned access; otherwise benign."
+  },
+  {
+    "event": "UpdateAccessKey",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Sensitive when reactivating a dormant key silently restores attacker access."
+  },
+  {
+    "event": "UpdateAccountPasswordPolicy",
+    "service": "iam",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Can strengthen or weaken; sensitive when it weakens length/rotation to ease credential attacks."
+  },
+  {
+    "event": "UpdateAssumeRolePolicy",
+    "service": "iam",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Rewrites a role's trust policy to let an attacker-controlled principal assume it."
+  },
+  {
+    "event": "UpdateLoginProfile",
+    "service": "iam",
+    "category": "credential-access",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Resets a user's console password; a classic account-takeover step, especially when target differs from the caller."
+  },
+  {
+    "event": "UpdateOpenIDConnectProviderThumbprint",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Legitimate on cert rotation; sensitive when changed to trust a rogue IdP certificate."
+  },
+  {
+    "event": "UpdateSAMLProvider",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Alters a SAML IdP's metadata, potentially trusting an attacker-controlled identity provider."
+  },
+  {
+    "event": "UploadSSHPublicKey",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Sensitive when adding an SSH public key (CodeCommit) as a secondary credential on a user."
+  },
+  {
+    "event": "UploadSigningCertificate",
+    "service": "iam",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Uploads an X.509 signing certificate as an alternate API credential; uncommon and credential-adding."
+  },
+  {
+    "event": "CreateGroupMembership",
+    "service": "identitystore",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when adding a user to a privileged Identity Center group that inherits permission-set assignments."
+  },
+  {
+    "event": "CreateUser",
+    "service": "identitystore",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Normal user provisioning; establishes a new principal for standing federated access."
+  },
+  {
+    "event": "Disable",
+    "service": "inspector2",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Disables Amazon Inspector vulnerability scanning; the generic name makes eventSource=inspector2 essential context."
+  },
+  {
+    "event": "CreateGrant",
+    "service": "kms",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Very common from AWS service integrations (EBS, etc.); a stealthy persistent-decrypt grant when the grantee is an unexpected principal."
+  },
+  {
+    "event": "Decrypt",
+    "service": "kms",
+    "category": "credential-access",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Core action for reading protected secrets/envelope-encrypted data; anomalous volume or new principals matter, otherwise pure noise."
+  },
+  {
+    "event": "DisableKey",
+    "service": "kms",
+    "category": "impact",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Instantly denies decryption across every resource encrypted with the key; a fast DoS/ransom lever."
+  },
+  {
+    "event": "DisableKeyRotation",
+    "service": "kms",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Weakens crypto hygiene and can preserve a compromised key version an attacker still controls."
+  },
+  {
+    "event": "Encrypt",
+    "service": "kms",
+    "category": "impact",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Rarely a signal alone; bursts can indicate cloud ransomware re-encrypting data with an attacker-controlled key."
+  },
+  {
+    "event": "GenerateDataKey",
+    "service": "kms",
+    "category": "data-access",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Envelope-encryption workhorse; only interesting in bulk or from unexpected identities."
+  },
+  {
+    "event": "ImportKeyMaterial",
+    "service": "kms",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Legitimate for BYOK; gives an attacker offline control over what the CMK can decrypt when unexpected."
+  },
+  {
+    "event": "PutKeyPolicy",
+    "service": "kms",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Rewrites who can use/administer a key, letting an attacker grant themselves decrypt rights or lock out owners."
+  },
+  {
+    "event": "RevokeGrant",
+    "service": "kms",
+    "category": "defense-evasion",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Part of grant-abuse chains; revoking legitimate grants can deny access or clean up attacker tooling."
+  },
+  {
+    "event": "ScheduleKeyDeletion",
+    "service": "kms",
+    "category": "impact",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Queues irreversible destruction of a CMK, rendering all data it protects permanently unrecoverable after the window."
+  },
+  {
+    "event": "AddLayerVersionPermission",
+    "service": "lambda",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when sharing a layer cross-account as a supply-chain path to distribute a malicious layer."
+  },
+  {
+    "event": "AddPermission",
+    "service": "lambda",
+    "category": "persistence",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Fires routinely for S3/EventBridge triggers; sensitive when granting invoke to a public or cross-account principal."
+  },
+  {
+    "event": "CreateEventSourceMapping",
+    "service": "lambda",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Normal wiring; gives event-driven persistence or a covert tap on a stream/queue/table when abused."
+  },
+  {
+    "event": "CreateFunction",
+    "service": "lambda",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine; a function attached to an IAM execution role is a common foothold for running attacker code."
+  },
+  {
+    "event": "CreateFunctionUrlConfig",
+    "service": "lambda",
+    "category": "persistence",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Legitimate for webhooks; sensitive when AuthType=NONE exposes an unauthenticated internet-facing backdoor to the code."
+  },
+  {
+    "event": "GetFunction",
+    "service": "lambda",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Returns a presigned S3 URL to download the deployment package; enables code theft and recon of secrets in env vars."
+  },
+  {
+    "event": "Invoke",
+    "service": "lambda",
+    "category": "privilege-escalation",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Ubiquitous data event; abused to run code under the function's IAM role."
+  },
+  {
+    "event": "UpdateFunctionCode",
+    "service": "lambda",
+    "category": "persistence",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Constant in CI/CD; the classic Lambda backdoor/supply-chain tampering vector when overwriting a trusted, privileged function."
+  },
+  {
+    "event": "UpdateFunctionConfiguration",
+    "service": "lambda",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when swapping the execution role or injecting env vars/layers to escalate or alter behavior."
+  },
+  {
+    "event": "DeleteLogGroup",
+    "service": "logs",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Common in IaC teardown; anti-forensic when destroying application/VPC/Lambda logs and attached metric filters."
+  },
+  {
+    "event": "DeleteLogStream",
+    "service": "logs",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when erasing evidence of activity while leaving the log group intact."
+  },
+  {
+    "event": "DeleteMetricFilter",
+    "service": "logs",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when deleting the metric filter feeding alarms (e.g. root-login/unauthorized-API), breaking log-based detections."
+  },
+  {
+    "event": "DeleteSubscriptionFilter",
+    "service": "logs",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when it stops real-time log forwarding to a SIEM/Lambda/Firehose."
+  },
+  {
+    "event": "PutRetentionPolicy",
+    "service": "logs",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine config; sensitive when shortening retention (e.g. to one day) to prune logs before investigators can pull them."
+  },
+  {
+    "event": "DisableMacie",
+    "service": "macie2",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Disables Macie, ending sensitive-data discovery that could reveal exfiltration staging."
+  },
+  {
+    "event": "UpdateMacieSession",
+    "service": "macie2",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when suspending the session or cutting finding-publishing frequency to degrade data-security visibility."
+  },
+  {
+    "event": "AcceptHandshake",
+    "service": "organizations",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Normal org onboarding; sensitive when completing an invite that joins a malicious account or enables org takeover."
+  },
+  {
+    "event": "AttachPolicy",
+    "service": "organizations",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Can be a benign guardrail addition or a permissive SCP that grants broad allow / overrides restrictive policy across accounts."
+  },
+  {
+    "event": "CloseAccount",
+    "service": "organizations",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Closing a member account is destructive and can disrupt services or hide prior activity; rarely routine."
+  },
+  {
+    "event": "CreateAccount",
+    "service": "organizations",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Normal provisioning; a new member account can serve as an attacker foothold under the org's trust."
+  },
+  {
+    "event": "CreatePolicy",
+    "service": "organizations",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when staging a permissive or attacker-controlled SCP for later attachment."
+  },
+  {
+    "event": "DeletePolicy",
+    "service": "organizations",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Deletes an SCP, removing a guardrail definition entirely from the org."
+  },
+  {
+    "event": "DeregisterDelegatedAdministrator",
+    "service": "organizations",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Removing delegated admin for GuardDuty/Security Hub/Access Analyzer can blind org-wide detection."
+  },
+  {
+    "event": "DetachPolicy",
+    "service": "organizations",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Detaching an SCP strips org-wide guardrails from an account or OU, re-enabling denied actions."
+  },
+  {
+    "event": "DisableAWSServiceAccess",
+    "service": "organizations",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Disabling trusted access can sever a security service's org-wide integration; uncommon and high-impact."
+  },
+  {
+    "event": "DisablePolicyType",
+    "service": "organizations",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Disabling SERVICE_CONTROL_POLICY turns off all SCP enforcement for the org root at once."
+  },
+  {
+    "event": "EnableAWSServiceAccess",
+    "service": "organizations",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when enabling trusted access wires in attacker tooling org-wide."
+  },
+  {
+    "event": "InviteAccountToOrganization",
+    "service": "organizations",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when inviting an attacker-controlled account extends org trust and RAM/SSO reach to it."
+  },
+  {
+    "event": "LeaveOrganization",
+    "service": "organizations",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "A member leaving the org drops all SCPs, delegated security services, and consolidated logging in one call."
+  },
+  {
+    "event": "MoveAccount",
+    "service": "organizations",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine reorganization; sensitive when relocating an account to a less-restricted OU to escape SCPs."
+  },
+  {
+    "event": "RegisterDelegatedAdministrator",
+    "service": "organizations",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Registers a member account as delegated admin for an org service, granting cross-account control."
+  },
+  {
+    "event": "RemoveAccountFromOrganization",
+    "service": "organizations",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Ejecting a member from the management side removes it from org guardrails and centralized monitoring."
+  },
+  {
+    "event": "UpdatePolicy",
+    "service": "organizations",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Editing an SCP document can silently weaken deny statements protecting the whole org."
+  },
+  {
+    "event": "AcceptResourceShareInvitation",
+    "service": "ram",
+    "category": "lateral-movement",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when pulling external shared resources into the account to enable pivots."
+  },
+  {
+    "event": "AssociateResourceShare",
+    "service": "ram",
+    "category": "lateral-movement",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when adding external principals/resources extends access outside the account boundary."
+  },
+  {
+    "event": "CreateResourceShare",
+    "service": "ram",
+    "category": "lateral-movement",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when sharing resources to an external account enables cross-account access or data exposure."
+  },
+  {
+    "event": "AddRoleToDBCluster",
+    "service": "rds",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Enables Aurora S3 import/export; sensitive as a data-movement path out of the database."
+  },
+  {
+    "event": "AddRoleToDBInstance",
+    "service": "rds",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Associates an IAM role to enable S3/other integrations usable for exfiltration."
+  },
+  {
+    "event": "CopyDBClusterSnapshot",
+    "service": "rds",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Legitimate for backups; sensitive when copied cross-region/account as an exfil staging step."
+  },
+  {
+    "event": "CopyDBSnapshot",
+    "service": "rds",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Legitimate for backups; sensitive when staging data cross-region/account outside monitoring scope."
+  },
+  {
+    "event": "CreateDBCluster",
+    "service": "rds",
+    "category": "impact",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Routine; may be attacker infrastructure or a restore target, and can flip PubliclyAccessible on creation."
+  },
+  {
+    "event": "CreateDBClusterSnapshot",
+    "service": "rds",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Manual cluster snapshot commonly precedes an attribute-share or copy used to move data out."
+  },
+  {
+    "event": "CreateDBInstance",
+    "service": "rds",
+    "category": "impact",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Very common; can be resource abuse or the target of a snapshot restore."
+  },
+  {
+    "event": "CreateDBSnapshot",
+    "service": "rds",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Benign on its own; the first link in the sharing/export exfil chain."
+  },
+  {
+    "event": "DeleteDBCluster",
+    "service": "rds",
+    "category": "impact",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Can wipe an entire Aurora/DocDB/Neptune dataset, especially with SkipFinalSnapshot."
+  },
+  {
+    "event": "DeleteDBInstance",
+    "service": "rds",
+    "category": "impact",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Destructive removal, especially with SkipFinalSnapshot, causes irreversible data loss."
+  },
+  {
+    "event": "DeleteDBSnapshot",
+    "service": "rds",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when destroying recovery points as anti-forensic tampering to block restoration."
+  },
+  {
+    "event": "DescribeDBInstances",
+    "service": "rds",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Benign at scale; a common recon step enumerating databases and endpoints before targeting."
+  },
+  {
+    "event": "DescribeDBSnapshots",
+    "service": "rds",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Recon phase of a snapshot-exfil chain, identifying shareable/restorable data."
+  },
+  {
+    "event": "DownloadDBLogFilePortion",
+    "service": "rds",
+    "category": "data-access",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when DB logs leak query text, error data, or embedded credentials."
+  },
+  {
+    "event": "ModifyDBCluster",
+    "service": "rds",
+    "category": "credential-access",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Noisy config event; inspect params: MasterUserPassword reset hands over admin DB credentials, PubliclyAccessible exposes it."
+  },
+  {
+    "event": "ModifyDBClusterSnapshotAttribute",
+    "service": "rds",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Shares an Aurora/Neptune/DocumentDB cluster snapshot to another account; rarely benign and a strong exfil signal."
+  },
+  {
+    "event": "ModifyDBInstance",
+    "service": "rds",
+    "category": "credential-access",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Noisy config event; inspect params: MasterUserPassword reset grants DB access, PubliclyAccessible exposes it to the internet."
+  },
+  {
+    "event": "ModifyDBSnapshotAttribute",
+    "service": "rds",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Sharing a snapshot with an external or all accounts is the classic RDS cross-account data-exfiltration move."
+  },
+  {
+    "event": "RestoreDBClusterFromSnapshot",
+    "service": "rds",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Legitimate for DR/cloning; sensitive when restoring into attacker-controlled infrastructure for data theft."
+  },
+  {
+    "event": "RestoreDBClusterToPointInTime",
+    "service": "rds",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Legitimate for DR; sensitive when a PITR clone recreates current data in a cluster the attacker can expose/query."
+  },
+  {
+    "event": "RestoreDBInstanceFromDBSnapshot",
+    "service": "rds",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Legitimate for DR; sensitive when restored into an instance the actor controls to read data without touching the original."
+  },
+  {
+    "event": "RestoreDBInstanceToPointInTime",
+    "service": "rds",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Legitimate for DR; sensitive when a PITR restore clones a live DB into a new instance, bypassing source access controls."
+  },
+  {
+    "event": "StartExportTask",
+    "service": "rds",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Exports an RDS snapshot as Parquet to an S3 bucket the actor can read, bypassing DB engine controls."
+  },
+  {
+    "event": "AuthorizeSnapshotAccess",
+    "service": "redshift",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Grants another AWS account access to a Redshift snapshot; the classic cross-account warehouse exfil technique."
+  },
+  {
+    "event": "CreateCluster",
+    "service": "redshift",
+    "category": "impact",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Routine provisioning; may be attacker infra or a restore target, and can flip PubliclyAccessible on creation."
+  },
+  {
+    "event": "CreateClusterSnapshot",
+    "service": "redshift",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Manual snapshot precedes AuthorizeSnapshotAccess or copy in the warehouse-exfil chain."
+  },
+  {
+    "event": "DeleteCluster",
+    "service": "redshift",
+    "category": "impact",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Warehouse deletion, especially skipping the final snapshot, is destructive and irreversible."
+  },
+  {
+    "event": "EnableSnapshotCopy",
+    "service": "redshift",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when enabling automatic cross-region snapshot copy to move data to a region outside monitoring."
+  },
+  {
+    "event": "GetClusterCredentials",
+    "service": "redshift",
+    "category": "credential-access",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Used in normal auth flows; abused to mint temporary DB credentials for unauthorized warehouse access."
+  },
+  {
+    "event": "ModifyCluster",
+    "service": "redshift",
+    "category": "credential-access",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Inspect params: MasterUserPassword reset yields admin access and PubliclyAccessible exposes the warehouse publicly."
+  },
+  {
+    "event": "ModifyClusterIamRoles",
+    "service": "redshift",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Done legitimately for integrations; attaching IAM roles enables UNLOAD/COPY to arbitrary S3, a direct exfil path."
+  },
+  {
+    "event": "RestoreFromClusterSnapshot",
+    "service": "redshift",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Legitimate for DR; sensitive when restoring into an attacker-controlled cluster to read warehouse data."
+  },
+  {
+    "event": "ChangeResourceRecordSets",
+    "service": "route53",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Extremely routine; enables subdomain takeover, traffic redirection, and ACME-based cert issuance when abused."
+  },
+  {
+    "event": "DeleteHostedZone",
+    "service": "route53",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Occurs in IaC teardown; can black-hole all resolution for the associated domains."
+  },
+  {
+    "event": "DisableDomainTransferLock",
+    "service": "route53domains",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Removing the registrar transfer lock is a classic precursor step to stealing a domain."
+  },
+  {
+    "event": "RegisterDomain",
+    "service": "route53domains",
+    "category": "persistence",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Sensitive when registering lookalike domains for phishing/C2 using the victim's billing."
+  },
+  {
+    "event": "TransferDomainToAnotherAwsAccount",
+    "service": "route53domains",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Moves domain control to an attacker-owned account; a rare, near-irreversible hijack of the org's namespace."
+  },
+  {
+    "event": "UpdateDomainNameservers",
+    "service": "route53domains",
+    "category": "impact",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Repointing nameservers hands full DNS resolution to attacker infrastructure, enabling traffic and email hijack."
+  },
+  {
+    "event": "CopyObject",
+    "service": "s3",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Common data movement; server-side copy can move data into an attacker-controlled bucket without a client download."
+  },
+  {
+    "event": "CreateAccessPoint",
+    "service": "s3",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive as an additional, easily overlooked entry path into bucket data."
+  },
+  {
+    "event": "DeleteBucket",
+    "service": "s3",
+    "category": "impact",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Bucket deletion is destructive and irreversible, a hallmark of sabotage/anti-forensics; benign in IaC teardown."
+  },
+  {
+    "event": "DeleteBucketEncryption",
+    "service": "s3",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Removing default encryption weakens data-at-rest protection and can precede exfiltration/tampering; rarely legitimate."
+  },
+  {
+    "event": "DeleteBucketPolicy",
+    "service": "s3",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when removing a restrictive policy strips deny rules and opens data that was locked down."
+  },
+  {
+    "event": "DeleteBucketPublicAccessBlock",
+    "service": "s3",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Deleting the public access block is rarely legitimate and directly enables public data exposure."
+  },
+  {
+    "event": "DeleteObject",
+    "service": "s3",
+    "category": "impact",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Very common; matters mainly in bulk or with versioning suspended."
+  },
+  {
+    "event": "DeleteObjects",
+    "service": "s3",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine cleanup; bulk deletion consistent with sabotage or ransomware cleanup."
+  },
+  {
+    "event": "GetBucketAcl",
+    "service": "s3",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Recon for public or misconfigured grants worth exploiting; also normal tooling behavior."
+  },
+  {
+    "event": "GetBucketPolicy",
+    "service": "s3",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Used to hunt for permissive/exploitable access configs; also routine reads."
+  },
+  {
+    "event": "GetObject",
+    "service": "s3",
+    "category": "data-access",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "The core object-read primitive and thus the exfiltration action, but overwhelmingly benign in volume; watch anomalous volume/new principals."
+  },
+  {
+    "event": "ListBuckets",
+    "service": "s3",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Classic first recon step; also normal console/tooling behavior."
+  },
+  {
+    "event": "PutAccessPointPolicy",
+    "service": "s3",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when an access point policy grants cross-account or overly broad access as an alternate path to bucket data."
+  },
+  {
+    "event": "PutBucketAcl",
+    "service": "s3",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Adding AllUsers/AuthenticatedUsers or a foreign canonical ID to a bucket ACL exposes data broadly."
+  },
+  {
+    "event": "PutBucketCors",
+    "service": "s3",
+    "category": "defense-evasion",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Sensitive when overly permissive CORS enables browser-based cross-origin reads that facilitate exfiltration."
+  },
+  {
+    "event": "PutBucketEncryption",
+    "service": "s3",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when changing default encryption to an attacker KMS key or weaker setting to undermine confidentiality."
+  },
+  {
+    "event": "PutBucketLifecycle",
+    "service": "s3",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when aggressive expiration rules destroy objects or purge logs for anti-forensics."
+  },
+  {
+    "event": "PutBucketLogging",
+    "service": "s3",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine config; sensitive when overwriting the target to disable S3 access logging and hide object access."
+  },
+  {
+    "event": "PutBucketPolicy",
+    "service": "s3",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Rewriting a bucket policy can grant public or attacker-owned cross-account access to all objects."
+  },
+  {
+    "event": "PutBucketPublicAccessBlock",
+    "service": "s3",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Can strengthen (enable) or relax the block; sensitive when relaxing/disabling removes the guardrail against public exposure."
+  },
+  {
+    "event": "PutBucketReplication",
+    "service": "s3",
+    "category": "exfiltration",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Legitimate replication exists; sensitive when rules silently and continuously copy every object to an external/attacker cross-account bucket."
+  },
+  {
+    "event": "PutBucketVersioning",
+    "service": "s3",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when suspending versioning removes recovery of overwritten objects; a common ransomware precursor."
+  },
+  {
+    "event": "PutBucketWebsite",
+    "service": "s3",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when static website hosting turns a private bucket into a publicly reachable data/malware endpoint."
+  },
+  {
+    "event": "PutObject",
+    "service": "s3",
+    "category": "impact",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Extremely routine; can plant web shells or overwrite data in ransomware."
+  },
+  {
+    "event": "PutObjectAcl",
+    "service": "s3",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when object-level ACLs make individual sensitive objects public without touching the bucket policy."
+  },
+  {
+    "event": "PutObjectLockConfiguration",
+    "service": "s3",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Weakening or disabling object lock removes immutability protections that block deletion and ransomware."
+  },
+  {
+    "event": "BatchGetSecretValue",
+    "service": "secretsmanager",
+    "category": "credential-access",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Bulk retrieval API that harvests many secrets in one call; a strong exfiltration indicator rarely seen in normal ops."
+  },
+  {
+    "event": "DeleteSecret",
+    "service": "secretsmanager",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when destroying a secret breaks dependent services or covers tracks after theft."
+  },
+  {
+    "event": "GetSecretValue",
+    "service": "secretsmanager",
+    "category": "credential-access",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Primary secret-theft signal but also routine app access; watch new principals, mass pulls, or secrets outside a role's normal scope."
+  },
+  {
+    "event": "ListSecrets",
+    "service": "secretsmanager",
+    "category": "discovery",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Enumerates secret names/ARNs; the recon step before targeted GetSecretValue theft."
+  },
+  {
+    "event": "PutResourcePolicy",
+    "service": "secretsmanager",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Attaches a resource policy that can grant cross-account or public read access to a secret's value."
+  },
+  {
+    "event": "PutSecretValue",
+    "service": "secretsmanager",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when overwriting a secret with backdoored credentials or tampering that survives across sessions."
+  },
+  {
+    "event": "ReplicateSecretToRegions",
+    "service": "secretsmanager",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when copying a secret into attacker-chosen regions as a stealthy staging/exfil path outside normal monitoring."
+  },
+  {
+    "event": "BatchDisableStandards",
+    "service": "securityhub",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when disabling entire compliance standards (CIS/FSBP) silences broad swaths of control failures at once."
+  },
+  {
+    "event": "DisableSecurityHub",
+    "service": "securityhub",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Turns off Security Hub, disabling aggregated findings and standards checks for the account."
+  },
+  {
+    "event": "UpdateStandardsControl",
+    "service": "securityhub",
+    "category": "defense-evasion",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Often routine tuning; sensitive when disabling a specific control to hide a targeted misconfiguration."
+  },
+  {
+    "event": "PutIdentityPolicy",
+    "service": "ses",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Attaches a policy to a sending identity that can authorize cross-account or external principals to send as that identity."
+  },
+  {
+    "event": "UpdateAccountSendingEnabled",
+    "service": "ses",
+    "category": "impact",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Re-enabling account sending (often after suppression) is typically done to resume bulk spam or phishing."
+  },
+  {
+    "event": "VerifyDomainIdentity",
+    "service": "ses",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when verifying a new sending domain stands up phishing/spam infrastructure from a trusted account."
+  },
+  {
+    "event": "VerifyEmailIdentity",
+    "service": "ses",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when verifying a new sender identity to abuse the account's email-sending reputation."
+  },
+  {
+    "event": "DeleteProtection",
+    "service": "shield",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Removing Shield Advanced protection strips DDoS mitigation from a resource; rarely legitimate."
+  },
+  {
+    "event": "CheckMfa",
+    "service": "signin",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Part of the login flow probing whether MFA is configured; interesting only as pre-auth enumeration in a suspicious sequence."
+  },
+  {
+    "event": "ConsoleLogin",
+    "service": "signin",
+    "category": "initial-access",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Primary interactive entry point; check responseElements for Failure, additionalEventData.MFAUsed=No, and userIdentity.type=Root for brute force, MFA-less logins, and root usage."
+  },
+  {
+    "event": "PasswordRecoveryCompleted",
+    "service": "signin",
+    "category": "credential-access",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "A password reset actually succeeded, meaning control of the account's credentials may have changed hands."
+  },
+  {
+    "event": "PasswordRecoveryRequested",
+    "service": "signin",
+    "category": "credential-access",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Account-takeover precursor: someone initiated a password reset (often against the root email); verify it was the legitimate owner."
+  },
+  {
+    "event": "SwitchRole",
+    "service": "signin",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine daily workflow in many orgs; sensitive when pivoting into higher-privilege or cross-account roles."
+  },
+  {
+    "event": "AddPermission",
+    "service": "sns",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when granting another AWS account access to an SNS topic (resource-policy backdoor)."
+  },
+  {
+    "event": "SetTopicAttributes",
+    "service": "sns",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when rewriting a topic's access policy grants external accounts publish/subscribe rights."
+  },
+  {
+    "event": "Subscribe",
+    "service": "sns",
+    "category": "exfiltration",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Very common legitimately; sensitive when subscribing an attacker-controlled endpoint (email/HTTP/SQS) silently exfiltrates notifications."
+  },
+  {
+    "event": "AttachCustomerManagedPolicyReferenceToPermissionSet",
+    "service": "sso",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when referencing a customer-managed policy that expands a permission set's effective access."
+  },
+  {
+    "event": "AttachManagedPolicyToPermissionSet",
+    "service": "sso",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Attaching AdministratorAccess or similar to a permission set grants broad rights to all its assignees across accounts."
+  },
+  {
+    "event": "CreateAccountAssignment",
+    "service": "sso",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Routine access administration; sensitive when assigning a privileged permission set or to an unexpected principal in a target account."
+  },
+  {
+    "event": "CreatePermissionSet",
+    "service": "sso",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when a new permission set defines elevated access to be provisioned across accounts."
+  },
+  {
+    "event": "DeleteAccountAssignment",
+    "service": "sso",
+    "category": "defense-evasion",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Can revoke legitimate access or clean up attacker access traces."
+  },
+  {
+    "event": "PutInlinePolicyToPermissionSet",
+    "service": "sso",
+    "category": "privilege-escalation",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Adding an inline admin policy to a permission set escalates access across every account it targets."
+  },
+  {
+    "event": "PutPermissionsBoundaryToPermissionSet",
+    "service": "sso",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when altering a permission set's boundary widens or removes the ceiling on effective permissions."
+  },
+  {
+    "event": "ProvisionPermissionSet",
+    "service": "sso",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when pushing updated permission-set policies to assigned accounts applies escalated access."
+  },
+  {
+    "event": "UpdateInstanceAccessControlAttributeConfiguration",
+    "service": "sso",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when changing ABAC attribute config alters how Identity Center evaluates access decisions."
+  },
+  {
+    "event": "CreateActivation",
+    "service": "ssm",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Registers hybrid activation credentials that let attacker-controlled machines join as managed instances for durable access."
+  },
+  {
+    "event": "CreateDocument",
+    "service": "ssm",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when a malicious SSM document becomes a reusable execution backdoor on instances."
+  },
+  {
+    "event": "DeleteDocument",
+    "service": "ssm",
+    "category": "impact",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Can disrupt automation or remove evidence of a malicious command payload."
+  },
+  {
+    "event": "DeleteParameter",
+    "service": "ssm",
+    "category": "impact",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Can break dependent automation or erase evidence of tampered values."
+  },
+  {
+    "event": "DescribeParameters",
+    "service": "ssm",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Enumerates parameter names/metadata to map where secrets live before targeted retrieval."
+  },
+  {
+    "event": "GetParameter",
+    "service": "ssm",
+    "category": "credential-access",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Routine app config reads; SecureString parameters often hold credentials, so reads by unusual principals/targets warrant review."
+  },
+  {
+    "event": "GetParameters",
+    "service": "ssm",
+    "category": "credential-access",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Batch fetch including SecureStrings; useful for harvesting secrets when from unexpected principals."
+  },
+  {
+    "event": "GetParametersByPath",
+    "service": "ssm",
+    "category": "credential-access",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Used legitimately by apps; a strong bulk-secret-harvesting/recon signal when recursively dumping a parameter tree from an unusual principal."
+  },
+  {
+    "event": "ModifyDocumentPermission",
+    "service": "ssm",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": true,
+    "note": "Shares a document with other accounts or publicly, exposing it or granting outside principals execution rights."
+  },
+  {
+    "event": "PutParameter",
+    "service": "ssm",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when writing/overwriting parameters that instances and pipelines consume enables backdoored config/credentials."
+  },
+  {
+    "event": "SendCommand",
+    "service": "ssm",
+    "category": "lateral-movement",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Heavy legitimate use for patching/ops; a direct control-plane-to-host RCE path when from an unusual principal or against unexpected targets."
+  },
+  {
+    "event": "StartAutomationExecution",
+    "service": "ssm",
+    "category": "privilege-escalation",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when automation documents run under an assume role abused to execute actions with elevated permissions."
+  },
+  {
+    "event": "StartSession",
+    "service": "ssm",
+    "category": "lateral-movement",
+    "severity": "high",
+    "defaultFlag": false,
+    "note": "Common as primary admin access in SSM-first orgs; opens an interactive shell into an instance, bypassing SSH/network controls, so watch unusual principals."
+  },
+  {
+    "event": "UpdateDocument",
+    "service": "ssm",
+    "category": "persistence",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when modifying an executed document injects commands into trusted automation."
+  },
+  {
+    "event": "AssumeRole",
+    "service": "sts",
+    "category": "lateral-movement",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Ubiquitous role-chaining/pivot primitive; central to lateral movement but far too common to flag by default."
+  },
+  {
+    "event": "AssumeRoleWithSAML",
+    "service": "sts",
+    "category": "lateral-movement",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Federated SAML sign-in; sensitive on an anomalous source or role."
+  },
+  {
+    "event": "AssumeRoleWithWebIdentity",
+    "service": "sts",
+    "category": "lateral-movement",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "OIDC/web-identity federation (e.g. CI); abused via misconfigured trust conditions."
+  },
+  {
+    "event": "DecodeAuthorizationMessage",
+    "service": "sts",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Decodes an encoded authorization-denied message; used to map permission boundaries after a denial."
+  },
+  {
+    "event": "GetCallerIdentity",
+    "service": "sts",
+    "category": "discovery",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "The classic whoami call attackers run first to confirm the compromised identity; also ubiquitous in tooling."
+  },
+  {
+    "event": "GetFederationToken",
+    "service": "sts",
+    "category": "credential-access",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when producing federated temporary credentials to create scoped sessions that evade some controls."
+  },
+  {
+    "event": "GetSessionToken",
+    "service": "sts",
+    "category": "credential-access",
+    "severity": "low",
+    "defaultFlag": false,
+    "note": "Issues MFA-backed temporary credentials; noisy but can be exfiltrated for offline reuse."
+  },
+  {
+    "event": "DeleteLoggingConfiguration",
+    "service": "wafv2",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Removing WAF logging blinds detection of the requests the ACL would otherwise record."
+  },
+  {
+    "event": "DeleteWebACL",
+    "service": "wafv2",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Deleting a Web ACL removes application-layer filtering that blocks exploitation traffic."
+  },
+  {
+    "event": "DisassociateWebACL",
+    "service": "wafv2",
+    "category": "defense-evasion",
+    "severity": "high",
+    "defaultFlag": true,
+    "note": "Detaching a Web ACL from an ALB/API Gateway/CloudFront silently exposes the resource with the ACL still intact."
+  },
+  {
+    "event": "UpdateWebACL",
+    "service": "wafv2",
+    "category": "defense-evasion",
+    "severity": "medium",
+    "defaultFlag": false,
+    "note": "Sensitive when editing WAF rules to whitelist attacker IPs or disable protections while the ACL appears intact."
+  }
+]

@@ -1,0 +1,361 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { stratify, tree, type HierarchyNode } from "d3-hierarchy";
+import type { FilterField, GraphEdge, GraphNode, LineageTree, QueryOp } from "../api/types";
+import { identityGlyph, prettyJSON } from "../api/types";
+import { backend } from "../api/backend";
+import { logError, logInfo } from "../api/log";
+import { RawJsonModal } from "./RawJsonModal";
+
+interface Props {
+  seq: number;
+  onClose: () => void;
+  onPivot: (field: FilterField, value: string, op: QueryOp) => void;
+}
+
+const NODE_W = 210;
+const NODE_H = 54;
+const GAP_X = 22;
+const LEVEL_H = 112;
+
+const MAX_NODES = 600; // hard ceiling on rendered nodes so the graph can't blow up the renderer
+const GLYPH_CLS: Record<string, string> = {
+  Root: "lg-root", IAMUser: "lg-iam", AssumedRole: "lg-role", AWSService: "lg-svc", FederatedUser: "lg-fed",
+};
+const GL_FILL: Record<string, string> = {
+  Root: "gl-root", IAMUser: "gl-iam", AssumedRole: "gl-role", AWSService: "gl-svc", FederatedUser: "gl-fed",
+};
+const trunc = (s: string, n: number) => (s && s.length > n ? s.slice(0, n - 1) + "…" : s || "");
+const ORIGIN_LABEL: Record<string, string> = {
+  sso: "AWS IAM Identity Center (SSO)",
+  "service-linked": "Service-linked role",
+  service: "AWS service",
+};
+
+const tail = (arn: string, sep = "/") => {
+  const i = arn.lastIndexOf(sep);
+  return i >= 0 ? arn.slice(i + 1) : arn;
+};
+
+// The recognizable end of a resource id: the part after the last ARN colon
+// (…:key/abcd, …:secret/foo, bucket/obj), or the whole thing when it isn't an ARN.
+const resTail = (r: string) => (r.includes(":") ? r.slice(r.lastIndexOf(":") + 1) : r);
+
+function label(n: GraphNode): { primary: string; secondary: string } {
+  if (n.kind === "event") return { primary: n.eventName || "event", secondary: n.resource ? resTail(n.resource) : n.eventSource || "" };
+  switch (n.identityType) {
+    case "Root": return { primary: "root", secondary: n.accountId };
+    case "IAMUser": return { primary: n.userName || tail(n.arn), secondary: n.accountId };
+    case "AWSService": return { primary: n.invokedBy || n.arn || "AWS service", secondary: "service" };
+    case "FederatedUser": return { primary: n.userName || tail(n.arn), secondary: n.accountId };
+    default: return { primary: n.roleName || tail(n.roleArn) || "role", secondary: n.sessionName ? `⋯ ${n.sessionName}` : n.accountId };
+  }
+}
+
+function pivotOf(n: GraphNode): [FilterField, string] | null {
+  if (n.identityType === "AssumedRole" && n.roleArn) return ["roleArn", n.roleArn];
+  if (n.userName) return ["userName", n.userName];
+  return null;
+}
+
+export function LineageView({ seq, onClose, onPivot }: Props) {
+  const [nodes, setNodes] = useState<Map<string, GraphNode>>(new Map());
+  const [edges, setEdges] = useState<GraphEdge[]>([]);
+  const [meta, setMeta] = useState<{ currentId: string; rootId: string; notes: string[] }>({ currentId: "", rootId: "", notes: [] });
+  const [loading, setLoading] = useState(true);
+  const [expSessions, setExpSessions] = useState<Set<string>>(new Set());
+  const [expEvents, setExpEvents] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  const [selected, setSelected] = useState<string | null>(null);
+  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  const [raw, setRaw] = useState<{ title: string; json: string } | null>(null);
+
+  const svgRef = useRef<SVGSVGElement>(null);
+  const didCenter = useRef(false);
+
+  useEffect(() => {
+    setLoading(true);
+    didCenter.current = false;
+    setSelected(null);
+    backend
+      .queryLineageGraph(seq)
+      .then((t) => {
+        setNodes(new Map(t.nodes.map((n) => [n.id, n])));
+        setEdges(t.edges);
+        setMeta({ currentId: t.currentId, rootId: t.rootId, notes: t.notes || [] });
+        setSelected(t.currentId || null);
+        logInfo(`lineage graph opened seq=${seq} nodes=${t.nodes.length} edges=${t.edges.length}`);
+      })
+      .catch((e) => logError(`lineage graph load failed seq=${seq}: ${e?.message || e}`))
+      .finally(() => setLoading(false));
+  }, [seq]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const laidOut = useMemo(() => {
+    const arr = [...nodes.values()];
+    if (!arr.length || !meta.rootId) return null;
+    const parentOf: Record<string, string> = {};
+    for (const e of edges) parentOf[e.child] = e.parent;
+    try {
+      const root = stratify<GraphNode>()
+        .id((d) => d.id)
+        .parentId((d) => (d.id === meta.rootId ? "" : parentOf[d.id] || meta.rootId))(arr);
+      tree<GraphNode>().nodeSize([NODE_W + GAP_X, LEVEL_H])(root);
+      return root;
+    } catch {
+      return null;
+    }
+  }, [nodes, edges, meta.rootId]);
+
+  const posOf = useCallback(
+    (id: string) => {
+      let r: { x: number; y: number } | null = null;
+      laidOut?.each((d) => {
+        if (d.data.id === id) r = { x: (d as HierarchyNode<GraphNode> & { x: number }).x, y: (d as HierarchyNode<GraphNode> & { y: number }).y };
+      });
+      return r;
+    },
+    [laidOut]
+  );
+
+  useEffect(() => {
+    if (didCenter.current || !laidOut) return;
+    const cur = posOf(meta.currentId);
+    const svg = svgRef.current;
+    if (!cur || !svg) return;
+    const r = svg.getBoundingClientRect();
+    setView({ k: 1, x: r.width / 2 - (cur as { x: number }).x, y: r.height / 3 - (cur as { y: number }).y });
+    didCenter.current = true;
+  }, [laidOut, posOf, meta.currentId]);
+
+  const merge = (t: LineageTree) => {
+    setNodes((prev) => {
+      const m = new Map(prev);
+      for (const c of t.nodes) {
+        if (m.size >= MAX_NODES) break; // never exceed the render ceiling
+        if (!m.has(c.id)) m.set(c.id, c);
+      }
+      return m;
+    });
+    setEdges((prev) => {
+      const seen = new Set(prev.map((e) => e.parent + ">" + e.child));
+      return [...prev, ...t.edges.filter((e) => !seen.has(e.parent + ">" + e.child))];
+    });
+  };
+  const withBusy = async (id: string, fn: () => Promise<void>) => {
+    if (busy.has(id)) return;
+    setBusy((s) => new Set(s).add(id));
+    try {
+      await fn();
+    } finally {
+      setBusy((s) => {
+        const m = new Set(s);
+        m.delete(id);
+        return m;
+      });
+    }
+  };
+  const expandSessions = (n: GraphNode) =>
+    withBusy(n.id + ":s", async () => {
+      const t = await backend.queryLineageChildren(n.accessKeyId);
+      merge(t);
+      setExpSessions((s) => new Set(s).add(n.id));
+      logInfo(`expand sessions ${n.id} +${t.nodes.length} nodes (total≈${nodes.size + t.nodes.length})`);
+    });
+  const expandEvents = (n: GraphNode) =>
+    withBusy(n.id + ":e", async () => {
+      const t = await backend.queryLineageEvents(n.accessKeyId);
+      merge(t);
+      setExpEvents((s) => new Set(s).add(n.id));
+      logInfo(`expand events ${n.id} +${t.nodes.length} nodes (total≈${nodes.size + t.nodes.length})`);
+    });
+
+  const openRaw = useCallback(async (viaSeq: number, title: string) => {
+    if (!viaSeq) return;
+    setRaw({ title, json: prettyJSON(await backend.getEventRaw(viaSeq)) });
+  }, []);
+
+  const incoming = useMemo(() => {
+    const m = new Map<string, GraphEdge>();
+    for (const e of edges) m.set(e.child, e);
+    return m;
+  }, [edges]);
+
+  // ---- pan / zoom ----
+  const drag = useRef<{ x: number; y: number } | null>(null);
+  const onDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest(".lgv-node, .lgv-ev-node")) return;
+    e.preventDefault();
+    drag.current = { x: e.clientX - view.x, y: e.clientY - view.y };
+  };
+  const onMove = (e: React.MouseEvent) => {
+    // Capture the drag anchor + pointer NOW. The setView updater runs later, during
+    // React's render phase - if onUp/onMouseLeave has nulled drag.current by then,
+    // reading drag.current.x inside the updater throws (null.x) mid-render. (That was
+    // the "crash while moving around": a null-deref race, not the SVG size.)
+    const d = drag.current;
+    if (!d) return;
+    const cx = e.clientX, cy = e.clientY;
+    setView((v) => ({ ...v, x: cx - d.x, y: cy - d.y }));
+  };
+  const onUp = () => (drag.current = null);
+  const onWheel = (e: React.WheelEvent) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const r = svg.getBoundingClientRect();
+    const mx = e.clientX - r.left, my = e.clientY - r.top;
+    const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+    setView((v) => {
+      const k = Math.min(2.5, Math.max(0.2, v.k * factor));
+      const s = k / v.k;
+      return { k, x: mx - (mx - v.x) * s, y: my - (my - v.y) * s };
+    });
+  };
+
+  // Build the SVG once per layout/selection - NOT per pan frame. Panning/zooming
+  // only mutates the outer <g transform>, so memoizing the ~thousands of node/link
+  // elements keeps a drag from reconciling the whole tree every mousemove (which
+  // churned enough garbage to crash the WebView2 renderer on big graphs).
+  const linkEls = useMemo(() => {
+    if (!laidOut) return null;
+    return laidOut.links().map((l, i) => {
+      const s = l.source as HierarchyNode<GraphNode> & { x: number; y: number };
+      const t = l.target as HierarchyNode<GraphNode> & { x: number; y: number };
+      const my = (s.y + NODE_H / 2 + (t.y - NODE_H / 2)) / 2;
+      const xacct = incoming.get(t.data.id)?.crossAccount;
+      return (
+        <path
+          key={i}
+          className={`lgv-link ${t.data.kind === "event" ? "ev" : ""} ${xacct ? "xacct" : ""}`}
+          d={`M${s.x},${s.y + NODE_H / 2} C${s.x},${my} ${t.x},${my} ${t.x},${t.y - NODE_H / 2}`}
+        />
+      );
+    });
+  }, [laidOut, incoming]);
+
+  const nodeEls = useMemo(() => {
+    if (!laidOut) return null;
+    return laidOut.descendants().map((d) => {
+      const n = d.data;
+      const x = (d as HierarchyNode<GraphNode> & { x: number }).x;
+      const y = (d as HierarchyNode<GraphNode> & { y: number }).y;
+      const lab = label(n);
+      if (n.kind === "event") {
+        const w = NODE_W - 34;
+        return (
+          <g key={n.id} className="lgv-g" transform={`translate(${x - w / 2},${y - NODE_H / 2})`} onClick={() => openRaw(n.seq || 0, `${n.eventName} · ${n.eventSource}`)}>
+            <title>{`${n.eventName} · ${n.eventSource}${n.resource ? `\n→ ${n.resource}` : ""}\nseq ${n.seq} (click to open)`}</title>
+            <rect className="lgv-rect ev" width={w} height={NODE_H} rx={7} />
+            <circle cx={13} cy={NODE_H / 2} r={4} className={n.errorCode ? "lgv-dot-err" : "lgv-dot-ok"} />
+            <text x={26} y={NODE_H / 2 - 2} className="lgv-nm">{trunc(lab.primary, 20)}</text>
+            <text x={26} y={NODE_H / 2 + 12} className="lgv-sb">{trunc(lab.secondary, 22)}</text>
+          </g>
+        );
+      }
+      const state = `${n.id === meta.currentId ? "cur" : ""} ${n.id === selected ? "sel" : ""} k-${n.kind}`;
+      return (
+        <g key={n.id} className="lgv-g" transform={`translate(${x - NODE_W / 2},${y - NODE_H / 2})`} onClick={() => setSelected(n.id)}>
+          <title>{n.arn}</title>
+          <rect className={`lgv-rect ${state}`} width={NODE_W} height={NODE_H} rx={8} />
+          <text x={16} y={NODE_H / 2 + 5} className={`lgv-gl ${GL_FILL[n.identityType] || "gl-other"}`}>{identityGlyph(n.identityType)}</text>
+          <text x={32} y={NODE_H / 2 - 3} className="lgv-nm">{trunc(lab.primary, 20)}</text>
+          {lab.secondary && <text x={32} y={NODE_H / 2 + 12} className="lgv-sb">{trunc(lab.secondary, 22)}</text>}
+          {n.events > 0 && <text x={NODE_W - 12} y={NODE_H / 2 + 4} textAnchor="end" className="lgv-ct">{n.events}</text>}
+          {n.originKind === "sso" && <text x={NODE_W - 10} y={13} textAnchor="end" className="lgv-badge b-sso">SSO</text>}
+          {n.originKind === "service-linked" && <text x={NODE_W - 10} y={13} textAnchor="end" className="lgv-badge b-slr">service-linked</text>}
+        </g>
+      );
+    });
+  }, [laidOut, selected, meta.currentId, openRaw]);
+
+  const sel = selected ? nodes.get(selected) : null;
+  const atCap = nodes.size >= MAX_NODES;
+
+  return createPortal(
+    <div className="lgv-scrim" onClick={onClose}>
+      <div className="lgv-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="lgv-bar">
+          <span className="lgv-title">Role lineage</span>
+          {meta.notes.map((n, i) => (
+            <span key={i} className="lgv-note">⚠ {n}</span>
+          ))}
+          <span className="lgv-spacer" />
+          <span className="lgv-hint">drag pan · scroll zoom · click a node for details</span>
+          <button className="lgv-close" onClick={onClose}>✕ Close</button>
+        </div>
+
+        {loading ? (
+          <div className="lgv-empty">Building lineage…</div>
+        ) : !laidOut ? (
+          <div className="lgv-empty">No lineage to show for this event.</div>
+        ) : (
+          <div className="lgv-body">
+            <svg ref={svgRef} className="lgv-canvas" onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp} onWheel={onWheel}>
+              <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
+                {linkEls}
+                {nodeEls}
+              </g>
+            </svg>
+
+            {sel && sel.kind !== "event" && (
+              <div className="lgv-detail">
+                <div className="lgv-d-head">
+                  <span className={`lgv-glyph ${GLYPH_CLS[sel.identityType] || "lg-other"}`}>{identityGlyph(sel.identityType)}</span>
+                  <span className="lgv-d-title">{label(sel).primary}</span>
+                  <span className={`lg-tag ${sel.kind === "current" ? "ok" : ""}`}>{sel.kind}</span>
+                </div>
+                {sel.originKind && <div className={`lgv-origin b-${sel.originKind}`}>{ORIGIN_LABEL[sel.originKind] || sel.originKind}</div>}
+                {incoming.get(sel.id)?.crossAccount && (
+                  <div className="lgv-xacct">⚠ Cross-account - assumed from account {nodes.get(incoming.get(sel.id)!.parent)?.accountId || "another account"}</div>
+                )}
+                <dl className="lgv-kv">
+                  {sel.invokedBy && (<><dt>service</dt><dd>{sel.invokedBy}</dd></>)}
+                  <dt>identity</dt><dd>{sel.identityType}</dd>
+                  {sel.roleArn && (<><dt>role</dt><dd>{sel.roleArn}</dd></>)}
+                  {sel.sessionName && (<><dt>session</dt><dd>{sel.sessionName}</dd></>)}
+                  {sel.userName && (<><dt>user</dt><dd>{sel.userName}</dd></>)}
+                  {sel.accountId && (<><dt>account</dt><dd>{sel.accountId}</dd></>)}
+                  {sel.accessKeyId && (<><dt>access key</dt><dd>{sel.accessKeyId}</dd></>)}
+                  {/* "this session" is keyed-session framing; a service/root has no key */}
+                  {sel.accessKeyId && (<><dt>this session</dt><dd>{sel.events} event{sel.events === 1 ? "" : "s"}</dd></>)}
+                  {sel.roleArn && (sel.roleSessions ?? 0) > 0 && (
+                    <><dt>role total</dt><dd>{sel.roleEvents} event{sel.roleEvents === 1 ? "" : "s"} across {sel.roleSessions} session{sel.roleSessions === 1 ? "" : "s"}</dd></>
+                  )}
+                  <dt>child sessions</dt><dd>{sel.childCount}</dd>
+                </dl>
+                {sel.events === 0 && (sel.roleEvents ?? 0) > 0 && (
+                  <div className="lgv-cap">This specific session key logged no activity - the role is active under {sel.roleSessions} other session{(sel.roleSessions ?? 0) === 1 ? "" : "s"}.</div>
+                )}
+                <div className="lgv-d-actions">
+                  {incoming.get(sel.id)?.viaSeq ? (
+                    <button onClick={() => openRaw(incoming.get(sel.id)!.viaSeq, `${incoming.get(sel.id)!.viaEvent} → ${label(sel).primary}`)}>Open AssumeRole event</button>
+                  ) : null}
+                  {pivotOf(sel) && <button onClick={() => { const p = pivotOf(sel)!; onPivot(p[0], p[1], "include"); onClose(); }}>Filter Events to this identity</button>}
+                  {atCap ? (
+                    <span className="lgv-cap">Graph is at its {MAX_NODES}-node limit - close and re-open on another event to explore further.</span>
+                  ) : (
+                    <>
+                      {sel.accessKeyId && sel.events > 0 && !expEvents.has(sel.id) && (
+                        <button onClick={() => expandEvents(sel)}>{busy.has(sel.id + ":e") ? "…" : `Expand ${sel.events} events`}</button>
+                      )}
+                      {sel.accessKeyId && sel.childCount > 0 && !expSessions.has(sel.id) && (
+                        <button onClick={() => expandSessions(sel)}>{busy.has(sel.id + ":s") ? "…" : `Expand ${sel.childCount} child session${sel.childCount > 1 ? "s" : ""}`}</button>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+      {raw && <RawJsonModal title={raw.title} json={raw.json} onClose={() => setRaw(null)} />}
+    </div>,
+    document.body
+  );
+}

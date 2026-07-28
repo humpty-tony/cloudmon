@@ -1,0 +1,12 @@
+# ---- build output (keep build/windows, build/darwin, appicon: they configure the build) ----
+build/bin/
+frontend/dist/
+
+# ---- dependencies ----
+node_modules/
+
+# ---- embedded DuckDB CLI binaries (large; fetch with scripts/fetch-duckdb.sh) ----
+internal/duckdbbin/bin/*.gz
+
+# ---- local tooling state / runtime logs ----
+*.log

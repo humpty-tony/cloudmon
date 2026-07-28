@@ -1,0 +1,359 @@
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import type { CloudTrailEvent, FilterField, Lineage, QueryOp } from "../api/types";
+import { filterFieldValue, eventUser, identityGlyph, truncateArn } from "../api/types";
+import type { ColumnDef } from "../api/columns";
+import type { TimeZonePref } from "../api/settings";
+import { InlineDetail } from "./InlineDetail";
+
+interface Props {
+  events: CloudTrailEvent[]; // newest-first; rendered newest-on-top (index 0 = top row)
+  columns: ColumnDef[];
+  colWidths: Record<string, number>;
+  rowHeight: number; // collapsed row height; must match CSS --row-h
+  selected: CloudTrailEvent | null; // the inline-expanded row
+  cursorSeq: number;
+  follow: boolean;
+  onSelect: (e: CloudTrailEvent) => void;
+  onCursor: (seq: number) => void;
+  onPivot: (field: FilterField, value: string, op: QueryOp) => void;
+  onDisengageFollow: () => void;
+  onReachTop: () => void;
+  onResizeColumn: (key: string, px: number) => void;
+  onReorderColumns?: (from: string, to: string) => void; // drag a header onto another to reorder
+  onNeedMore?: () => void; // scrolled near the bottom of the loaded window
+  selectedRaw?: string; // lazily-fetched raw JSON for the expanded row ("" = loading)
+  selectedRawError?: boolean; // the raw fetch failed (show an error instead of "loading" forever)
+  selectedLineage?: Lineage | null; // assumed-role ancestry for the expanded row
+  onOpenLineage?: (seq: number) => void; // open the full lineage graph view
+  loadingMore?: boolean;
+  atLoadCap?: boolean;
+  isSensitive: (eventName: string) => boolean; // effective set (user-tunable) → row highlight
+  timeZone: TimeZonePref; // render eventTime in browser-local or UTC
+}
+
+function TimeCell({ e, tz }: { e: CloudTrailEvent; tz: TimeZonePref }) {
+  const d = new Date(e.eventTime);
+  const p = (n: number, l = 2) => String(n).padStart(l, "0");
+  const utc = tz === "utc";
+  const h = utc ? d.getUTCHours() : d.getHours();
+  const m = utc ? d.getUTCMinutes() : d.getMinutes();
+  const s = utc ? d.getUTCSeconds() : d.getSeconds();
+  const ms = utc ? d.getUTCMilliseconds() : d.getMilliseconds();
+  return (
+    <span className="c-time-main">
+      {p(h)}:{p(m)}:{p(s)}
+      <span className="c-time-ms">.{p(ms, 3)}</span>
+      {utc && <span className="c-time-tz">Z</span>}
+    </span>
+  );
+}
+
+function IdentityCell({ e }: { e: CloudTrailEvent }) {
+  const ui = e.userIdentity;
+  return (
+    <span className="c-ident">
+      <span className={`c-ident-glyph t-${ui.type}`}>{identityGlyph(ui.type)}</span>
+      <span className="c-ident-name">{eventUser(e)}</span>
+      {ui.arn && <span className="c-ident-arn">{truncateArn(ui.arn, 22)}</span>}
+    </span>
+  );
+}
+
+function ResultCell({ e }: { e: CloudTrailEvent }) {
+  if (e.errorCode) {
+    return (
+      <span className="c-result">
+        <span className="dot-sev err" />
+        <span className="c-result-code">{e.errorCode}</span>
+      </span>
+    );
+  }
+  return (
+    <span className="c-result">
+      <span className="dot-sev ok" />
+      <span className="c-result-ok">Success</span>
+    </span>
+  );
+}
+
+export function EventTable({
+  events,
+  columns,
+  colWidths,
+  rowHeight,
+  selected,
+  cursorSeq,
+  follow,
+  onSelect,
+  onCursor,
+  onPivot,
+  onDisengageFollow,
+  onReachTop,
+  onResizeColumn,
+  onReorderColumns,
+  onNeedMore,
+  selectedRaw,
+  selectedRawError,
+  selectedLineage,
+  onOpenLineage,
+  loadingMore,
+  atLoadCap,
+  isSensitive,
+  timeZone,
+}: Props) {
+  const parentRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLDivElement>(null);
+  const dragKey = useRef<string | null>(null); // header being dragged (reorder)
+  const [overKey, setOverKey] = useState<string | null>(null); // header under the drag
+  const [viewportW, setViewportW] = useState(0); // visible width → the pinned panel's fixed width
+
+  const widths = columns.map((c) => colWidths[c.key] ?? c.width);
+  const minTotal = widths.reduce((a, b) => a + b, 0);
+  // grow-flagged columns (that the user hasn't manually resized) absorb spare
+  // width via fr so text isn't cropped when there's room; everything else is
+  // fixed. If NOTHING is flexible (every column pinned by a manual resize, or a
+  // grow-less preset) promote the last track to 1fr so the grid always fills the
+  // width - no dead right gutter (native last-column-autoexpand). minWidth:minTotal
+  // on the surfaces keeps rows scrollable when there are too many columns to fit.
+  const hasFlex = columns.some((c) => !colWidths[c.key] && c.grow);
+  const tracks = columns.map((c, i) =>
+    !colWidths[c.key] && c.grow ? `minmax(${widths[i]}px, ${c.grow}fr)` : `${widths[i]}px`
+  );
+  if (tracks.length && !hasFlex) {
+    tracks[tracks.length - 1] = `minmax(${widths[widths.length - 1]}px, 1fr)`;
+  }
+  const grid = tracks.join(" ");
+  const n = events.length;
+
+  const rowVirtualizer = useVirtualizer({
+    count: n,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => rowHeight,
+    overscan: 10,
+    getItemKey: (index) => events[index].seq,
+  });
+
+  useEffect(() => {
+    rowVirtualizer.measure();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rowHeight]);
+
+  // Track the visible width so the pinned expanded panel can size to it.
+  useEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
+    const update = () => setViewportW(el.clientWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  useLayoutEffect(() => {
+    const el = parentRef.current;
+    if (!el) return;
+    if (follow) el.scrollTop = 0; // newest is at the top; following pins there
+  }, [n, follow, rowHeight]);
+
+  useEffect(() => {
+    if (follow || cursorSeq < 0) return;
+    if (selected && selected.seq === cursorSeq) return; // the expand effect below owns this row
+    const ci = events.findIndex((e) => e.seq === cursorSeq);
+    if (ci >= 0) rowVirtualizer.scrollToIndex(ci, { align: "auto" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cursorSeq]);
+
+  // When a row expands, bring its TOP into view so the detail panel opens predictably.
+  // align:"start" targets the row's start offset - stable as the row grows to full
+  // height - which avoids the align:"auto" re-resolve that otherwise overshoots and
+  // parks the expanded panel's bottom edge at the very top of the viewport.
+  useEffect(() => {
+    if (!selected) return;
+    const si = events.findIndex((e) => e.seq === selected.seq);
+    if (si >= 0) rowVirtualizer.scrollToIndex(si, { align: "start" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.seq]);
+
+  const onScroll = () => {
+    const el = parentRef.current;
+    if (!el) return;
+    if (headRef.current) headRef.current.scrollLeft = el.scrollLeft; // sync header horizontally
+    if (onNeedMore && el.scrollHeight - el.scrollTop - el.clientHeight < 600) onNeedMore();
+    if (follow) {
+      if (el.scrollTop > 40) onDisengageFollow();
+    } else if (el.scrollTop <= 4) {
+      onReachTop(); // scrolled back to the top → resume following
+    }
+  };
+
+  const startResize = (e: React.MouseEvent, key: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const th = (e.currentTarget as HTMLElement).parentElement as HTMLElement;
+    const startX = e.clientX;
+    const startW = th.offsetWidth;
+    const move = (ev: MouseEvent) => onResizeColumn(key, Math.max(60, startW + (ev.clientX - startX)));
+    const up = () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseup", up);
+      document.body.style.cursor = "";
+    };
+    document.body.style.cursor = "col-resize";
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseup", up);
+  };
+
+  // Rows render in NORMAL FLOW between two spacer divs (not absolutely positioned)
+  // so the sticky expanded panel has no absolute/transformed ancestor to fight -
+  // that's what makes the pin stay put deterministically while columns scroll.
+  const virtualItems = rowVirtualizer.getVirtualItems();
+  const totalSize = rowVirtualizer.getTotalSize();
+  const padTop = virtualItems.length ? virtualItems[0].start : 0;
+  const padBottom = virtualItems.length ? totalSize - virtualItems[virtualItems.length - 1].end : 0;
+
+  return (
+    <div className="etable">
+      <div className="ethead-wrap" ref={headRef}>
+        <div className="ethead" style={{ gridTemplateColumns: grid, width: "100%", minWidth: minTotal }}>
+          {columns.map((c) => (
+            <div
+              key={c.key}
+              className={`eth ${overKey === c.key ? "eth--drop" : ""}`}
+              onDragOver={(e) => {
+                if (dragKey.current && dragKey.current !== c.key) {
+                  e.preventDefault();
+                  setOverKey(c.key);
+                }
+              }}
+              onDragLeave={() => setOverKey((o) => (o === c.key ? null : o))}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (dragKey.current && onReorderColumns) onReorderColumns(dragKey.current, c.key);
+                dragKey.current = null;
+                setOverKey(null);
+              }}
+            >
+              <span
+                className="eth-label"
+                draggable={!!onReorderColumns}
+                onDragStart={(e) => {
+                  dragKey.current = c.key;
+                  e.dataTransfer.effectAllowed = "move";
+                }}
+                onDragEnd={() => {
+                  dragKey.current = null;
+                  setOverKey(null);
+                }}
+                title={onReorderColumns ? "Drag to reorder" : undefined}
+              >
+                {c.label}
+              </span>
+              <span className="eth-grip" onMouseDown={(e) => startResize(e, c.key)} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="etbody" ref={parentRef} onScroll={onScroll}>
+        {n === 0 && (
+          <div className="et-empty">
+            No events to show - adjust filters, widen the time range, or import a dump. Press <kbd>?</kbd> for help.
+          </div>
+        )}
+        <div className="etbody-inner" style={{ width: "100%", minWidth: minTotal }}>
+          {padTop > 0 && <div style={{ height: padTop }} aria-hidden="true" />}
+          {virtualItems.map((vi) => {
+            const ri = vi.index;
+            const e = events[ri];
+            const expanded = selected?.seq === e.seq;
+            const sev = e.errorCode ? "row--err" : isSensitive(e.eventName) ? "row--sensitive" : "";
+            const cls = [
+              "row",
+              ri % 2 === 0 ? "row--zebra" : "",
+              sev,
+              e.readOnly ? "row--readonly" : "",
+              expanded ? "row--selected" : "",
+              e.seq === cursorSeq ? "row--cursor" : "",
+            ].join(" ");
+            return (
+              <div
+                key={e.seq}
+                data-index={vi.index}
+                ref={rowVirtualizer.measureElement}
+                className="rowwrap"
+              >
+                <div
+                  className={cls}
+                  style={{ gridTemplateColumns: grid, height: rowHeight }}
+                  onClick={() => {
+                    onSelect(e);
+                    onCursor(e.seq);
+                  }}
+                >
+                  {columns.map((c) => {
+                    const rawVal = filterFieldValue(e, c.field);
+                    let content;
+                    if (c.key === "time") content = <TimeCell e={e} tz={timeZone} />;
+                    else if (c.key === "identity") content = <IdentityCell e={e} />;
+                    else if (c.key === "result") content = <ResultCell e={e} />;
+                    else content = c.get(e);
+                    const pivotable = c.field !== "eventTime";
+                    return (
+                      <div key={c.key} className={`cell ${c.mono ? "mono" : ""} c-${c.key}`} title={c.get(e)}>
+                        <span className="cell-inner">{content}</span>
+                        {pivotable && (
+                          <span className="pivot-icons">
+                            <button
+                              className="pv"
+                              title={`Filter for ${rawVal}`}
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                onPivot(c.field, rawVal, "include");
+                              }}
+                            >
+                              <span className="pv-loupe">⌕</span>
+                              <span className="pv-sign">+</span>
+                            </button>
+                            <button
+                              className="pv"
+                              title={`Filter out ${rawVal}`}
+                              onClick={(ev) => {
+                                ev.stopPropagation();
+                                onPivot(c.field, rawVal, "exclude");
+                              }}
+                            >
+                              <span className="pv-loupe">⌕</span>
+                              <span className="pv-sign">−</span>
+                            </button>
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {expanded && (
+                  <div className="row-expand">
+                    <div className="row-expand-pin" style={{ width: viewportW || undefined }}>
+                      {selectedRaw ? (
+                        <InlineDetail event={{ ...e, rawJSON: selectedRaw }} lineage={selectedLineage} onPivot={onPivot} onOpenLineage={onOpenLineage} />
+                      ) : selectedRawError ? (
+                        <div className="xd-loading">Could not load this event (the database was busy). Collapse and reopen to retry.</div>
+                      ) : (
+                        <div className="xd-loading">Loading event…</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {padBottom > 0 && <div style={{ height: padBottom }} aria-hidden="true" />}
+        </div>
+        {loadingMore && <div className="et-foot">Loading more…</div>}
+        {atLoadCap && !loadingMore && (
+          <div className="et-foot">Reached the load limit - refine the filter to see more.</div>
+        )}
+      </div>
+    </div>
+  );
+}

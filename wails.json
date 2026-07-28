@@ -1,0 +1,20 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "cloudmon",
+  "outputfilename": "cloudmon",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "humpty-tony",
+    "email": "cedric@cedricbrisson.ca"
+  },
+  "info": {
+    "companyName": "humpty-tony",
+    "productName": "CloudMon",
+    "productVersion": "0.1.0",
+    "copyright": "Copyright (c) 2026 humpty-tony",
+    "comments": "Local desktop viewer for AWS CloudTrail"
+  }
+}
