@@ -2,13 +2,7 @@
 
 Process Monitor for AWS CloudTrail. Open a CloudTrail export, or stream live from a trail you own, and investigate API activity on your own machine: filter, pivot, correlate identities, and test detections, with no SIEM and no per-GB bill.
 
-<p align="center">
-  <!-- Demo video placeholder: drop the recording at assets/demo.mp4, or drag-drop a
-       file into this spot on GitHub to embed a hosted copy. -->
-  <video src="assets/demo.mp4" controls muted width="760">
-    <a href="assets/demo.mp4">Watch the CloudMon demo</a>
-  </video>
-</p>
+https://github.com/user-attachments/assets/6e5f09d8-cb21-4fa1-a13d-0d47bed212e8
 
 ## The problem
 
