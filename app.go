@@ -59,7 +59,13 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.openLog()
 	// Open the saved database off the startup path so the window paints first.
-	go a.ensureDB()
+	go func() {
+		if a.ensureDB() == nil {
+			a.Log("error", fmt.Sprintf("database initialization failed: %v", a.dbErr))
+			return
+		}
+		a.Log("info", "database initialized")
+	}()
 }
 
 // ensureDB opens the persistent embedded engine exactly once. Startup warms it
