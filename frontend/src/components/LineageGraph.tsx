@@ -68,7 +68,7 @@ function Node(props: {
     >
       <span className={`lg-glyph ${GLYPH_CLS[props.type] || "lg-other"}`}>{identityGlyph(props.type)}</span>
       <span className="lg-body">
-        <span className="lg-primary">{v.primary}<AliasBadge kind="arn" value={props.arn||props.roleArn}/></span>
+        <span className="lg-primary"><span className="lg-primary-text">{v.primary}</span><AliasBadge kind="arn" value={props.arn||props.roleArn}/></span>
         {v.secondary && <span className="lg-secondary">{v.secondary}</span>}
       </span>
       {props.current && <span className="lg-here">this event</span>}

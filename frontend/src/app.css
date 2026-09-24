@@ -1447,3 +1447,7 @@ body { font-feature-settings: "liga", "calt"; }
 
 .c-ident { max-width:100%; }
 .c-ident-arn { min-width:0; }
+
+.lg-primary { display:flex; align-items:center; min-width:0; }
+.lg-primary-text { min-width:0; overflow:hidden; text-overflow:ellipsis; }
+.lg-primary .alias-badge { max-width:14ch; }
