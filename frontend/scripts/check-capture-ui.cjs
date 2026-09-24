@@ -519,6 +519,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.keyboard.press('Escape');
   await lineageOriginal.waitFor({state:'hidden'});
   await lineageEvent.waitFor({state:'visible'});
+  assert.ok(await lineageEvent.getByRole('button',{name:'Original JSON',exact:true}).evaluate(el=>document.activeElement===el),'closing Original JSON lost focus behind the lineage inspector');
   await page.keyboard.press('Escape');
   await lineageEvent.waitFor({state:'hidden'});
   await page.locator('.lgv-modal').waitFor({state:'visible'});

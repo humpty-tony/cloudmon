@@ -15,11 +15,19 @@ interface Props {
 export function LineageEventModal({ title, json, onClose, onPivot }: Props) {
   const [original, setOriginal] = useState(false);
   const close = useRef<HTMLButtonElement>(null);
+  const originalButton = useRef<HTMLButtonElement>(null);
+  const wasOriginal = useRef(false);
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     close.current?.focus();
     return () => previous?.focus();
   }, []);
+  useEffect(() => {
+    // Making this dialog inert may blur the opener before the raw viewer saves
+    // activeElement. Restore it explicitly after that viewer unmounts.
+    if (!original && wasOriginal.current) originalButton.current?.focus();
+    wasOriginal.current = original;
+  }, [original]);
   useEffect(() => {
     if (original) return;
     const onKey = (event: KeyboardEvent) => {
@@ -44,7 +52,7 @@ export function LineageEventModal({ title, json, onClose, onPivot }: Props) {
         <div className="rawmodal-head">
           <div className="rawmodal-title">{title}</div>
           <div className="rawmodal-actions">
-            <button className="rawmodal-copy" onClick={() => setOriginal(true)}>Original JSON</button>
+            <button ref={originalButton} className="rawmodal-copy" onClick={() => setOriginal(true)}>Original JSON</button>
             <button ref={close} className="icon-btn" onClick={onClose} title="Close (Esc)" aria-label="Close lineage event">✕</button>
           </div>
         </div>
