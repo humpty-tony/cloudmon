@@ -656,6 +656,49 @@ func (a *App) Investigate(options store.InvestigationOptions, requestID string) 
 	return a.db.Investigate(ctx, options)
 }
 
+type InvestigationExport struct {
+	Path             string `json:"path"`
+	EventCount       int    `json:"eventCount"`
+	TotalMatches     int    `json:"totalMatches"`
+	ObservationCount int    `json:"observationCount"`
+	Truncated        bool   `json:"truncated"`
+}
+
+// ExportInvestigation reconstructs the successful displayed scope server-side.
+// The native dialog cannot be dismissed by CancelQuery; cancellation is checked
+// on both sides of it so no export starts after the user cancels the request.
+func (a *App) ExportInvestigation(options store.InvestigationOptions, requestID string) (InvestigationExport, error) {
+	if a.ensureDB() == nil {
+		return InvestigationExport{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	if options.Snapshot == nil {
+		return InvestigationExport{}, fmt.Errorf("run an investigation before exporting its report")
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return InvestigationExport{}, err
+	}
+	defer done()
+	if err := ctx.Err(); err != nil {
+		return InvestigationExport{}, err
+	}
+	path, err := rt.SaveFileDialog(a.ctx, rt.SaveDialogOptions{Title: "Export investigation report", DefaultFilename: "cloudmon-investigation.zip", Filters: []rt.FileFilter{{DisplayName: "Investigation ZIP (*.zip)", Pattern: "*.zip"}}})
+	if err != nil {
+		return InvestigationExport{}, err
+	}
+	if err := ctx.Err(); err != nil {
+		return InvestigationExport{}, err
+	}
+	if path == "" {
+		return InvestigationExport{}, nil
+	}
+	summary, err := a.db.ExportInvestigationFile(ctx, options, path)
+	if err != nil {
+		return InvestigationExport{}, fmt.Errorf("investigation report was not saved: %w", err)
+	}
+	return InvestigationExport{Path: path, EventCount: summary.EventCount, TotalMatches: summary.TotalMatches, ObservationCount: summary.ObservationCount, Truncated: summary.Truncated}, nil
+}
+
 func (a *App) Analyze(options store.AnalysisOptions, requestID string) (store.ActivityAnalysis, error) {
 	if a.ensureDB() == nil {
 		return store.ActivityAnalysis{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)

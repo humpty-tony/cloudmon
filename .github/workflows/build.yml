@@ -120,8 +120,15 @@ jobs:
       - name: Backend checks with real DuckDB
         # Native static links are large; serialize package builds on hosted runners.
         run: go test -p 1 -tags "${{ matrix.tags }}" ./...
+      - name: Generate investigation report browser fixture
+        if: runner.os == 'Linux'
+        env:
+          CLOUDMON_REPORT_FIXTURE: ${{ runner.temp }}/cloudmon-report/report.html
+        run: go test -p 1 ./internal/store -run '^TestInvestigationReportFixture$' -count=1
       - name: Capture setup browser check
         if: runner.os == 'Linux'
+        env:
+          CLOUDMON_REPORT_FIXTURE: ${{ runner.temp }}/cloudmon-report/report.html
         working-directory: frontend
         run: |
           npx playwright install --with-deps chromium --only-shell

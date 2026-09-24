@@ -2,6 +2,7 @@ const assert = require('node:assert/strict');
 const {chromium} = require('playwright');
 const path = require('node:path');
 const fs = require('node:fs');
+const {pathToFileURL} = require('node:url');
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'test-results', 'capture');
 fs.mkdirSync(output, {recursive:true});
@@ -951,6 +952,132 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.ok(await page.locator('.hunt-view').evaluate(el=>el.scrollWidth<=el.clientWidth),'five-step hunt spills at minimum width');
   assert.ok(await page.locator('.hunt-detail').evaluate(el=>el.scrollWidth<=el.clientWidth),'sequence details spill at minimum width');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'sequence page has horizontal overflow');
+
+  // Investigation exports use the displayed successful scope and invalidate native
+  // completions when cancellation, new controls, or closing the dialog supersede them.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.evaluate(()=>{
+    const state=window.captureTest,app=window.go.main.App,base=state.rows[0];
+    state.rows=Array.from({length:520},(_,i)=>({...base,seq:i+1,eventID:`report-${i+1}`,eventName:i===0?'GetObject':i%2?'PutObject':'HeadObject',eventSource:'s3.amazonaws.com',eventTime:new Date(Date.parse('2026-09-24T00:00:00Z')+i*500).toISOString()}));
+    state.raw=JSON.stringify({eventID:'report-1',eventName:'GetObject',resources:[{ARN:'arn:aws:s3:::evidence-bucket/audit/events.json'}]});
+    state.reportMode='success';state.reportCalls=[];state.reportCancelled=[];
+    const nativeInvestigate=app.Investigate,nativeCancel=app.CancelQuery;
+    app.Investigate=async(options,id)=>{
+      const result=await nativeInvestigate(options,id);
+      if(state.holdReportInvestigation)await new Promise(resolve=>{state.finishReportInvestigation=resolve});
+      state.reportSuccessfulOptions=structuredClone({...options,snapshot:result.snapshot});
+      return result;
+    };
+    app.ExportInvestigation=async(options,id)=>{
+      state.reportCalls.push(structuredClone(options));
+      if(state.reportMode==='failure')throw Error('Report destination is unavailable');
+      const result={path:state.reportMode==='dialog-cancel'?'':'/evidence/reports/production-review.zip',eventCount:options.relation==='resources'?261:500,totalMatches:options.relation==='resources'?261:520,observationCount:503,truncated:options.relation!=='resources'};
+      if(state.reportMode==='pending'){
+        state.reportPending=id;
+        return new Promise((resolve,reject)=>{state.finishReport=path=>resolve({...result,path});state.rejectReport=()=>reject(Error('Report export cancelled'))});
+      }
+      return result;
+    };
+    app.CancelQuery=async id=>{
+      if(id===state.reportPending){state.reportCancelled.push(id);return}
+      return nativeCancel(id);
+    };
+  });
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.locator('.row').getByText('GetObject',{exact:true}).click();
+  await page.getByRole('button',{name:'Investigate',exact:true}).click();
+  const reportDialog=page.getByRole('dialog',{name:'Event investigation',exact:true});
+  const exportInvestigation=reportDialog.getByRole('button',{name:'Export investigation',exact:true});
+  await reportDialog.getByText('520 events',{exact:true}).waitFor();
+  await exportInvestigation.click();
+  await reportDialog.getByText('Saved investigation report:',{exact:false}).waitFor();
+  assert.deepEqual(await page.evaluate(()=>window.captureTest.reportCalls.at(-1)),await page.evaluate(()=>window.captureTest.reportSuccessfulOptions),'report export changed the displayed investigation options or snapshot');
+  await reportDialog.getByText('/evidence/reports/production-review.zip',{exact:false}).waitFor();
+  await reportDialog.getByText('Showing 500 closest events of 520. Narrow the window or relationship.',{exact:true}).waitFor();
+  await page.setViewportSize({width:960,height:720});
+  await page.clock.runFor(150);
+  await page.screenshot({path:path.join(output,'investigation-export.png'),fullPage:true});
+  assert.ok(await reportDialog.evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&el.scrollWidth<=el.clientWidth}),'investigation export controls or status spill at minimum width');
+  await page.evaluate(()=>{window.captureTest.reportMode='dialog-cancel'});
+  await exportInvestigation.click();
+  await reportDialog.getByText('Export cancelled. No report was saved.',{exact:true}).waitFor();
+  await page.evaluate(()=>{window.captureTest.reportMode='failure'});
+  await exportInvestigation.click();
+  await reportDialog.getByRole('alert').getByText('Report destination is unavailable',{exact:false}).waitFor();
+  assert.ok(await exportInvestigation.isEnabled(),'failed export cannot be retried');
+  await page.evaluate(()=>{window.captureTest.reportMode='pending'});
+  await exportInvestigation.click();
+  await reportDialog.getByText('Preparing investigation report…',{exact:true}).waitFor();
+  await page.waitForFunction(()=>!!window.captureTest.finishReport);
+  await reportDialog.getByRole('button',{name:'Cancel export',exact:true}).click();
+  await page.waitForFunction(()=>window.captureTest.reportCancelled.length===1);
+  await reportDialog.getByText('Cancel requested. Close the save dialog if it is still open.',{exact:true}).waitFor();
+  assert.ok(await exportInvestigation.isDisabled(),'cancellation allowed a second native save dialog before the first settled');
+  await page.evaluate(()=>window.captureTest.rejectReport());
+  await reportDialog.getByText('Export cancelled. No report was saved.',{exact:true}).waitFor();
+  // Native publication can win cancellation; the UI must report an already saved file.
+  await exportInvestigation.click();
+  await page.waitForFunction(()=>window.captureTest.reportCalls.length===5);
+  await reportDialog.getByRole('button',{name:'Cancel export',exact:true}).click();
+  await page.waitForFunction(()=>window.captureTest.reportCancelled.length===2);
+  await page.evaluate(()=>window.captureTest.finishReport('/evidence/reports/save-won-race.zip'));
+  await reportDialog.getByText('Saved investigation report: /evidence/reports/save-won-race.zip',{exact:false}).waitFor();
+  assert.equal(await reportDialog.getByText('Export cancelled. No report was saved.',{exact:true}).count(),0,'UI hid a successfully saved file after cancellation raced');
+  await exportInvestigation.click();
+  await page.waitForFunction(()=>window.captureTest.reportCalls.length===6);
+  await page.evaluate(()=>{window.captureTest.holdReportInvestigation=true});
+  await reportDialog.getByLabel('Investigation relationship',{exact:true}).selectOption('resources');
+  await reportDialog.getByText('Loading investigation…',{exact:true}).waitFor();
+  await page.waitForFunction(()=>window.captureTest.reportCancelled.length===3&&!!window.captureTest.finishReportInvestigation);
+  assert.ok(await exportInvestigation.isDisabled(),'export remained available while the new investigation was unresolved');
+  await page.evaluate(()=>window.captureTest.finishReport('/evidence/reports/stale-scope.zip'));
+  await page.clock.runFor(100);
+  assert.equal(await reportDialog.getByText('stale-scope.zip',{exact:false}).count(),0,'changed controls accepted an obsolete report completion');
+  await page.evaluate(()=>{const state=window.captureTest;state.holdReportInvestigation=false;state.finishReportInvestigation();state.reportMode='success'});
+  await reportDialog.getByText('261 events',{exact:true}).waitFor();
+  await exportInvestigation.click();
+  await reportDialog.getByText('Saved investigation report:',{exact:false}).waitFor();
+  assert.deepEqual(await page.evaluate(()=>window.captureTest.reportCalls.at(-1)),await page.evaluate(()=>window.captureTest.reportSuccessfulOptions),'retry exported stale controls instead of the new successful investigation');
+  assert.equal(await page.evaluate(()=>window.captureTest.reportCalls.at(-1).relation),'resources');
+  await page.evaluate(()=>{window.captureTest.reportMode='pending'});
+  await exportInvestigation.click();
+  await page.waitForFunction(()=>window.captureTest.reportCalls.length===8);
+  await reportDialog.getByRole('button',{name:'Close investigation',exact:true}).click();
+  await page.waitForFunction(()=>window.captureTest.reportCancelled.length===4);
+  await page.evaluate(()=>window.captureTest.finishReport('/evidence/reports/closed-dialog.zip'));
+  await page.getByRole('button',{name:'Investigate',exact:true}).click();
+  await reportDialog.getByText('520 events',{exact:true}).waitFor();
+  assert.equal(await reportDialog.getByText('closed-dialog.zip',{exact:false}).count(),0,'reopened investigation inherited an old export completion');
+  await reportDialog.getByRole('button',{name:'Close investigation',exact:true}).click();
+  // This HTML is produced by the real DuckDB report test, not a frontend mock.
+  // Its offline presentation is inspected at both supported minimum widths.
+  if(process.env.CLOUDMON_REPORT_FIXTURE){
+    const fixture=path.resolve(process.env.CLOUDMON_REPORT_FIXTURE);
+    assert.ok(fs.existsSync(fixture),`Missing generated report fixture: ${fixture}`);
+    const reportPage=await browser.newPage({viewport:{width:1024,height:768}});
+    const externalRequests=[];
+    reportPage.on('pageerror',e=>errors.push(String(e)));
+    await reportPage.route(/^https?:/,route=>{externalRequests.push(route.request().url());return route.abort()});
+    await reportPage.goto(pathToFileURL(fixture).href);
+    await reportPage.getByRole('heading',{name:'Event investigation',exact:true}).waitFor();
+    await reportPage.getByRole('heading',{name:'Included evidence',exact:true}).waitFor();
+    await reportPage.getByRole('heading',{name:'Chronological context',exact:true}).waitFor();
+    for(const summary of await reportPage.locator('details > summary').all())await summary.click();
+    assert.equal(await reportPage.locator('script').count(),0,'portable report includes executable scripts');
+    assert.equal(await reportPage.evaluate(()=>window.reportInjected===true),false,'retained hostile source text executed as markup');
+    assert.ok((await reportPage.locator('body').innerText()).includes('window.reportInjected=true'),'hostile source fixture was dropped instead of displayed safely');
+    const relativeEvidenceLinks=await reportPage.locator('a[href]').evaluateAll(links=>links.map(link=>link.getAttribute('href')).filter(href=>/^events\/\d+\.json$|^sources\/\d+\.txt$/.test(href)));
+    assert.ok(relativeEvidenceLinks.some(href=>href.startsWith('events/')),'portable report has no raw event links');
+    assert.ok(relativeEvidenceLinks.some(href=>href.startsWith('sources/')),'portable report has no retained source links');
+    assert.ok(relativeEvidenceLinks.every(href=>fs.existsSync(path.join(path.dirname(fixture),href))),'portable report references missing evidence files');
+    assert.ok(await reportPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'portable report spills at 1024px');
+    await reportPage.screenshot({path:path.join(output,'investigation-report.png'),fullPage:true});
+    await reportPage.setViewportSize({width:960,height:720});
+    assert.ok(await reportPage.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'portable report spills at 960px');
+    await reportPage.screenshot({path:path.join(output,'investigation-report-minimum.png'),fullPage:true});
+    assert.deepEqual(externalRequests,[],'portable report attempted a network request');
+    await reportPage.close();
+  }
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture','invalid search stays unapplied','failed search shows stale results and retries','clear resets unapplied draft'],errors}));
  } finally {await browser.close();await server.close()}

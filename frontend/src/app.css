@@ -1477,3 +1477,11 @@ body { font-feature-settings: "liga", "calt"; }
 .hunt-sequence-rules { margin:0 0 8px; font-size:12px; line-height:1.6; color:var(--tx-2); }
 .hunt-card>strong,.hunt-card>time { max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 @media(max-width:720px) { .hunt-sequence-controls { grid-template-columns:minmax(0,1fr); } }
+
+
+.investigation-export { flex-shrink:0; padding:8px 16px; border-bottom:1px solid var(--line-struct); font-size:11px; }
+.investigation-export>div { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+.investigation-export span { color:var(--tx-3); flex:1; min-width:220px; line-height:1.5; }
+.investigation-export p { margin:8px 0 0; line-height:1.5; overflow-wrap:anywhere; max-height:70px; overflow:auto; }
+.investigation-export-status { color:var(--tx-2); }
+.investigation-export-error { color:var(--sev-err); }
