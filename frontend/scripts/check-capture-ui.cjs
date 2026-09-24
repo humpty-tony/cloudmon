@@ -105,6 +105,15 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
       return {snapshot:options.snapshot||snapshot(),scope:{...stats,events:150,invalidTimes:2},current:stats,previous:{...stats,events:30},groups:options.entity?groups.filter(g=>g.value===options.entity.value):groups,totalGroups:options.entity?1:2,limit:50,fromMs:Date.parse('2026-09-23T00:00:00.001Z'),toMs:Date.parse('2026-09-24T00:00:00.001Z'),previousFromMs:Date.parse('2026-09-22T00:00:00.001Z'),hasWindow:true,breakdowns:{eventSource:[{value:'iam.amazonaws.com',current:90,previous:30,totalGroups:1}],eventName:[{value:'PutRolePolicy',current:90,previous:30,totalGroups:1}],sourceIPAddress:[{value:'192.0.2.1',current:90,previous:30,totalGroups:1}]},events:options.entity?state.rows.slice(0,2):[],notes:['Counts describe stored events, not unique AWS actions.','Missing evidence can explain differences; this is not a statistical anomaly detector.']};
      }finally{searchJobs.delete(id)}
     },
+    Hunt:async(options,id)=>{
+     state.huntCalls=(state.huntCalls||[]).concat([options]);
+     try{
+      if(state.delayHunt)await new Promise((resolve,reject)=>searchJobs.set(id,{resolve,reject}));
+      if(state.failHunt)throw Error('Indicator 2 has an invalid IP address');
+      const first=state.rows[0],second={...state.rows[1],eventTime:'2026-09-24T00:01:00Z'};
+      return {snapshot:snapshot(),scanned:900,total:options.mode==='sequence'?1:600,limit:500,invalidTimes:2,missingPrincipal:3,indicators:options.indicators.map(indicator=>({...indicator,matches:600})),matches:options.mode==='indicators'?Array.from({length:500},(_,i)=>({event:{...first,seq:first.seq+i,eventID:i===0?first.eventID:`indicator-${i}`,identityArn:'arn:aws:sts::111122223333:assumed-role/Investigator/session'},indicators:[0,1]})):[],pairs:options.mode==='sequence'?[{first,second,deltaMs:60000,tiedFirst:2}]:[],notes:['Counts can overlap across indicators.','Pairs show temporal proximity for recorded identifiers, not causation.']};
+     }finally{searchJobs.delete(id)}
+    },
     RawBySeqs:async()=>{if(state.exportFails)throw Error('Storage unavailable');return [raw]},
     ExportEventsJSON:async(data)=>{state.exported=data;return 'selection.json'},
     GetEventEvidence:async()=>({total:3,variants:3,observations:[1,2,3].map(id=>({id,source:id===3?'/evidence/history.csv':'/evidence/CloudTrail/2026/09/24/events.json.gz',ordinal:id,format:id===3?'event-history-csv':'cloudtrail-json',lossy:id===3,sha256:String(id).repeat(64),observedAt:'2026-09-24T00:01:00Z',displayed:id===1}))}),
@@ -554,6 +563,45 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.evaluate(()=>{window.captureTest.failAnalysis=false});
   await page.getByRole('button',{name:'Run analysis',exact:true}).click();
   await page.getByText('Service overview',{exact:true}).waitFor();
+  assert.deepEqual(errors,[]);
+  await page.getByRole('button',{name:'Hunts',exact:true}).click();
+  assert.ok(await page.getByRole('button',{name:'Run hunt',exact:true}).isDisabled());
+  await page.getByLabel('Typed indicators',{exact:true}).fill('ip 192.0.2.1\narn arn:aws:s3:::evidence-bucket/audit/events.json');
+  await page.getByRole('button',{name:'Run hunt',exact:true}).click();
+  await page.getByText('600 matched events · 900 events in scope',{exact:true}).waitFor();
+  assert.ok(await page.locator('.hunt-card').count()<20,'hunt rendered every result');
+  await page.getByRole('button',{name:'Original record',exact:true}).click();
+  await page.getByRole('dialog',{name:'Raw JSON',exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.rawSnapshot.generation),'fixture');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Investigate event',exact:true}).click();
+  await page.getByRole('dialog',{name:'Event investigation',exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.investigationCalls.at(-1).snapshot.generation),'fixture');
+  await page.getByRole('button',{name:'Close investigation',exact:true}).click();
+  await page.getByLabel('Hunt type',{exact:true}).selectOption('sequence');
+  await page.getByLabel('Step A search',{exact:true}).fill('eventName="PutRolePolicy"');
+  await page.getByLabel('Step B search',{exact:true}).fill('eventName="PutRolePolicy"');
+  await page.getByText('Inputs changed. Results below use the previous hunt; run again to apply changes.',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Run hunt',exact:true}).click();
+  await page.getByText('1 event pairs · 900 events in scope',{exact:true}).waitFor();
+  await page.getByText('2 A candidates share this timestamp; a representative is shown.',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Original B',exact:true}).click();
+  await page.getByRole('dialog',{name:'Raw JSON',exact:true}).waitFor();await page.keyboard.press('Escape');
+  await page.locator('.hunt-view').evaluate(el=>{el.scrollTop=0});
+  await page.setViewportSize({width:1440,height:1000});
+  await page.screenshot({path:path.join(output,'analysis-hunts.png'),fullPage:true});
+  await page.setViewportSize({width:960,height:720});
+  assert.ok(await page.locator('.hunt-view').evaluate(el=>el.scrollWidth<=el.clientWidth),'hunt spills at minimum width');
+  await page.evaluate(()=>{window.captureTest.delayHunt=true});
+  await page.getByRole('button',{name:'Run hunt',exact:true}).click();
+  await page.getByRole('button',{name:'Cancel hunt',exact:true}).click();
+  await page.getByText('Hunt cancelled. Run again when ready.',{exact:true}).waitFor();
+  await page.evaluate(()=>{window.captureTest.delayHunt=false;window.captureTest.failHunt=true});
+  await page.getByRole('button',{name:'Run hunt',exact:true}).click();
+  await page.getByRole('alert').getByText('Error: Indicator 2 has an invalid IP address',{exact:true}).waitFor();
+  await page.evaluate(()=>{window.captureTest.failHunt=false});
+  await page.getByLabel('Step A search',{exact:true}).fill('unknownField="x"');
+  assert.ok(await page.getByRole('button',{name:'Run hunt',exact:true}).isDisabled(),'invalid sequence became an unrestricted step');
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture','invalid search stays unapplied','failed search shows stale results and retries','clear resets unapplied draft'],errors}));
  } finally {await browser.close();await server.close()}

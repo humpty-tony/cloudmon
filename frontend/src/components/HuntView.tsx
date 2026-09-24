@@ -3,11 +3,12 @@ import {useVirtualizer} from "@tanstack/react-virtual";
 import {backend} from "../api/backend";
 import {compileQuery} from "../api/queryLang";
 import type {CloudTrailEvent,EventRow,HuntIndicator,HuntOptions,HuntResult,QueryFilter} from "../api/types";
-import {rowToEvent} from "../api/types";
+import {rowToEvent,QUERY_FIELDS} from "../api/types";
 import {RawJsonModal} from "./RawJsonModal";
 import {InvestigationView} from "./InvestigationView";
 
 const emptyFilter:QueryFilter={includes:{},excludes:{},errorsOnly:false,hideReadOnly:false,fromMs:0,toMs:0,text:"",expr:null};
+const searchFields=new Set<string>(QUERY_FIELDS);
 function indicators(text:string):{values:HuntIndicator[];error:string} {
   const lines=text.split(/\r?\n/).filter(line=>line.trim());
   if(!lines.length||lines.length>100)return {values:[],error:"Enter 1 to 100 indicators, one per line."};
@@ -28,7 +29,7 @@ export function HuntView({filter}:{filter:QueryFilter}) {
   const [raw,setRaw]=useState<{title:string;json:string}|null>(null),[rawError,setRawError]=useState(""),[rawBusy,setRawBusy]=useState(false);
   const [investigation,setInvestigation]=useState<CloudTrailEvent|null>(null);
   const controller=useRef<AbortController|null>(null),request=useRef(0),rawRequest=useRef(0),scroll=useRef<HTMLDivElement>(null);
-  const parsed=useMemo(()=>indicators(text),[text]),a=useMemo(()=>compileQuery(first),[first]),b=useMemo(()=>compileQuery(second),[second]);
+  const parsed=useMemo(()=>indicators(text),[text]),a=useMemo(()=>compileQuery(first,searchFields),[first]),b=useMemo(()=>compileQuery(second,searchFields),[second]);
   const validation=mode==="indicators"?parsed.error:a.error?`Step A: ${a.error}`:b.error?`Step B: ${b.error}`:!a.ast||!b.ast?"Both steps need a search expression.":"";
   const options:HuntOptions={mode,filter:useFilter?filter:emptyFilter,indicators:mode==="indicators"?parsed.values:[],first:mode==="sequence"?a.ast:null,second:mode==="sequence"?b.ast:null,group,minutes,snapshot:null};
   const signature=JSON.stringify({options,text,first,second});
