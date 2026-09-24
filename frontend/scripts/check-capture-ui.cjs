@@ -5,22 +5,24 @@ const fs = require('node:fs');
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'test-results', 'capture');
 fs.mkdirSync(output, {recursive:true});
-async function checkStatusBar(page) {
+async function checkStatusBar(page, expected='↑ 1 new event') {
  // Flush resize/paint work and the badge entrance animation on the test clock.
  await page.clock.runFor(300);
- await page.locator('.statusbar .newpill').waitFor({state:'visible'});
- // Resolve both live elements in one browser task: resizing can replace nodes
- // between a locator resolving its handle and an evaluation using that handle.
+ await page.getByRole('button',{name:expected,exact:true}).waitFor({state:'visible'});
+ // Read the badge and footer together as one rendered layout.
  const bounds=await page.evaluate(()=>{
   const footer=document.querySelector('.statusbar');
-  const button=footer.querySelector('.newpill');
+  const button=footer?.querySelector('.newpill');
+  if(!button)return {missing:true,footer:footer?.textContent};
   const pill=button.getBoundingClientRect();
   const bar=footer.getBoundingClientRect();
   return {inside:pill.top>=bar.top && pill.bottom<=bar.bottom && pill.left>=bar.left && pill.right<=bar.right,
    visible:pill.width>0 && pill.height>0 && bar.bottom<=innerHeight && bar.right<=innerWidth,
+   label:button.textContent.replace(/\s+/g,' ').trim(),
    pill:{width:pill.width,height:pill.height},bar:{width:bar.width,height:bar.height}};
  });
  assert.ok(bounds.inside && bounds.visible,`New-event badge spills out of the footer: ${JSON.stringify(bounds)}`);
+ assert.equal(bounds.label,expected,'Inspection lost its pending event count');
 }
 (async()=>{
  const vite=await import('vite');
@@ -188,11 +190,14 @@ async function checkStatusBar(page) {
   await page.screenshot({path:path.join(output,'statusbar-minimum.png'),fullPage:true});
   // Inspection needs only a progress notification, not a million fixture rows.
   await page.evaluate(()=>window.captureTest.emit(1000004,false));
-  await page.getByRole('button',{name:'↑ 1,000,000 new events',exact:true}).waitFor();
-  await checkStatusBar(page);
+  await checkStatusBar(page,'↑ 1,000,000 new events');
   await page.screenshot({path:path.join(output,'statusbar-large-count.png'),fullPage:true});
   await page.setViewportSize({width:1440,height:1000});
-  await checkStatusBar(page);
+  await checkStatusBar(page,'↑ 1,000,000 new events');
+  assert.deepEqual(await page.evaluate(()=>({agg:window.captureTest.aggCalls,newer:window.captureTest.newerCalls})),frozen,'resizing resumed Follow during inspection');
+  await page.getByRole('button',{name:'↑ 1,000,000 new events',exact:true}).click();
+  await page.locator('.sb-mode.live').waitFor();
+  assert.equal(await page.locator('.newpill').count(),0,'explicit Follow did not clear pending arrivals');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture'],errors}));
