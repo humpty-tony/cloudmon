@@ -350,7 +350,7 @@ func TestQueryExpr(t *testing.T) {
 	// user:"ali" or errorCode=*  → alice's ListBuckets + the ec2 error = 2
 	f = Filter{Expr: &Expr{T: "or", Nodes: []Expr{
 		{T: "cmp", Field: "user", Op: "contains", Value: "ali"},
-		{T: "cmp", Field: "errorCode", Op: "eq", Value: ""},
+		{T: "cmp", Field: "errorCode", Op: "eq", Value: "*"},
 	}}}
 	if agg, err := s.Aggregates(f); err != nil || agg.Total != 2 {
 		t.Fatalf("or expr total=%d err=%v", agg.Total, err)

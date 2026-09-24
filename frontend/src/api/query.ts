@@ -4,7 +4,7 @@
 // different fields; excludes and exists are AND; text is AND substring; time is AND.
 
 import type { CloudTrailEvent, FilterField, QueryOp, QueryTerm } from "./types";
-import { filterFieldValue, eventUser, eventResult } from "./types";
+import { filterFieldValue, QUERY_FIELDS } from "./types";
 
 let termCounter = 0;
 export const nextTermId = () => `t${++termCounter}`;
@@ -16,11 +16,9 @@ export function timeTerm(from: number, to: number, label: string): QueryTerm {
   return { kind: "time", id: nextTermId(), from, to, label };
 }
 
-/** Concatenated searchable text for a free-text (bareword) query match. */
-export function searchableText(e: CloudTrailEvent): string {
-  return `${e.eventName} ${e.eventSource} ${eventUser(e)} ${e.sourceIPAddress} ${e.awsRegion} ${eventResult(
-    e
-  )} ${e.userIdentity.arn} ${e.errorCode ?? ""} ${e.errorMessage ?? ""}`.toLowerCase();
+/** Search each supported field, without inventing phrases across field boundaries. */
+export function searchableValues(e: CloudTrailEvent): string[] {
+  return QUERY_FIELDS.map(field => filterFieldValue(e, field));
 }
 
 /** Add a term, de-duplicating exact field/op/value repeats (e.g. double-clicks). */

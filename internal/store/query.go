@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -47,6 +48,8 @@ const pageCols = `seq,eventID,eventTime,eventName,eventSource,awsRegion,sourceIP
 type Filter struct {
 	Includes     map[string][]string `json:"includes"`
 	Excludes     map[string][]string `json:"excludes"`
+	Exists       []string            `json:"exists"`
+	MatchNone    bool                `json:"matchNone"`
 	ErrorsOnly   bool                `json:"errorsOnly"`
 	HideReadOnly bool                `json:"hideReadOnly"`
 	FromMs       int64               `json:"fromMs"`
@@ -81,7 +84,7 @@ var queryFieldExpr = map[string]string{
 	"useragent":          "userAgent",
 	"identitytype":       "identityType",
 	"identityarn":        "identityArn",
-	"user":               "userName",
+	"user":               "CASE WHEN identityType='Root' THEN 'root' ELSE coalesce(nullif(userName,''), CASE WHEN identityArn IS NOT NULL AND identityArn<>'' THEN coalesce(nullif(regexp_extract(identityArn,'[^/]+$'),''),identityArn) END, nullif(identityType,''), '-') END",
 	"username":           "userName",
 	"rolearn":            "roleArn",
 	"sessionname":        "sessionName",
@@ -97,23 +100,28 @@ var queryFieldExpr = map[string]string{
 	"managementevent":    "CAST(managementEvent AS VARCHAR)",
 }
 
-// filterable columns whitelist - guards against SQL injection via column name.
-var filterCols = map[string]bool{
-	"eventName": true, "eventSource": true, "awsRegion": true, "sourceIPAddress": true,
-	"identityType": true, "identityArn": true, "userName": true, "accountId": true,
-	"principalId": true, "errorCode": true, "recipientAccountId": true,
-	"roleArn": true, "sessionName": true, "userAgent": true,
-}
-
 var facetFields = []string{"eventSource", "eventName", "userName", "roleArn", "identityType", "sourceIPAddress", "awsRegion"}
-var textCols = []string{"eventName", "eventSource", "userName", "roleArn", "sessionName", "identityArn", "principalId", "sourceIPAddress", "errorCode"}
+
+// Free text searches each supported query field independently (never a joined
+// string that could invent a phrase spanning two unrelated fields).
+var textFields = []string{"eventTime", "eventName", "eventSource", "user", "userName", "identityType", "identityArn", "roleArn", "sessionName", "principalId", "accountId", "awsRegion", "sourceIPAddress", "userAgent", "result", "errorCode", "errorMessage", "readOnly", "managementEvent", "recipientAccountId", "eventID"}
+
+func queryColumn(field string) (string, error) {
+	col, ok := queryFieldExpr[strings.ToLower(field)]
+	if !ok {
+		return "", fmt.Errorf("unknown query field %q", field)
+	}
+	// The language treats missing and empty values as empty strings. Every atom
+	// is two-valued, so NOT is the complement of its operand even for SQL NULLs.
+	return "coalesce(" + col + ",'')", nil
+}
 
 func inList(col string, vals []string) string {
 	q := make([]string, 0, len(vals))
 	for _, v := range vals {
-		q = append(q, sqlStr(v))
+		q = append(q, sqlStr(strings.ToLower(v)))
 	}
-	return col + " IN (" + strings.Join(q, ",") + ")"
+	return "lower(" + col + ") IN (" + strings.Join(q, ",") + ")"
 }
 
 // escapeLike escapes the LIKE/ILIKE metacharacters so a user value matches
@@ -133,56 +141,69 @@ func globToLike(g string) string {
 
 // textMatchSQL matches a bareword (regex=false) or regex (regex=true) free-text
 // term across the searchable columns - the SQL form of the old searchableText().
-func textMatchSQL(word string, regex bool) string {
-	w := strings.TrimSpace(word)
-	if w == "" {
-		return ""
-	}
-	ors := make([]string, 0, len(textCols))
+func textMatchSQL(word string, regex bool) (string, error) {
 	if regex {
-		pat := sqlStr(w)
-		for _, col := range textCols {
-			ors = append(ors, "regexp_matches("+col+", "+pat+", 'i')")
-		}
-	} else {
-		like := sqlStr("%" + escapeLike(w) + "%")
-		for _, col := range textCols {
-			ors = append(ors, col+" ILIKE "+like+" ESCAPE '\\'")
+		if err := validateSearchRegex(word); err != nil {
+			return "", err
 		}
 	}
-	return "(" + strings.Join(ors, " OR ") + ")"
+	ors := make([]string, 0, len(textFields))
+	for _, field := range textFields {
+		col, err := queryColumn(field)
+		if err != nil {
+			return "", err
+		}
+		if regex {
+			ors = append(ors, "regexp_matches("+col+", "+sqlStr(word)+", 'i')")
+		} else {
+			ors = append(ors, col+" ILIKE "+sqlStr("%"+escapeLike(word)+"%")+" ESCAPE '\\'")
+		}
+	}
+	return "(" + strings.Join(ors, " OR ") + ")", nil
+}
+
+func validateSearchRegex(pattern string) error {
+	if len(pattern) > 4096 {
+		return fmt.Errorf("regular expression exceeds 4096 bytes")
+	}
+	// Go's RE2-compatible syntax gate also rejects bad patterns on an empty
+	// dataset, before DuckDB can optimize the predicate away.
+	if _, err := regexp.Compile("(?i)" + pattern); err != nil {
+		return fmt.Errorf("invalid RE2 regular expression: %w", err)
+	}
+	return nil
 }
 
 // cmpSQL compiles one field comparison. The value is always escaped via sqlStr;
 // the field is resolved through queryFieldExpr (the injection guard).
 func cmpSQL(field, op, value string) (string, error) {
-	col, ok := queryFieldExpr[strings.ToLower(field)]
-	if !ok {
-		return "", fmt.Errorf("unknown query field %q", field)
+	col, err := queryColumn(field)
+	if err != nil {
+		return "", err
 	}
 	switch op {
 	case "exists": // bare  field=  → has a value
-		return "(" + col + " IS NOT NULL AND " + col + " <> '')", nil
+		return "(" + col + " <> '')", nil
 	case "nexists": // bare  field!=  → missing / empty
-		return "(" + col + " IS NULL OR " + col + " = '')", nil
+		return "(" + col + " = '')", nil
 	case "eq", "ne":
 		neg := op == "ne"
 		switch {
-		case value == "": // explicit empty string:  field=""  is-empty ;  field!=""  has-a-value
+		case value == "*": // presence, consistent with the documented errorCode=* idiom
 			if neg {
-				return "(" + col + " IS NOT NULL AND " + col + " <> '')", nil
+				return "(" + col + " = '')", nil
 			}
-			return "(" + col + " IS NULL OR " + col + " = '')", nil
+			return "(" + col + " <> '')", nil
 		case strings.ContainsAny(value, "*?"): // glob
 			pat := sqlStr(globToLike(value))
 			if neg {
-				return "(" + col + " IS NULL OR " + col + " NOT ILIKE " + pat + " ESCAPE '\\')", nil
+				return "(" + col + " NOT ILIKE " + pat + " ESCAPE '\\')", nil
 			}
 			return "(" + col + " ILIKE " + pat + " ESCAPE '\\')", nil
 		default: // exact, case-insensitive
 			lv := sqlStr(strings.ToLower(value))
 			if neg {
-				return "(" + col + " IS NULL OR lower(" + col + ") <> " + lv + ")", nil
+				return "lower(" + col + ") <> " + lv, nil
 			}
 			return "lower(" + col + ") = " + lv, nil
 		}
@@ -190,9 +211,12 @@ func cmpSQL(field, op, value string) (string, error) {
 		like := sqlStr("%" + escapeLike(value) + "%")
 		return "(" + col + " ILIKE " + like + " ESCAPE '\\')", nil
 	case "regex", "nregex":
+		if err := validateSearchRegex(value); err != nil {
+			return "", err
+		}
 		m := "regexp_matches(" + col + ", " + sqlStr(value) + ", 'i')"
 		if op == "nregex" {
-			return "(" + col + " IS NULL OR NOT " + m + ")", nil
+			return "(NOT " + m + ")", nil
 		}
 		return m, nil
 	}
@@ -200,20 +224,34 @@ func cmpSQL(field, op, value string) (string, error) {
 }
 
 // exprSQL compiles a parsed query-language tree into a SQL boolean expression.
-// Empty nodes (e.g. a bareword that trims to nothing) collapse away.
 func exprSQL(e *Expr) (string, error) {
 	if e == nil {
 		return "", nil
 	}
+	nodes := 0
+	return compileExpr(e, 0, &nodes)
+}
+
+func compileExpr(e *Expr, depth int, nodes *int) (string, error) {
+	if e == nil {
+		return "", fmt.Errorf("missing expression operand")
+	}
+	*nodes++
+	if depth > 32 || *nodes > 512 || len(e.Value) > 16384 {
+		return "", fmt.Errorf("query is too complex (maximum depth 32, 512 nodes, 16384 bytes per value)")
+	}
 	switch e.T {
 	case "and", "or":
+		if len(e.Nodes) == 0 {
+			return "", fmt.Errorf("%s requires operands", e.T)
+		}
 		joiner := " AND "
 		if e.T == "or" {
 			joiner = " OR "
 		}
 		parts := make([]string, 0, len(e.Nodes))
 		for i := range e.Nodes {
-			s, err := exprSQL(&e.Nodes[i])
+			s, err := compileExpr(&e.Nodes[i], depth+1, nodes)
 			if err != nil {
 				return "", err
 			}
@@ -226,7 +264,7 @@ func exprSQL(e *Expr) (string, error) {
 		}
 		return "(" + strings.Join(parts, joiner) + ")", nil
 	case "not":
-		s, err := exprSQL(e.Node)
+		s, err := compileExpr(e.Node, depth+1, nodes)
 		if err != nil {
 			return "", err
 		}
@@ -235,7 +273,7 @@ func exprSQL(e *Expr) (string, error) {
 		}
 		return "(NOT " + s + ")", nil
 	case "text":
-		return textMatchSQL(e.Value, e.Regex), nil
+		return textMatchSQL(e.Value, e.Regex)
 	case "cmp":
 		return cmpSQL(e.Field, e.Op, e.Value)
 	}
@@ -244,15 +282,36 @@ func exprSQL(e *Expr) (string, error) {
 
 func (f Filter) where() (string, error) {
 	var c []string
-	for col, vals := range f.Includes {
-		if filterCols[col] && len(vals) > 0 {
+	if f.MatchNone {
+		c = append(c, "FALSE")
+	}
+	for field, vals := range f.Includes {
+		col, err := queryColumn(field)
+		if err != nil {
+			return "", err
+		}
+		if len(vals) > 0 {
 			c = append(c, inList(col, vals))
 		}
 	}
-	for col, vals := range f.Excludes {
-		if filterCols[col] && len(vals) > 0 {
-			c = append(c, "("+col+" IS NULL OR NOT "+inList(col, vals)+")")
+	for field, vals := range f.Excludes {
+		col, err := queryColumn(field)
+		if err != nil {
+			return "", err
 		}
+		if len(vals) > 0 {
+			c = append(c, "(NOT "+inList(col, vals)+")")
+		}
+	}
+	for _, field := range f.Exists {
+		col, err := queryColumn(field)
+		if err != nil {
+			return "", err
+		}
+		c = append(c, col+" <> ''")
+	}
+	if f.FromMs > 0 && f.ToMs > 0 && f.FromMs > f.ToMs {
+		return "", fmt.Errorf("time range starts after it ends")
 	}
 	if f.ErrorsOnly {
 		c = append(c, "errorCode IS NOT NULL AND errorCode <> ''")
@@ -266,7 +325,11 @@ func (f Filter) where() (string, error) {
 	if f.ToMs > 0 {
 		c = append(c, fmt.Sprintf("ts <= epoch_ms(%d)", f.ToMs))
 	}
-	if s := textMatchSQL(f.Text, false); s != "" {
+	if f.Text != "" {
+		s, err := textMatchSQL(f.Text, false)
+		if err != nil {
+			return "", err
+		}
 		c = append(c, s)
 	}
 	if f.Expr != nil {

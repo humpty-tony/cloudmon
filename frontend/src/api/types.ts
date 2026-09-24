@@ -130,10 +130,12 @@ export type QueryExpr =
   | { t: "cmp"; field: string; op: CmpOp; value: string }
   | { t: "text"; value: string; regex?: boolean };
 
-/** Injection-safe structured filter (mirrors internal/store.Filter). Keys are engine columns. */
+/** Injection-safe structured filter (mirrors internal/store.Filter). Keys are query fields. */
 export interface QueryFilter {
   includes: Record<string, string[]>;
   excludes: Record<string, string[]>;
+  exists?: string[];
+  matchNone?: boolean;
   errorsOnly: boolean;
   hideReadOnly: boolean;
   fromMs: number;
@@ -365,6 +367,7 @@ export const QUERY_FIELDS: FilterField[] = [
   "errorCode",
   "errorMessage",
   "readOnly",
+  "managementEvent",
   "recipientAccountId",
   "eventID",
 ];

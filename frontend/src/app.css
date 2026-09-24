@@ -194,6 +194,12 @@ kbd { font: var(--fs-cap) var(--mono); border: 1px solid var(--kbd-line); border
 .qbar-clear { background: transparent; border: 1px solid var(--line-struct); color: var(--tx-2); border-radius: var(--radius); padding: 5px 11px; font-size: var(--fs-label); cursor: pointer; }
 .qbar-clear:hover { color: var(--tx-1); }
 .qbar-status { min-height: 15px; padding: 0 2px; }
+.search-notice { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; font-size: 12px; border-bottom: 1px solid var(--line-struct); }
+.search-notice--error { color: var(--sev-err); }
+.search-notice > div { min-width: 0; }
+.search-notice button { flex: none; white-space: nowrap; }
+.search-notice details { margin-top: 4px; }
+.search-notice pre { max-height: 90px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
 .qbar-hint { color: var(--tx-3); font-size: var(--fs-label); }
 .qbar-hint code { color: var(--tx-2); font-family: var(--mono); background: var(--bg-1); border: 1px solid var(--line-row); border-radius: 3px; padding: 0 4px; margin: 0 1px; }
 .qbar-error { color: var(--sev-err); font-size: var(--fs-label); font-family: var(--mono); }

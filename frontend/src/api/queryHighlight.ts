@@ -8,7 +8,7 @@ export interface Seg {
   cls: string; // "" for whitespace; qh-field / qh-op / qh-bool / qh-str / qh-re / qh-val / qh-text / qh-paren
 }
 
-const OP = new Set(["=", "!", "~", ":"]);
+const OP = new Set(["=", "!", "~", ":", "<", ">"]);
 
 function nextIsOp(input: string, from: number): boolean {
   let i = from;
