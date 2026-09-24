@@ -1,9 +1,10 @@
-name: Build and check
+name: Build, check and release
 
 on:
   pull_request:
   push:
     branches: [main]
+    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -11,24 +12,49 @@ permissions:
 
 concurrency:
   group: build-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
+  metadata:
+    name: Build metadata
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      commit: ${{ steps.version.outputs.commit }}
+      publish: ${{ steps.version.outputs.publish }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Release behavior checks
+        run: python3 -m unittest discover -s scripts -p 'test_release.py' -v
+      - name: Validate build version and release ancestry
+        id: version
+        run: python3 scripts/release.py metadata
+
   desktop:
     name: ${{ matrix.platform }}
+    needs: metadata
     timeout-minutes: 20
+    env:
+      VITE_APP_VERSION: ${{ needs.metadata.outputs.version }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-24.04
             platform: linux/amd64
+            package: linux-amd64
             tags: webkit2_41
           - os: windows-latest
             platform: windows/amd64
+            package: windows-amd64
             tags: ''
           - os: macos-latest
             platform: darwin/universal
+            package: macos-universal
             tags: ''
     runs-on: ${{ matrix.os }}
     defaults:
@@ -47,6 +73,11 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Stamp native application version
+        run: python scripts/release.py stamp "$VITE_APP_VERSION"
       - name: Linux desktop dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
@@ -114,11 +145,63 @@ jobs:
         if: runner.os == 'macOS'
         run: lipo build/bin/cloudmon.app/Contents/MacOS/cloudmon -verify_arch x86_64 arm64
       - name: Package desktop artifact
-        # Preserve executable permissions and app-bundle symlinks inside the archive.
-        run: tar -czf "cloudmon-${{ runner.os }}.tar.gz" -C build/bin .
+        env:
+          PACKAGE_PLATFORM: ${{ matrix.package }}
+        run: python scripts/release.py package "$VITE_APP_VERSION" dist "$PACKAGE_PLATFORM"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: cloudmon-${{ runner.os }}
-          path: cloudmon-${{ runner.os }}.tar.gz
+          path: dist/*
+          compression-level: 0
           if-no-files-found: error
           retention-days: 7
+
+  assets:
+    name: Verify release packages
+    needs: [metadata, desktop]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: cloudmon-*
+          path: release-assets
+          merge-multiple: true
+      - name: Verify archives and generate SHA-256 checksums
+        run: python3 scripts/release.py assemble "$RELEASE_VERSION" release-assets
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: release-assets
+          path: release-assets/*
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish tagged release
+    needs: [metadata, assets]
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/') && needs.metadata.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: release-assets
+          path: release-assets
+      - name: Upload, verify and publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_VERSION: ${{ needs.metadata.outputs.version }}
+          RELEASE_COMMIT: ${{ needs.metadata.outputs.commit }}
+        run: python3 scripts/release.py publish "$RELEASE_VERSION" release-assets "$GITHUB_REPOSITORY" "$RELEASE_COMMIT"
