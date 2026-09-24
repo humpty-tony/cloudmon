@@ -340,6 +340,7 @@ kbd { font: var(--fs-cap) var(--mono); border: 1px solid var(--kbd-line); border
 .sb-mode.live { color: var(--sev-ok); }
 .sb-mode.paused { color: var(--sev-warn); }
 .sb-cell { color: var(--tx-3); }
+.sb-version { max-width: 10rem; overflow: hidden; text-overflow: ellipsis; }
 .sb-source { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .sb-center { flex: 1 0 auto; display: flex; justify-content: center; }
 .newpill { background: var(--acc-sel); border: 1px solid var(--acc); color: var(--acc); border-radius: var(--radius); padding: 1px 12px; cursor: pointer; font-family: var(--mono); font-size: var(--fs-cap); white-space: nowrap; flex-shrink: 0; }

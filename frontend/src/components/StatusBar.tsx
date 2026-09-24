@@ -12,7 +12,7 @@ interface Props {
   onRepin: () => void;
 }
 
-const BUILD_TAG = "v0.1"; // app version, shown in the status bar
+const BUILD_TAG = import.meta.env.VITE_APP_VERSION || "dev";
 
 export function StatusBar(p: Props) {
   const mode = !p.streaming ? "-- FILE --" : p.following ? "-- FOLLOW --" : "-- PAUSED --";
@@ -46,7 +46,7 @@ export function StatusBar(p: Props) {
         </span>
         <kbd>Ctrl K</kbd> cmds
       </span>
-      <span className="sb-cell" style={{ color: "var(--acc-text)", fontWeight: 700, letterSpacing: "0.3px" }}>
+      <span className="sb-cell sb-version" title={BUILD_TAG} style={{ color: "var(--acc-text)", fontWeight: 700, letterSpacing: "0.3px" }}>
         ⬢ {BUILD_TAG}
       </span>
     </div>

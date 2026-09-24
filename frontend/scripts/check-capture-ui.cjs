@@ -16,12 +16,18 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   if(!button)return {missing:true,footer:footer?.textContent};
   const pill=button.getBoundingClientRect();
   const bar=footer.getBoundingClientRect();
+  const version=footer.querySelector('.sb-version').getBoundingClientRect();
   return {inside:pill.top>=bar.top && pill.bottom<=bar.bottom && pill.left>=bar.left && pill.right<=bar.right,
    visible:pill.width>0 && pill.height>0 && bar.bottom<=innerHeight && bar.right<=innerWidth,
+   versionInside:version.left>=bar.left && version.right<=bar.right && version.bottom<=bar.bottom,
    label:button.textContent.replace(/\s+/g,' ').trim(),
    pill:{width:pill.width,height:pill.height},bar:{width:bar.width,height:bar.height}};
  });
  assert.ok(bounds.inside && bounds.visible,`New-event badge spills out of the footer: ${JSON.stringify(bounds)}`);
+ assert.ok(bounds.versionInside,`Build version spills out of the footer: ${JSON.stringify(bounds)}`);
+ const buildTag=process.env.VITE_APP_VERSION || 'dev';
+ assert.equal(await page.locator('.sb-version').getAttribute('title'),buildTag,'Version tooltip must preserve the full build version');
+ assert.equal((await page.locator('.sb-version').textContent()).trim(),`⬢ ${buildTag}`,'Build must show its injected version');
  assert.equal(bounds.label,expected,'Inspection lost its pending event count');
 }
 (async()=>{
