@@ -1467,6 +1467,16 @@ body { font-feature-settings: "liga", "calt"; }
 .saved-hunt-scope pre { max-height:180px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; padding:12px; border:1px solid var(--line-struct); background:var(--bg-1); font:11px var(--mono); }
 .saved-hunt-scope .saved-hunt-actions { margin-top:10px; }
 @media(max-width:720px) { .saved-hunt-controls { grid-template-columns:minmax(0,1fr) auto; } .saved-hunt-controls label:last-child { grid-column:1/-1; } }
+.hunt-sequence-controls { grid-template-columns:repeat(2,minmax(0,1fr)); align-items:start; }
+.hunt-sequence-step { display:flex; gap:8px; align-items:flex-end; min-width:0; }
+.hunt-sequence-step .hunt-input { flex:1; min-width:0; }
+.hunt-sequence-step>.btn-ghost { flex-shrink:0; margin-bottom:16px; }
+.hunt-sequence-actions,.hunt-sequence-rules { grid-column:1/-1; }
+.hunt-sequence-actions { display:flex; align-items:center; flex-wrap:wrap; gap:12px; font-size:11px; color:var(--tx-2); }
+.hunt-sequence-rules { margin:0 0 8px; font-size:12px; line-height:1.6; color:var(--tx-2); }
+.hunt-card>strong,.hunt-card>time { max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+@media(max-width:720px) { .hunt-sequence-controls { grid-template-columns:minmax(0,1fr); } }
+
 
 .investigation-export { flex-shrink:0; padding:8px 16px; border-bottom:1px solid var(--line-struct); font-size:11px; }
 .investigation-export>div { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
