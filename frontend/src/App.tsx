@@ -1,3 +1,4 @@
+import { hasCredentialLineage } from "./api/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SavedCapture, RecoveryState, CloudTrailEvent, ConnectionConfig, EvidenceSnapshot, FilterField, Lineage, QueryFilter, QueryOp, QueryTerm } from "./api/types";
 import { backend, maximizeWindow, exportEvents, onMenuEvent, type QueryResult } from "./api/backend";
@@ -571,10 +572,10 @@ export default function App() {
       .catch(() => {
         if (id === detailReq.current) setSelectedRawErr(true);
       });
-    // Assumed-role ancestry: only worth a query for AssumedRole events.
+    // The store checks whether the recorded credentials are temporary.
     setSelectedLineage(null);
     setSelectedLineageError(false);
-    if (e.userIdentity.type === "AssumedRole") {
+    if (hasCredentialLineage(e)) {
       backend
         .queryLineage(e.seq)
         .then((l) => {
@@ -613,7 +614,7 @@ export default function App() {
   useEffect(() => {
     if (!connected) return;
     const onKey = (e: KeyboardEvent) => {
-      if (settingsOpen) return; // the settings modal owns its own keys (incl. Esc)
+      if (settingsOpen || lineageSeq != null) return; // overlays own their keyboard interactions
       if (uiView !== "console") return; // vim-style shortcuts are console-only (don't hijack the Sigma editor)
       const el = e.target as HTMLElement;
       const typing = el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
@@ -670,7 +671,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, uiView]);
+  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, lineageSeq, uiView]);
 
   const toggleCapture = async () => {
     if(captureBusy)return;

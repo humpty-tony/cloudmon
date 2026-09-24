@@ -92,10 +92,11 @@ export interface Backend {
   querySnapshotPage(filter: QueryFilter, snapshot: EvidenceSnapshot, before: number, limit: number): Promise<CloudTrailEvent[]>;
   exportFiltered(filter: QueryFilter, snapshot: EvidenceSnapshot, signal?: AbortSignal): Promise<FilteredExport>;
   getEventRaw(seq: number): Promise<string>;
+  queryLineageRaw(seq: number, snapshot: EvidenceSnapshot): Promise<string>;
   queryLineage(seq: number): Promise<Lineage>; // assumed-role ancestry chain
   queryLineageGraph(seq: number): Promise<LineageTree>; // full lineage tree centred on the event
-  queryLineageChildren(accessKeyId: string): Promise<LineageTree>; // lazy expand a node's child sessions
-  queryLineageEvents(accessKeyId: string): Promise<LineageTree>; // expand a session's own events as nodes
+  queryLineageChildren(accessKeyId: string, snapshot?: EvidenceSnapshot): Promise<LineageTree>; // lazy expand a node's child sessions
+  queryLineageEvents(accessKeyId: string, snapshot?: EvidenceSnapshot): Promise<LineageTree>; // expand a session's own events as nodes
   sigmaRun(ruleYAML: string): Promise<SigmaOutcome>; // validate + test a Sigma rule
 }
 
@@ -268,17 +269,18 @@ class WailsBackend implements Backend {
   getEventRaw(seq: number) {
     return this.app.GetEventRaw(seq) as Promise<string>;
   }
+  queryLineageRaw(seq: number, snapshot: EvidenceSnapshot) { return this.app.QueryLineageRaw(seq, snapshot) as Promise<string>; }
   queryLineage(seq: number) {
     return this.app.QueryLineage(seq) as Promise<Lineage>;
   }
   queryLineageGraph(seq: number) {
     return this.app.QueryLineageGraph(seq) as Promise<LineageTree>;
   }
-  queryLineageChildren(accessKeyId: string) {
-    return this.app.QueryLineageChildren(accessKeyId) as Promise<LineageTree>;
+  queryLineageChildren(accessKeyId: string, snapshot?: EvidenceSnapshot) {
+    return this.app.QueryLineageChildren(accessKeyId, snapshot ?? null) as Promise<LineageTree>;
   }
-  queryLineageEvents(accessKeyId: string) {
-    return this.app.QueryLineageEvents(accessKeyId) as Promise<LineageTree>;
+  queryLineageEvents(accessKeyId: string, snapshot?: EvidenceSnapshot) {
+    return this.app.QueryLineageEvents(accessKeyId, snapshot ?? null) as Promise<LineageTree>;
   }
   async sigmaRun(ruleYAML: string): Promise<SigmaOutcome> {
     const r = (await this.app.SigmaRun(ruleYAML)) as SigmaResultRaw;
@@ -430,6 +432,7 @@ class MockBackend implements Backend {
   async getEventRaw(seq: number) {
     return this.data.find((e) => e.seq === seq)?.rawJSON ?? "";
   }
+  async queryLineageRaw(): Promise<string> { throw new Error("Credential lineage requires the desktop query engine."); }
   async queryLineage(): Promise<Lineage> {
     return { applicable: false, sourceIdentity: "", complete: false, nodes: [] }; // no engine in the browser preview
   }

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { stratify, tree, type HierarchyNode } from "d3-hierarchy";
-import type { FilterField, GraphEdge, GraphNode, LineageTree, QueryOp } from "../api/types";
+import type { EvidenceSnapshot, FilterField, GraphEdge, GraphNode, LineageTree, QueryOp } from "../api/types";
 import { identityGlyph } from "../api/types";
 import { backend } from "../api/backend";
 import { logError, logInfo } from "../api/log";
@@ -63,6 +63,12 @@ export function LineageView({ seq, onClose, onPivot }: Props) {
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [meta, setMeta] = useState<{ currentId: string; rootId: string; notes: string[] }>({ currentId: "", rootId: "", notes: [] });
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [retry, setRetry] = useState(0);
+  const snapshotRef = useRef<EvidenceSnapshot | undefined>(undefined);
+  const generation = useRef(0);
+  const graphRef = useRef({nodes: new Map<string, GraphNode>(), edges: [] as GraphEdge[]});
+  const busyRef = useRef(new Set<string>());
   const [expSessions, setExpSessions] = useState<Set<string>>(new Set());
   const [expEvents, setExpEvents] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<Set<string>>(new Set());
@@ -74,27 +80,35 @@ export function LineageView({ seq, onClose, onPivot }: Props) {
   const didCenter = useRef(false);
 
   useEffect(() => {
-    setLoading(true);
+    const request = ++generation.current;
+    setLoading(true); setError(""); setExpSessions(new Set()); setExpEvents(new Set()); setBusy(new Set()); busyRef.current.clear();
+    setNodes(new Map()); setEdges([]); setMeta({currentId:"",rootId:"",notes:[]});
+    snapshotRef.current = undefined;
+    graphRef.current = {nodes:new Map(),edges:[]};
     didCenter.current = false;
     setSelected(null);
     backend
       .queryLineageGraph(seq)
       .then((t) => {
+        if (request !== generation.current) return;
+        snapshotRef.current = t.snapshot;
+        graphRef.current = {nodes:new Map(t.nodes.map(n=>[n.id,n])),edges:t.edges};
         setNodes(new Map(t.nodes.map((n) => [n.id, n])));
         setEdges(t.edges);
         setMeta({ currentId: t.currentId, rootId: t.rootId, notes: t.notes || [] });
         setSelected(t.currentId || null);
         logInfo(`lineage graph opened seq=${seq} nodes=${t.nodes.length} edges=${t.edges.length}`);
       })
-      .catch((e) => logError(`lineage graph load failed seq=${seq}: ${e?.message || e}`))
-      .finally(() => setLoading(false));
-  }, [seq]);
+      .catch((e) => { if(request===generation.current){setError(String(e?.message || e));logError(`lineage graph load failed seq=${seq}: ${e?.message || e}`)} })
+      .finally(() => {if(request===generation.current)setLoading(false)});
+    return () => { generation.current++; };
+  }, [seq, retry]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !raw && onClose();
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, raw]);
 
   const laidOut = useMemo(() => {
     const arr = [...nodes.values()];
@@ -104,7 +118,7 @@ export function LineageView({ seq, onClose, onPivot }: Props) {
     try {
       const root = stratify<GraphNode>()
         .id((d) => d.id)
-        .parentId((d) => (d.id === meta.rootId ? "" : parentOf[d.id] || meta.rootId))(arr);
+        .parentId((d) => (d.id === meta.rootId ? "" : parentOf[d.id]))(arr);
       tree<GraphNode>().nodeSize([NODE_W + GAP_X, LEVEL_H])(root);
       return root;
     } catch {
@@ -134,51 +148,47 @@ export function LineageView({ seq, onClose, onPivot }: Props) {
   }, [laidOut, posOf, meta.currentId]);
 
   const merge = (t: LineageTree) => {
-    setNodes((prev) => {
-      const m = new Map(prev);
-      for (const c of t.nodes) {
-        if (m.size >= MAX_NODES) break; // never exceed the render ceiling
-        if (!m.has(c.id)) m.set(c.id, c);
-      }
-      return m;
-    });
-    setEdges((prev) => {
-      const seen = new Set(prev.map((e) => e.parent + ">" + e.child));
-      return [...prev, ...t.edges.filter((e) => !seen.has(e.parent + ">" + e.child))];
-    });
-  };
-  const withBusy = async (id: string, fn: () => Promise<void>) => {
-    if (busy.has(id)) return;
-    setBusy((s) => new Set(s).add(id));
-    try {
-      await fn();
-    } finally {
-      setBusy((s) => {
-        const m = new Set(s);
-        m.delete(id);
-        return m;
-      });
+    const next = new Map(graphRef.current.nodes);
+    const nextEdges = [...graphRef.current.edges];
+    const additions = new Map(t.nodes.map(n=>[n.id,n]));
+    let omitted = false;
+    for (const edge of t.edges) {
+      if (nextEdges.some(e=>e.parent===edge.parent && e.child===edge.child)) continue;
+      // Do not reparent an existing node or introduce a cycle. Every new node
+      // must have a visible parent; the layout never invents missing edges.
+      if (!next.has(edge.parent) || next.has(edge.child) || next.size>=MAX_NODES || !additions.has(edge.child)) {omitted=true;continue}
+      next.set(edge.child, additions.get(edge.child)!); nextEdges.push(edge);
     }
+    graphRef.current = {nodes:next,edges:nextEdges};
+    setNodes(next);setEdges(nextEdges);
+    const notes = [...(t.notes??[]),...(omitted?["Some expansion links were omitted because they repeat an existing node or exceed the graph limit."]:[])];
+    if(notes.length)setMeta(m=>({...m,notes:[...new Set([...m.notes,...notes])]}));
   };
-  const expandSessions = (n: GraphNode) =>
-    withBusy(n.id + ":s", async () => {
-      const t = await backend.queryLineageChildren(n.accessKeyId);
-      merge(t);
-      setExpSessions((s) => new Set(s).add(n.id));
-      logInfo(`expand sessions ${n.id} +${t.nodes.length} nodes (total≈${nodes.size + t.nodes.length})`);
-    });
-  const expandEvents = (n: GraphNode) =>
-    withBusy(n.id + ":e", async () => {
-      const t = await backend.queryLineageEvents(n.accessKeyId);
-      merge(t);
-      setExpEvents((s) => new Set(s).add(n.id));
-      logInfo(`expand events ${n.id} +${t.nodes.length} nodes (total≈${nodes.size + t.nodes.length})`);
-    });
-
-  const openRaw = useCallback(async (viaSeq: number, title: string) => {
-    if (!viaSeq) return;
-    setRaw({ title, json: await backend.getEventRaw(viaSeq) });
+  const withBusy = useCallback(async (id: string, fn: (request: number) => Promise<void>) => {
+    if (busyRef.current.has(id)) return;
+    const request=generation.current;
+    busyRef.current.add(id); setBusy(new Set(busyRef.current));setError("");
+    try { await fn(request); }
+    catch(e) {if(request===generation.current)setError(String(e))}
+    finally {if(request===generation.current){busyRef.current.delete(id);setBusy(new Set(busyRef.current))}}
   }, []);
+  const expandSessions = (n: GraphNode) => withBusy(n.id+":s",async request=>{
+    if(!snapshotRef.current)throw Error("Graph snapshot unavailable; reload lineage.");
+    const t=await backend.queryLineageChildren(n.accessKeyId,snapshotRef.current);
+    if(request!==generation.current)return;
+    merge(t);setExpSessions(s=>new Set(s).add(n.id));
+  });
+  const expandEvents = (n: GraphNode) => withBusy(n.id+":e",async request=>{
+    if(!snapshotRef.current)throw Error("Graph snapshot unavailable; reload lineage.");
+    const t=await backend.queryLineageEvents(n.accessKeyId,snapshotRef.current);
+    if(request!==generation.current)return;
+    merge(t);setExpEvents(s=>new Set(s).add(n.id));
+  });
+  const openRaw = useCallback((viaSeq: number, title: string) => withBusy("raw",async request=>{
+    if(!snapshotRef.current)throw Error("Graph snapshot unavailable; reload lineage.");
+    const json=await backend.queryLineageRaw(viaSeq,snapshotRef.current);
+    if(request===generation.current)setRaw({title,json});
+  }), [withBusy]);
 
   const incoming = useMemo(() => {
     const m = new Map<string, GraphEdge>();
@@ -280,19 +290,18 @@ export function LineageView({ seq, onClose, onPivot }: Props) {
     <div className="lgv-scrim" onClick={onClose}>
       <div className="lgv-modal" onClick={(e) => e.stopPropagation()}>
         <div className="lgv-bar">
-          <span className="lgv-title">Role lineage</span>
-          {meta.notes.map((n, i) => (
-            <span key={i} className="lgv-note">⚠ {n}</span>
-          ))}
+          <span className="lgv-title">Credential lineage</span>
           <span className="lgv-spacer" />
           <span className="lgv-hint">drag pan · scroll zoom · click a node for details</span>
           <button className="lgv-close" onClick={onClose}>✕ Close</button>
         </div>
 
+        {meta.notes.length>0 && <div className="lgv-notes">{meta.notes.map((n,i)=><div key={i} className="lgv-note">{n}</div>)}</div>}
+        {error && <div className="lgv-error" role="alert">{error} <button onClick={()=>setRetry(n=>n+1)}>Reload lineage</button></div>}
         {loading ? (
           <div className="lgv-empty">Building lineage…</div>
         ) : !laidOut ? (
-          <div className="lgv-empty">No lineage to show for this event.</div>
+          <div className="lgv-empty">{error ? "The graph could not be loaded." : "No credential links are available for this event."}</div>
         ) : (
           <div className="lgv-body">
             <svg ref={svgRef} className="lgv-canvas" onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp} onWheel={onWheel}>
@@ -313,6 +322,8 @@ export function LineageView({ seq, onClose, onPivot }: Props) {
                 {incoming.get(sel.id)?.crossAccount && (
                   <div className="lgv-xacct">⚠ Cross-account - assumed from account {nodes.get(incoming.get(sel.id)!.parent)?.accountId || "another account"}</div>
                 )}
+                {sel.identityNote && <div className="lgv-cap">{sel.identityNote}</div>}
+                {incoming.get(sel.id)?.evidence && <div className="lgv-cap">{incoming.get(sel.id)!.evidence}</div>}
                 <dl className="lgv-kv">
                   {sel.invokedBy && (<><dt>service</dt><dd>{sel.invokedBy}</dd></>)}
                   <dt>identity</dt><dd>{sel.identityType}</dd>
@@ -326,15 +337,16 @@ export function LineageView({ seq, onClose, onPivot }: Props) {
                   {sel.roleArn && (sel.roleSessions ?? 0) > 0 && (
                     <><dt>role total</dt><dd>{sel.roleEvents} event{sel.roleEvents === 1 ? "" : "s"} across {sel.roleSessions} session{sel.roleSessions === 1 ? "" : "s"}</dd></>
                   )}
-                  <dt>child sessions</dt><dd>{sel.childCount}</dd>
+                  <dt>issued keys</dt><dd>{sel.childCount}</dd>
                 </dl>
                 {sel.events === 0 && (sel.roleEvents ?? 0) > 0 && (
                   <div className="lgv-cap">This specific session key logged no activity - the role is active under {sel.roleSessions} other session{(sel.roleSessions ?? 0) === 1 ? "" : "s"}.</div>
                 )}
                 <div className="lgv-d-actions">
                   {incoming.get(sel.id)?.viaSeq ? (
-                    <button onClick={() => openRaw(incoming.get(sel.id)!.viaSeq, `${incoming.get(sel.id)!.viaEvent} → ${label(sel).primary}`)}>Open AssumeRole event</button>
+                    <button onClick={() => openRaw(incoming.get(sel.id)!.viaSeq, `${incoming.get(sel.id)!.viaEvent} → ${label(sel).primary}`)}>Open issuance event</button>
                   ) : null}
+                  {(incoming.get(sel.id)?.evidenceSeqs??[]).filter(s=>s!==incoming.get(sel.id)?.viaSeq).map(s=><button key={s} onClick={()=>openRaw(s,`Linked issuance observation ${s}`)}>Open linked observation {s}</button>)}
                   {pivotOf(sel) && <button onClick={() => { const p = pivotOf(sel)!; onPivot(p[0], p[1], "include"); onClose(); }}>Filter Events to this identity</button>}
                   {atCap ? (
                     <span className="lgv-cap">Graph is at its {MAX_NODES}-node limit - close and re-open on another event to explore further.</span>
@@ -344,7 +356,7 @@ export function LineageView({ seq, onClose, onPivot }: Props) {
                         <button onClick={() => expandEvents(sel)}>{busy.has(sel.id + ":e") ? "…" : `Expand ${sel.events} events`}</button>
                       )}
                       {sel.accessKeyId && sel.childCount > 0 && !expSessions.has(sel.id) && (
-                        <button onClick={() => expandSessions(sel)}>{busy.has(sel.id + ":s") ? "…" : `Expand ${sel.childCount} child session${sel.childCount > 1 ? "s" : ""}`}</button>
+                        <button onClick={() => expandSessions(sel)}>{busy.has(sel.id + ":s") ? "…" : `Expand ${sel.childCount} issued key${sel.childCount > 1 ? "s" : ""}`}</button>
                       )}
                     </>
                   )}

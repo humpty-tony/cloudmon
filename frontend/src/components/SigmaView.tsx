@@ -1,3 +1,4 @@
+import { hasCredentialLineage } from "../api/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { backend, type SigmaOutcome } from "../api/backend";
 import type { ColumnDef } from "../api/columns";
@@ -91,7 +92,7 @@ export function SigmaView(p: Props) {
     backend.getEventRaw(e.seq).then(raw=>{if(id===detailReq.current){setSelectedRaw(raw);setSelectedRawError(!raw)}})
       .catch(()=>{if(id===detailReq.current)setSelectedRawError(true)});
     setSelectedLineage(null);
-    if (e.userIdentity.type === "AssumedRole") {
+    if (hasCredentialLineage(e)) {
       backend.queryLineage(e.seq).then(lineage=>{if(id===detailReq.current)setSelectedLineage(lineage)})
         .catch(()=>{if(id===detailReq.current)setSelectedLineageError(true)});
     }

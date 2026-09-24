@@ -1,6 +1,8 @@
 package store
 
 import (
+	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 )
@@ -18,95 +20,30 @@ type LineageNode struct {
 	SessionName  string `json:"sessionName"`
 	InvokedBy    string `json:"invokedBy"` // for AWSService: the calling service
 	// The AssumeRole* event this node performed to mint the session beneath it.
-	ViaSeq      int64  `json:"viaSeq"`
-	ViaEvent    string `json:"viaEvent"`
-	ViaTime     string `json:"viaTime"`
-	ViaSourceIP string `json:"viaSourceIP"`
+	ViaSeq       int64   `json:"viaSeq"`
+	ViaEvent     string  `json:"viaEvent"`
+	ViaTime      string  `json:"viaTime"`
+	ViaSourceIP  string  `json:"viaSourceIP"`
+	Evidence     string  `json:"evidence"`
+	EvidenceSeqs []int64 `json:"evidenceSeqs"`
 }
 
-// Lineage is the assumed-role ancestry for one event: who ultimately assumed the
-// role. Complete=false means the chain broke (an AssumeRole wasn't in the dataset
-// - cross-account, outside the time range, or a service-internal assumption).
+// Lineage is a credential ancestry supported by the loaded evidence. Status and
+// Reason explain where the walk stopped; Complete never verifies a human identity.
 type Lineage struct {
-	Applicable     bool          `json:"applicable"`     // false unless the event is an AssumedRole
-	SourceIdentity string        `json:"sourceIdentity"` // immutable origin, if sts:SourceIdentity is set
-	Complete       bool          `json:"complete"`       // reached a real principal (not an unresolved role)
-	Nodes          []LineageNode `json:"nodes"`          // origin-first → immediate parent
+	Applicable     bool          `json:"applicable"`     // recorded temporary credentials
+	SourceIdentity string        `json:"sourceIdentity"` // recorded attribute, not verified human identity
+	Complete       bool          `json:"complete"`       // reached a recorded non-session principal
+	Status         string        `json:"status"`
+	Reason         string        `json:"reason"`
+	Nodes          []LineageNode `json:"nodes"` // origin-first → immediate parent
 }
 
 const lineageMaxDepth = 12
 
-// Lineage walks the assumed-role chain for the event `seq` by following the
-// credential key: a session's userIdentity.accessKeyId equals the
-// responseElements.credentials.accessKeyId of the AssumeRole that minted it, whose
-// userIdentity is the caller. Repeat up the chain.
-func (s *Store) Lineage(seq int64) (Lineage, error) {
-	lin := Lineage{Nodes: []LineageNode{}}
-
-	var seed []struct {
-		AccessKeyID    string `json:"accessKeyId"`
-		SourceIdentity string `json:"sourceIdentity"`
-		IdentityType   string `json:"identityType"`
-	}
-	if err := s.queryJSON(fmt.Sprintf("SELECT accessKeyId, sourceIdentity, identityType FROM events WHERE seq=%d;", seq), &seed); err != nil {
-		return lin, err
-	}
-	if len(seed) == 0 || seed[0].IdentityType != "AssumedRole" {
-		return lin, nil // not an assumed-role event → no lineage
-	}
-	lin.Applicable = true
-	lin.SourceIdentity = seed[0].SourceIdentity
-	if seed[0].AccessKeyID == "" {
-		return lin, nil // no key to follow
-	}
-
-	// Walk up: each hop is the AssumeRole event whose issuedKeyId equals the child
-	// session's key; its userIdentity is the parent, whose own key feeds the next hop.
-	q := fmt.Sprintf(`WITH RECURSIVE chain AS (
-  SELECT seq, eventName, eventTime, sourceIPAddress, identityType, identityArn, userName, accountId, roleArn, sessionName, invokedBy, accessKeyId AS caller_key, 1 AS depth
-  FROM events WHERE issuedKeyId = %s AND issuedKeyId <> '' AND issuedKeyId IS DISTINCT FROM accessKeyId
-  UNION ALL
-  SELECT e.seq, e.eventName, e.eventTime, e.sourceIPAddress, e.identityType, e.identityArn, e.userName, e.accountId, e.roleArn, e.sessionName, e.invokedBy, e.accessKeyId, c.depth + 1
-  FROM events e JOIN chain c ON e.issuedKeyId = c.caller_key
-  WHERE c.identityType = 'AssumedRole' AND c.caller_key <> '' AND e.issuedKeyId IS DISTINCT FROM e.accessKeyId AND c.depth < %d
-)
-SELECT seq, eventName, eventTime, sourceIPAddress, identityType, identityArn, userName, accountId, roleArn, sessionName, invokedBy
-FROM chain ORDER BY depth DESC;`, sqlStr(seed[0].AccessKeyID), lineageMaxDepth)
-
-	var rows []struct {
-		Seq          int64  `json:"seq"`
-		EventName    string `json:"eventName"`
-		EventTime    string `json:"eventTime"`
-		SourceIP     string `json:"sourceIPAddress"`
-		IdentityType string `json:"identityType"`
-		IdentityArn  string `json:"identityArn"`
-		UserName     string `json:"userName"`
-		AccountID    string `json:"accountId"`
-		RoleArn      string `json:"roleArn"`
-		SessionName  string `json:"sessionName"`
-		InvokedBy    string `json:"invokedBy"`
-	}
-	if err := s.queryJSON(q, &rows); err != nil {
-		return lin, err
-	}
-	for _, r := range rows {
-		lin.Nodes = append(lin.Nodes, LineageNode{
-			IdentityType: r.IdentityType, Arn: r.IdentityArn, UserName: r.UserName, AccountID: r.AccountID,
-			RoleArn: r.RoleArn, SessionName: r.SessionName, InvokedBy: r.InvokedBy,
-			ViaSeq: r.Seq, ViaEvent: r.EventName, ViaTime: r.EventTime, ViaSourceIP: r.SourceIP,
-		})
-	}
-	// Complete when the origin-most node we found is a real principal, not a role
-	// whose own assumption we couldn't locate.
-	if len(lin.Nodes) > 0 && lin.Nodes[0].IdentityType != "AssumedRole" {
-		lin.Complete = true
-	}
-	return lin, nil
-}
-
 // ---- Full lineage graph (the "Lineage view"): sessions are nodes, AssumeRole
-// events are edges. Each session has exactly one parent (issuedKeyId is unique),
-// so the structure is a tree rooted at a real principal. ----
+// events are edges. Only an unambiguous observed parent is drawn; conflicting
+// evidence is explained instead of being flattened into a false chain. ----
 
 // GraphNode is one session (or root principal) in the lineage tree.
 type GraphNode struct {
@@ -120,7 +57,8 @@ type GraphNode struct {
 	SessionName  string `json:"sessionName"`
 	AccountID    string `json:"accountId"`
 	AccessKeyID  string `json:"accessKeyId"`
-	InvokedBy    string `json:"invokedBy"`            // for AWSService: the calling service (e.g. config.amazonaws.com)
+	InvokedBy    string `json:"invokedBy"` // for AWSService: the calling service (e.g. config.amazonaws.com)
+	IdentityNote string `json:"identityNote,omitempty"`
 	OriginKind   string `json:"originKind,omitempty"` // sso | service-linked | service (for the UI badge)
 	Events       int    `json:"events"`               // activity count (events performed by this SESSION key)
 	ChildCount   int    `json:"childCount"`           // total AssumeRole calls this session made (for expand affordance)
@@ -141,16 +79,19 @@ type GraphNode struct {
 
 // GraphEdge is the AssumeRole that created Child from Parent.
 type GraphEdge struct {
-	Parent       string `json:"parent"`
-	Child        string `json:"child"`
-	ViaSeq       int64  `json:"viaSeq"`
-	ViaEvent     string `json:"viaEvent"`
-	ViaTime      string `json:"viaTime"`
-	ViaIP        string `json:"viaIP"`
-	CrossAccount bool   `json:"crossAccount,omitempty"` // parent and child live in different accounts
+	Parent       string  `json:"parent"`
+	Child        string  `json:"child"`
+	ViaSeq       int64   `json:"viaSeq"`
+	ViaEvent     string  `json:"viaEvent"`
+	ViaTime      string  `json:"viaTime"`
+	ViaIP        string  `json:"viaIP"`
+	Evidence     string  `json:"evidence,omitempty"`
+	EvidenceSeqs []int64 `json:"evidenceSeqs,omitempty"`
+	CrossAccount bool    `json:"crossAccount,omitempty"` // parent and child live in different accounts
 }
 
 type LineageTree struct {
+	Snapshot   *Snapshot   `json:"snapshot,omitempty"`
 	Applicable bool        `json:"applicable"`
 	CurrentID  string      `json:"currentId"`
 	RootID     string      `json:"rootId"`
@@ -182,7 +123,10 @@ func roleTail(arn string) string {
 		return p[len(p)-1] // service-linked role → the AWSServiceRoleFor… name, not "aws-service-role"
 	}
 	if len(p) > 1 {
-		return p[1] // for assumed-role/Role/Session and role/Role, index 1 is the role name
+		if strings.Contains(arn, ":assumed-role/") {
+			return p[1]
+		}
+		return p[len(p)-1]
 	}
 	return arn
 }
@@ -195,10 +139,8 @@ func originKind(identityType, roleArn, identityArn string) string {
 	switch {
 	case isSSOSession(roleArn, identityArn):
 		return "sso"
-	case strings.Contains(roleArn, "aws-service-role/") || strings.Contains(identityArn, "aws-service-role/") ||
-		strings.Contains(roleArn, "AWSServiceRoleFor") || strings.Contains(identityArn, "AWSServiceRoleFor"):
-		// the AWSServiceRoleFor… form catches zero-activity children resolved from the
-		// STS session arn (which lacks the aws-service-role/ path).
+	case strings.Contains(roleArn, ":role/aws-service-role/"):
+		// Require the observed service-linked role path, not a lookalike name.
 		return "service-linked"
 	case identityType == "AWSService":
 		return "service"
@@ -207,13 +149,16 @@ func originKind(identityType, roleArn, identityArn string) string {
 }
 
 // ssoPermissionSet extracts the AWS IAM Identity Center (SSO) permission-set name
-// from a reserved SSO role/identity arn, or "" if it isn't one. These look like
+// from an observed reserved SSO role ARN, or "" if its path is not recorded. These look like
 //
 //	…:role/aws-reserved/sso.amazonaws.com/<region>/AWSReservedSSO_<Perm>_<hash>
 //
-// and the session arn  …:assumed-role/AWSReservedSSO_<Perm>_<hash>/<user>.
+// A session ARN alone lacks this path and is not enough for classification.
 // The trailing _<hash> is dropped; permission-set names may themselves contain "_".
 func ssoPermissionSet(arn string) string {
+	if !strings.Contains(arn, ":role/aws-reserved/sso.amazonaws.com/") {
+		return ""
+	}
 	for _, seg := range strings.Split(arn, "/") {
 		if strings.HasPrefix(seg, "AWSReservedSSO_") {
 			name := strings.TrimPrefix(seg, "AWSReservedSSO_")
@@ -229,15 +174,14 @@ func ssoPermissionSet(arn string) string {
 // isSSOSession reports whether a session is an IAM Identity Center (SSO) session,
 // from either its role arn (the aws-reserved path) or its assumed-role identity arn.
 func isSSOSession(roleArn, identityArn string) bool {
-	return strings.Contains(roleArn, "aws-reserved/sso.amazonaws.com") ||
-		ssoPermissionSet(roleArn) != "" || ssoPermissionSet(identityArn) != ""
+	return strings.Contains(roleArn, ":role/aws-reserved/sso.amazonaws.com/") && ssoPermissionSet(roleArn) != ""
 }
 
 // parseStsArn pulls the account, role and session out of an assumed-role STS arn:
 // arn:aws:sts::<acct>:assumed-role/<role>/<session>
 func parseStsArn(arn string) (account, role, session string) {
 	parts := strings.Split(arn, ":")
-	if len(parts) >= 6 {
+	if len(parts) == 6 && parts[2] == "sts" && strings.HasPrefix(parts[5], "assumed-role/") {
 		account = parts[4]
 		seg := strings.SplitN(parts[5], "/", 3)
 		if len(seg) >= 2 {
@@ -250,31 +194,51 @@ func parseStsArn(arn string) (account, role, session string) {
 	return
 }
 
-// childRow is one AssumeRole edge out of a session.
+// childRow carries one qualified issuance edge.
 type childRow struct {
-	Seq       int64  `json:"seq"`
-	EventName string `json:"eventName"`
-	EventTime string `json:"eventTime"`
-	SourceIP  string `json:"sourceIPAddress"`
-	ChildKey  string `json:"child_key"`
-	ChildArn  string `json:"child_arn"`
+	Seq                                                                                                                             int64
+	EventName, EventTime, SourceIP, ChildKey, ChildArn, TargetRole, TargetPrincipal, CallerType, CallerArn, CallerAccount, Evidence string
+	EvidenceSeqs                                                                                                                    []int64
 }
 
-// childrenOf returns the AssumeRole edges a session made, capped; trunc=true when
-// there were more than the cap.
-func (s *Store) childrenOf(key string) (rows []childRow, trunc bool, err error) {
+func (s *lineageReader) childrenOf(key string) ([]childRow, bool, error) {
 	if key == "" {
 		return nil, false, nil
 	}
-	q := fmt.Sprintf(`SELECT seq, eventName, eventTime, sourceIPAddress, issuedKeyId AS child_key, issuedRoleArn AS child_arn
-FROM events WHERE accessKeyId = %s AND eventName LIKE 'AssumeRole%%' AND issuedKeyId <> '' AND issuedKeyId IS DISTINCT FROM accessKeyId
-ORDER BY eventTime LIMIT %d;`, sqlStr(key), graphChildCap+1)
-	if err = s.queryJSON(q, &rows); err != nil {
+	var keys []struct {
+		K string `json:"k"`
+	}
+	q := fmt.Sprintf("SELECT DISTINCT issuedKeyId AS k FROM events WHERE accessKeyId=%s AND %s AND issuedKeyId IS DISTINCT FROM accessKeyId ORDER BY k LIMIT %d", sqlStr(key), issuancePredicate, graphChildCap+1)
+	if err := s.queryJSON(q, &keys); err != nil {
 		return nil, false, err
 	}
-	if len(rows) > graphChildCap {
-		rows = rows[:graphChildCap]
-		trunc = true
+	trunc := len(keys) > graphChildCap
+	if trunc {
+		keys = keys[:graphChildCap]
+	}
+	var rows []childRow
+	for _, k := range keys {
+		var uses []ancRow
+		if err := s.queryJSON("SELECT "+lineageColumns+" FROM events WHERE accessKeyId="+sqlStr(k.K)+" ORDER BY try_cast(eventTime AS TIMESTAMPTZ) NULLS FIRST, seq LIMIT 1", &uses); err != nil {
+			return nil, false, err
+		}
+		var child *ancRow
+		if len(uses) > 0 {
+			child = &uses[0]
+		}
+		r, _, reason, err := s.issuer(k.K, child)
+		if err != nil {
+			return nil, false, err
+		}
+		if r == nil {
+			s.notes = append(s.notes, "Child credential omitted: "+reason)
+			continue
+		}
+		if r.NodeKey != key {
+			s.notes = append(s.notes, "Child credential has a different or missing caller key in the selected observation; omitted.")
+			continue
+		}
+		rows = append(rows, childRow{Seq: r.Seq, EventName: r.EventName, EventTime: r.EventTime, SourceIP: r.SourceIP, ChildKey: k.K, ChildArn: r.IssuedArn, TargetRole: r.TargetRole, TargetPrincipal: r.TargetPrincipal, CallerType: r.IdentityType, CallerArn: r.IdentityArn, CallerAccount: r.AccountID, Evidence: r.Evidence, EvidenceSeqs: r.EvidenceSeqs})
 	}
 	return rows, trunc, nil
 }
@@ -300,33 +264,39 @@ func uniqNonEmpty(in []string) []string {
 }
 
 type sident struct {
-	Type, Arn, RoleArn, UserName, SessionName, AccountID, InvokedBy string
+	Type, Arn, RoleArn, UserName, SessionName, AccountID, InvokedBy, Note string
 }
 
 // resolveIdentities looks up each session key's identity from its OWN events.
 // Keys that performed no events won't appear (caller falls back to the edge arn).
-func (s *Store) resolveIdentities(keys []string) (map[string]sident, error) {
+func (s *lineageReader) resolveIdentities(keys []string) (map[string]sident, error) {
 	m := map[string]sident{}
 	ks := uniqNonEmpty(keys)
 	if len(ks) == 0 {
 		return m, nil
 	}
-	q := "SELECT accessKeyId AS k, any_value(identityType) AS t, any_value(identityArn) AS a, any_value(roleArn) AS r, any_value(userName) AS u, any_value(sessionName) AS sn, any_value(accountId) AS ac, any_value(invokedBy) AS ib " +
-		"FROM events WHERE accessKeyId IN (" + sqlValues(ks) + ") GROUP BY k;"
+	q := "SELECT accessKeyId AS k, identityType AS t, identityArn AS a, roleArn AS r, userName AS u, sessionName AS sn, accountId AS ac, invokedBy AS ib, greatest(count(DISTINCT nullif(identityArn,'')) OVER (PARTITION BY accessKeyId), count(DISTINCT nullif(identityType,'')) OVER (PARTITION BY accessKeyId), count(DISTINCT nullif(roleArn,'')) OVER (PARTITION BY accessKeyId), count(DISTINCT nullif(accountId,'')) OVER (PARTITION BY accessKeyId)) AS variants " +
+		"FROM events WHERE accessKeyId IN (" + sqlValues(ks) + ") QUALIFY row_number() OVER (PARTITION BY accessKeyId ORDER BY (coalesce(identityArn,'') <> '') DESC, seq) = 1;"
+
 	var raw []struct {
-		K  string `json:"k"`
-		T  string `json:"t"`
-		A  string `json:"a"`
-		R  string `json:"r"`
-		U  string `json:"u"`
-		Sn string `json:"sn"`
-		Ac string `json:"ac"`
-		Ib string `json:"ib"`
+		Variants int    `json:"variants"`
+		K        string `json:"k"`
+		T        string `json:"t"`
+		A        string `json:"a"`
+		R        string `json:"r"`
+		U        string `json:"u"`
+		Sn       string `json:"sn"`
+		Ac       string `json:"ac"`
+		Ib       string `json:"ib"`
 	}
 	if err := s.queryJSON(q, &raw); err != nil {
 		return m, err
 	}
 	for _, r := range raw {
+		if r.Variants > 1 {
+			m[r.K] = sident{Note: "Conflicting identities use this access key; showing issuance evidence only."}
+			continue
+		}
 		m[r.K] = sident{Type: r.T, Arn: r.A, RoleArn: r.R, UserName: r.U, SessionName: r.Sn, AccountID: r.Ac, InvokedBy: r.Ib}
 	}
 	return m, nil
@@ -354,7 +324,7 @@ const resourceExpr = `COALESCE(
 
 // roleActivity returns, per role arn, the total events and distinct session keys
 // across the whole role - the rollup that contextualises a session node's own count.
-func (s *Store) roleActivity(roleArns []string) (map[string][2]int, error) {
+func (s *lineageReader) roleActivity(roleArns []string) (map[string][2]int, error) {
 	m := map[string][2]int{}
 	rs := uniqNonEmpty(roleArns)
 	if len(rs) == 0 {
@@ -377,7 +347,7 @@ func (s *Store) roleActivity(roleArns []string) (map[string][2]int, error) {
 
 // countBy runs "SELECT accessKeyId, count(*) ... GROUP BY" with an optional extra
 // predicate, returning key→count. Used for activity counts and child counts.
-func (s *Store) countBy(keys []string, extra string) (map[string]int, error) {
+func (s *lineageReader) countBy(keys []string, extra string) (map[string]int, error) {
 	m := map[string]int{}
 	ks := uniqNonEmpty(keys)
 	if len(ks) == 0 {
@@ -401,63 +371,27 @@ func (s *Store) countBy(keys []string, extra string) (map[string]int, error) {
 	return m, nil
 }
 
-// ancRow is one step of the ancestry walk (an AssumeRole event + its caller).
-type ancRow struct {
-	Seq          int64  `json:"seq"`
-	EventName    string `json:"eventName"`
-	EventTime    string `json:"eventTime"`
-	SourceIP     string `json:"sourceIPAddress"`
-	IdentityType string `json:"identityType"`
-	IdentityArn  string `json:"identityArn"`
-	UserName     string `json:"userName"`
-	AccountID    string `json:"accountId"`
-	RoleArn      string `json:"roleArn"`
-	SessionName  string `json:"sessionName"`
-	InvokedBy    string `json:"invokedBy"`
-	NodeKey      string `json:"node_key"`
-}
-
-func (s *Store) ancestry(startKey string) ([]ancRow, error) {
-	q := fmt.Sprintf(`WITH RECURSIVE chain AS (
-  SELECT seq, eventName, eventTime, sourceIPAddress, identityType, identityArn, userName, accountId, roleArn, sessionName, invokedBy, accessKeyId AS node_key, 1 AS depth
-  FROM events WHERE issuedKeyId = %s AND issuedKeyId <> '' AND issuedKeyId IS DISTINCT FROM accessKeyId
-  UNION ALL
-  SELECT e.seq, e.eventName, e.eventTime, e.sourceIPAddress, e.identityType, e.identityArn, e.userName, e.accountId, e.roleArn, e.sessionName, e.invokedBy, e.accessKeyId, c.depth + 1
-  FROM events e JOIN chain c ON e.issuedKeyId = c.node_key
-  WHERE c.identityType = 'AssumedRole' AND c.node_key <> '' AND e.issuedKeyId IS DISTINCT FROM e.accessKeyId AND c.depth < %d
-)
-SELECT seq, eventName, eventTime, sourceIPAddress, identityType, identityArn, userName, accountId, roleArn, sessionName, invokedBy, node_key FROM chain ORDER BY depth;`, sqlStr(startKey), lineageMaxDepth)
-	var rows []ancRow
-	err := s.queryJSON(q, &rows)
-	return rows, err
-}
-
 // LineageGraph builds the lineage tree centred on event `seq`: the full ancestry
 // up to the origin, the immediate parent's other children (siblings), and the
 // event's own direct children. Deeper nodes are fetched on demand via
 // LineageChildren (each carries childCount so the UI knows it's expandable).
-func (s *Store) LineageGraph(seq int64) (LineageTree, error) {
+func (s *lineageReader) LineageGraph(seq int64) (LineageTree, error) {
 	tree := LineageTree{Nodes: []GraphNode{}, Edges: []GraphEdge{}, Notes: []string{}}
 
-	var seed []struct {
-		AccessKeyID        string `json:"accessKeyId"`
-		IdentityType       string `json:"identityType"`
-		IdentityArn        string `json:"identityArn"`
-		RoleArn            string `json:"roleArn"`
-		SessionName        string `json:"sessionName"`
-		UserName           string `json:"userName"`
-		AccountID          string `json:"accountId"`
-		InvokedBy          string `json:"invokedBy"`
-		RecipientAccountID string `json:"recipientAccountId"`
-		SourceIdentity     string `json:"sourceIdentity"`
-	}
-	if err := s.queryJSON(fmt.Sprintf("SELECT accessKeyId, identityType, identityArn, roleArn, sessionName, userName, accountId, invokedBy, recipientAccountId, sourceIdentity FROM events WHERE seq=%d;", seq), &seed); err != nil {
+	seedRow, err := s.seed(seq)
+	if err != nil {
 		return tree, err
 	}
-	if len(seed) == 0 || seed[0].IdentityType != "AssumedRole" || seed[0].AccessKeyID == "" {
+	if seedRow == nil || !seedRow.temporary() {
 		return tree, nil
 	}
-	ks := seed[0].AccessKeyID
+	if seedRow.NodeKey == "" {
+		tree.Applicable = true
+		tree.Notes = append(tree.Notes, "No access key is recorded; credential links cannot be established.")
+		return tree, nil
+	}
+	seed := []ancRow{*seedRow}
+	ks := seed[0].NodeKey
 	tree.Applicable = true
 	tree.CurrentID = ks
 
@@ -475,38 +409,23 @@ func (s *Store) LineageGraph(seq int64) (LineageTree, error) {
 
 	// current session
 	cur := ensure(ks)
-	*cur = GraphNode{ID: ks, Kind: "current", IdentityType: "AssumedRole", Arn: seed[0].IdentityArn,
+	*cur = GraphNode{ID: ks, Kind: "current", IdentityType: seed[0].IdentityType, Arn: seed[0].IdentityArn,
 		RoleArn: seed[0].RoleArn, RoleName: roleTail(seed[0].RoleArn), UserName: seed[0].UserName,
 		SessionName: seed[0].SessionName, AccountID: seed[0].AccountID, AccessKeyID: ks, InvokedBy: seed[0].InvokedBy}
 
 	// ancestry
-	anc, err := s.ancestry(ks)
+	anc, status, reason, err := s.ancestry(seed[0])
 	if err != nil {
 		return tree, err
 	}
-	// Filter self-loops / cycles: some events carry accessKeyId == issuedKeyId, so the
-	// recursive walk revisits the same key and yields bogus self-referential ancestors
-	// (seen with certain SSO sessions → 12 dangling self-edges). Stop at the first repeat.
-	{
-		seen := map[string]bool{ks: true}
-		prev := ks
-		var clean []ancRow
-		for _, a := range anc {
-			id := nodeID(a.NodeKey, a.IdentityArn)
-			if id == prev || seen[id] {
-				break
-			}
-			seen[id] = true
-			prev = id
-			clean = append(clean, a)
-		}
-		anc = clean
+	if status != "observed" {
+		tree.Notes = append(tree.Notes, reason)
 	}
 	var parentKey, parentID string
 	prevID := ks
 	for i := range anc {
 		a := anc[i]
-		id := nodeID(a.NodeKey, a.IdentityArn)
+		id := ancestorID(a)
 		n := ensure(id)
 		kind := "ancestor"
 		if i == 0 {
@@ -516,54 +435,32 @@ func (s *Store) LineageGraph(seq int64) (LineageTree, error) {
 		*n = GraphNode{ID: id, Kind: kind, IdentityType: a.IdentityType, Arn: a.IdentityArn,
 			RoleArn: a.RoleArn, RoleName: roleTail(a.RoleArn), UserName: a.UserName, SessionName: a.SessionName,
 			AccountID: a.AccountID, AccessKeyID: a.NodeKey, InvokedBy: a.InvokedBy}
-		tree.Edges = append(tree.Edges, GraphEdge{Parent: id, Child: prevID, ViaSeq: a.Seq, ViaEvent: a.EventName, ViaTime: a.EventTime, ViaIP: a.SourceIP})
+		tree.Edges = append(tree.Edges, GraphEdge{Parent: id, Child: prevID, ViaSeq: a.Seq, ViaEvent: a.EventName, ViaTime: a.EventTime, ViaIP: a.SourceIP, Evidence: a.Evidence, EvidenceSeqs: a.EvidenceSeqs})
 		prevID = id
 	}
-	if len(anc) == 0 {
-		tree.RootID = ks
-		// Distinguish a cross-account / SSO origin from a merely-missing AssumeRole:
-		// a federated Identity Center login, a role used in an account other than the
-		// one that owns it, or an assumption logged only in the caller's account are
-		// all security-relevant signals worth naming instead of "can't find it".
-		roleAcct, recip := seed[0].AccountID, seed[0].RecipientAccountID
-		perm := ssoPermissionSet(seed[0].RoleArn)
-		if perm == "" {
-			perm = ssoPermissionSet(seed[0].IdentityArn)
-		}
-		switch {
-		case isSSOSession(seed[0].RoleArn, seed[0].IdentityArn):
-			ps := perm
-			if ps == "" {
-				ps = "(unknown permission set)"
-			}
-			tree.Notes = append(tree.Notes, fmt.Sprintf("AWS IAM Identity Center (SSO) session - permission set %s. Its origin is a federated SSO login (centralised in your Identity Center account), not an in-account AssumeRole.", ps))
-		case roleAcct != "" && recip != "" && roleAcct != recip:
-			tree.Notes = append(tree.Notes, fmt.Sprintf("Cross-account: this role is owned by account %s but used in account %s - the assuming principal is logged in the role's account, not this trail.", roleAcct, recip))
-		case seed[0].SourceIdentity != "":
-			tree.Notes = append(tree.Notes, fmt.Sprintf("The AssumeRole that created this session isn't in this trail (source identity %q). The origin is likely a federated/SSO login or another account.", seed[0].SourceIdentity))
-		default:
-			tree.Notes = append(tree.Notes, "The AssumeRole that created this session isn't in this trail - it's outside the time window, a federated/SSO login, or an assumption from another account (logged in the caller's account).")
-		}
-	} else {
-		top := anc[len(anc)-1]
-		topID := nodeID(top.NodeKey, top.IdentityArn)
-		if top.IdentityType != "AssumedRole" {
+	tree.RootID = ks
+	if len(anc) > 0 {
+		topID := ancestorID(anc[len(anc)-1])
+		tree.RootID = topID
+		if status == "observed" {
 			nodes[topID].Kind = "origin"
-			tree.RootID = topID
-		} else {
-			tree.RootID = topID
-			tree.Notes = append(tree.Notes, "Ancestry incomplete above "+top.IdentityArn+" (its AssumeRole isn't in the dataset).")
 		}
+	}
+	if ps := ssoPermissionSet(seed[0].RoleArn); ps != "" {
+		tree.Notes = append(tree.Notes, "Recorded IAM Identity Center role: permission set "+ps+". This role label does not establish the login that created the session.")
+	}
+	if seed[0].SourceIdentity != "" {
+		tree.Notes = append(tree.Notes, "Recorded sourceIdentity: "+seed[0].SourceIdentity+". Its identity assurance depends on the issuing policy and identity provider.")
 	}
 
 	// keys whose identity we must resolve from own-events (siblings + children)
 	var resolveKeys []string
 	// edge-arn fallback for keys with no own events
-	edgeArn := map[string]string{}
+	edgeRows := map[string]childRow{}
 
 	addChild := func(parentNodeID, parentKey, kind string, c childRow) {
 		id := nodeID(c.ChildKey, c.ChildArn)
-		if id == parentNodeID {
+		if _, exists := nodes[id]; exists {
 			return // self-loop (accessKeyId == issuedKeyId) - not a real child
 		}
 		if _, exists := nodes[id]; !exists {
@@ -571,9 +468,9 @@ func (s *Store) LineageGraph(seq int64) (LineageTree, error) {
 			nodes[id].Kind = kind
 			nodes[id].AccessKeyID = c.ChildKey
 			resolveKeys = append(resolveKeys, c.ChildKey)
-			edgeArn[c.ChildKey] = c.ChildArn
+			edgeRows[c.ChildKey] = c
 		}
-		tree.Edges = append(tree.Edges, GraphEdge{Parent: parentNodeID, Child: id, ViaSeq: c.Seq, ViaEvent: c.EventName, ViaTime: c.EventTime, ViaIP: c.SourceIP})
+		tree.Edges = append(tree.Edges, GraphEdge{Parent: parentNodeID, Child: id, ViaSeq: c.Seq, ViaEvent: c.EventName, ViaTime: c.EventTime, ViaIP: c.SourceIP, Evidence: c.Evidence, EvidenceSeqs: c.EvidenceSeqs})
 	}
 
 	// parent's children → siblings (S is already present, so it's just skipped)
@@ -625,16 +522,12 @@ func (s *Store) LineageGraph(seq int64) (LineageTree, error) {
 			n.AccountID = id.AccountID
 			n.InvokedBy = id.InvokedBy
 		} else {
-			acct, role, sess := parseStsArn(edgeArn[k])
-			n.IdentityType = "AssumedRole"
-			n.Arn = edgeArn[k]
-			n.RoleName = role
-			n.SessionName = sess
-			n.AccountID = acct
-			if role != "" && acct != "" {
-				n.RoleArn = "arn:aws:iam::" + acct + ":role/" + role
-			}
+			applyIssuedIdentity(n, edgeRows[k])
 		}
+		if id, ok := idents[k]; ok {
+			n.IdentityNote = id.Note
+		}
+
 	}
 
 	// activity + child counts for every session node
@@ -644,14 +537,22 @@ func (s *Store) LineageGraph(seq int64) (LineageTree, error) {
 			allKeys = append(allKeys, k)
 		}
 	}
-	if acts, err := s.countBy(allKeys, ""); err == nil {
+	acts, err := s.countBy(allKeys, "")
+	if err != nil {
+		return tree, err
+	}
+	{
 		for k, c := range acts {
 			if nodes[k] != nil {
 				nodes[k].Events = c
 			}
 		}
 	}
-	if ccs, err := s.countBy(allKeys, "eventName LIKE 'AssumeRole%' AND issuedKeyId <> '' AND issuedKeyId IS DISTINCT FROM accessKeyId"); err == nil {
+	ccs, err := s.childCounts(allKeys)
+	if err != nil {
+		return tree, err
+	}
+	{
 		for k, c := range ccs {
 			if nodes[k] != nil {
 				nodes[k].ChildCount = c
@@ -696,7 +597,11 @@ func (s *Store) LineageGraph(seq int64) (LineageTree, error) {
 			roleArns = append(roleArns, ra)
 		}
 	}
-	if ra, err := s.roleActivity(roleArns); err == nil {
+	ra, err := s.roleActivity(roleArns)
+	if err != nil {
+		return tree, err
+	}
+	{
 		for _, id := range order {
 			if v, ok := ra[nodes[id].RoleArn]; ok {
 				nodes[id].RoleEvents, nodes[id].RoleSessions = v[0], v[1]
@@ -717,25 +622,31 @@ func (s *Store) LineageGraph(seq int64) (LineageTree, error) {
 
 // LineageChildren returns the direct children of one session (for lazy expansion
 // in the graph), resolved and counted like LineageGraph's nodes.
-func (s *Store) LineageChildren(accessKeyID string) (LineageTree, error) {
+func (s *lineageReader) LineageChildren(accessKeyID string) (LineageTree, error) {
 	tree := LineageTree{Nodes: []GraphNode{}, Edges: []GraphEdge{}, Notes: []string{}}
 	kids, trunc, err := s.childrenOf(accessKeyID)
 	if err != nil {
 		return tree, err
 	}
 	var keys []string
-	edgeArn := map[string]string{}
+	edgeRows := map[string]childRow{}
 	for _, c := range kids {
 		keys = append(keys, c.ChildKey)
-		edgeArn[c.ChildKey] = c.ChildArn
-		tree.Edges = append(tree.Edges, GraphEdge{Parent: accessKeyID, Child: nodeID(c.ChildKey, c.ChildArn), ViaSeq: c.Seq, ViaEvent: c.EventName, ViaTime: c.EventTime, ViaIP: c.SourceIP})
+		edgeRows[c.ChildKey] = c
+		tree.Edges = append(tree.Edges, GraphEdge{Parent: accessKeyID, Child: nodeID(c.ChildKey, c.ChildArn), ViaSeq: c.Seq, ViaEvent: c.EventName, ViaTime: c.EventTime, ViaIP: c.SourceIP, Evidence: c.Evidence, EvidenceSeqs: c.EvidenceSeqs})
 	}
 	idents, err := s.resolveIdentities(keys)
 	if err != nil {
 		return tree, err
 	}
-	acts, _ := s.countBy(keys, "")
-	ccs, _ := s.countBy(keys, "eventName LIKE 'AssumeRole%' AND issuedKeyId <> '' AND issuedKeyId IS DISTINCT FROM accessKeyId")
+	acts, err := s.countBy(keys, "")
+	if err != nil {
+		return tree, err
+	}
+	ccs, err := s.childCounts(keys)
+	if err != nil {
+		return tree, err
+	}
 	for _, c := range kids {
 		id := nodeID(c.ChildKey, c.ChildArn)
 		n := GraphNode{ID: id, Kind: "descendant", AccessKeyID: c.ChildKey, Events: acts[c.ChildKey], ChildCount: ccs[c.ChildKey]}
@@ -749,16 +660,12 @@ func (s *Store) LineageChildren(accessKeyID string) (LineageTree, error) {
 			n.AccountID = idn.AccountID
 			n.InvokedBy = idn.InvokedBy
 		} else {
-			acct, role, sess := parseStsArn(edgeArn[c.ChildKey])
-			n.IdentityType = "AssumedRole"
-			n.Arn = edgeArn[c.ChildKey]
-			n.RoleName = role
-			n.SessionName = sess
-			n.AccountID = acct
-			if role != "" && acct != "" {
-				n.RoleArn = "arn:aws:iam::" + acct + ":role/" + role
-			}
+			applyIssuedIdentity(&n, edgeRows[c.ChildKey])
 		}
+		if id, ok := idents[c.ChildKey]; ok {
+			n.IdentityNote = id.Note
+		}
+
 		tree.Nodes = append(tree.Nodes, n)
 	}
 	// role-level rollup, matching LineageGraph so expanded nodes read consistently
@@ -768,7 +675,11 @@ func (s *Store) LineageChildren(accessKeyID string) (LineageTree, error) {
 			roleArns = append(roleArns, n.RoleArn)
 		}
 	}
-	if ra, err := s.roleActivity(roleArns); err == nil {
+	ra, err := s.roleActivity(roleArns)
+	if err != nil {
+		return tree, err
+	}
+	{
 		for i := range tree.Nodes {
 			if v, ok := ra[tree.Nodes[i].RoleArn]; ok {
 				tree.Nodes[i].RoleEvents, tree.Nodes[i].RoleSessions = v[0], v[1]
@@ -788,12 +699,12 @@ const eventNodeCap = 60 // events shown when expanding a session's activity
 
 // LineageEvents returns a session's own events as leaf nodes (kind "event"), for
 // expanding the activity count in the graph. Capped, newest-order by time.
-func (s *Store) LineageEvents(accessKeyID string) (LineageTree, error) {
+func (s *lineageReader) LineageEvents(accessKeyID string) (LineageTree, error) {
 	tree := LineageTree{Nodes: []GraphNode{}, Edges: []GraphEdge{}, Notes: []string{}}
 	if accessKeyID == "" {
 		return tree, nil
 	}
-	q := fmt.Sprintf("SELECT seq, eventName, eventSource, eventTime, errorCode, readOnly, %s FROM events WHERE accessKeyId = %s ORDER BY eventTime LIMIT %d;", resourceExpr, sqlStr(accessKeyID), eventNodeCap+1)
+	q := fmt.Sprintf("SELECT seq, eventName, eventSource, eventTime, errorCode, readOnly, %s FROM events WHERE accessKeyId = %s ORDER BY eventTime DESC, seq DESC LIMIT %d;", resourceExpr, sqlStr(accessKeyID), eventNodeCap+1)
 	var rows []struct {
 		Seq         int64  `json:"seq"`
 		EventName   string `json:"eventName"`
@@ -818,7 +729,87 @@ func (s *Store) LineageEvents(accessKeyID string) (LineageTree, error) {
 		tree.Edges = append(tree.Edges, GraphEdge{Parent: accessKeyID, Child: id, ViaSeq: r.Seq, ViaEvent: r.EventName, ViaTime: r.EventTime})
 	}
 	if trunc {
-		tree.Notes = append(tree.Notes, fmt.Sprintf("Showing the first %d events.", eventNodeCap))
+		tree.Notes = append(tree.Notes, fmt.Sprintf("Showing the newest %d events.", eventNodeCap))
 	}
 	return tree, nil
+}
+
+// A lineage response is built from one committed read; lazy expansion uses the
+// same generation and sequence cutoff and rejects replaced datasets.
+type lineageReader struct {
+	queryJSON func(string, any) error
+	notes     []string
+}
+
+func (s *Store) lineageRead(snapshot *Snapshot, fn func(*lineageReader) error) (Snapshot, error) {
+	var snap Snapshot
+	err := s.readSnapshot(context.Background(), func(ctx context.Context, tx *sql.Tx) error {
+		var err error
+		if snapshot == nil {
+			snap, err = snapshotOn(ctx, tx)
+		} else {
+			snap = *snapshot
+			err = validateSnapshot(ctx, tx, snap)
+		}
+		if err != nil {
+			return err
+		}
+		r := &lineageReader{queryJSON: func(q string, dst any) error {
+			return queryJSONOn(ctx, tx, fmt.Sprintf("WITH events AS (SELECT * FROM main.events WHERE seq <= %d) ", snap.MaxSeq)+q, dst)
+		}}
+		return fn(r)
+	})
+	return snap, err
+}
+func (s *Store) LineageGraph(seq int64) (LineageTree, error) {
+	var tree LineageTree
+	snap, err := s.lineageRead(nil, func(r *lineageReader) error {
+		var err error
+		tree, err = r.LineageGraph(seq)
+		tree.Notes = append(tree.Notes, uniqNonEmpty(r.notes)...)
+		return err
+	})
+	tree.Snapshot = &snap
+	return tree, err
+}
+func (s *Store) LineageChildren(key string, snapshots ...Snapshot) (LineageTree, error) {
+	var tree LineageTree
+	var snapshot *Snapshot
+	if len(snapshots) > 0 {
+		snapshot = &snapshots[0]
+	}
+	snap, err := s.lineageRead(snapshot, func(r *lineageReader) error {
+		var err error
+		tree, err = r.LineageChildren(key)
+		tree.Notes = append(tree.Notes, uniqNonEmpty(r.notes)...)
+		return err
+	})
+	tree.Snapshot = &snap
+	return tree, err
+}
+func (s *Store) LineageEvents(key string, snapshots ...Snapshot) (LineageTree, error) {
+	var tree LineageTree
+	var snapshot *Snapshot
+	if len(snapshots) > 0 {
+		snapshot = &snapshots[0]
+	}
+	snap, err := s.lineageRead(snapshot, func(r *lineageReader) error { var err error; tree, err = r.LineageEvents(key); return err })
+	tree.Snapshot = &snap
+	return tree, err
+}
+
+func (s *Store) LineageRaw(seq int64, snapshot Snapshot) (string, error) {
+	var rows []struct {
+		Raw string `json:"raw"`
+	}
+	_, err := s.lineageRead(&snapshot, func(r *lineageReader) error {
+		return r.queryJSON(fmt.Sprintf("SELECT raw FROM events WHERE seq=%d", seq), &rows)
+	})
+	if err != nil {
+		return "", err
+	}
+	if len(rows) == 0 {
+		return "", fmt.Errorf("issuance event is no longer available")
+	}
+	return rows[0].Raw, nil
 }

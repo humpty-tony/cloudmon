@@ -79,7 +79,11 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     ExportFiltered:async(filter,snap,id)=>{try{if(state.delayExport)await new Promise((resolve,reject)=>{searchJobs.set(id,{resolve,reject})});state.exportedFilter={filter,snapshot:snap};return {path:'cloudtrail-matches.json',count:queryRows(filter).filter(row=>row.seq<=snap.maxSeq).length}}finally{searchJobs.delete(id)}},
     QueryNewer:async(_filter,since)=>{state.newerCalls++;state.newerActive++;state.newerMax=Math.max(state.newerMax,state.newerActive);const rows=state.rows.filter(r=>r.seq>since);try{if(state.delayNewer)await new Promise(resolve=>{state.resolveNewer=resolve});return rows}finally{state.newerActive--}},
     GetEventRaw:async(seq)=>{state.rawCalls++;if(state.failRaw)throw Error('Storage unavailable');const value=state.rawBySeq[seq] || state.raw;if(state.delayRawSeq===seq)return new Promise(resolve=>{state.resolveRaw=()=>resolve(value)});return value},
-    QueryLineage:async()=>{if(state.failLineage)throw Error('Lineage unavailable');return {applicable:true,sourceIdentity:'',complete:false,nodes:[]}},
+    QueryLineage:async(seq)=>{if(state.failLineage)throw Error('Lineage unavailable');return state.lineage || {applicable:state.rows.find(r=>r.seq===seq)?.identityType==='AssumedRole',sourceIdentity:'',complete:false,status:'missing',reason:'No successful supported STS issuance for this key is present in the loaded evidence.',nodes:[]}},
+    QueryLineageGraph:async()=>{if(state.failGraph)throw Error('Graph query unavailable');return {...state.graph,snapshot:snapshot()}},
+    QueryLineageChildren:async(key,snap)=>{state.expansionSnapshot=snap;if(state.failExpansion)throw Error('The dataset changed; reload lineage.');return {nodes:[],edges:[],notes:['No further unambiguous child links are present.']}},
+    QueryLineageEvents:async(key,snap)=>{state.expansionSnapshot=snap;return {nodes:[],edges:[],notes:[]}},
+    QueryLineageRaw:async(seq,snap)=>{state.rawSnapshot=snap;return state.rawBySeq[seq] || state.raw},
     RawBySeqs:async()=>{if(state.exportFails)throw Error('Storage unavailable');return [raw]},
     ExportEventsJSON:async(data)=>{state.exported=data;return 'selection.json'},
     GetEventEvidence:async()=>({total:3,variants:3,observations:[1,2,3].map(id=>({id,source:id===3?'/evidence/history.csv':'/evidence/CloudTrail/2026/09/24/events.json.gz',ordinal:id,format:id===3?'event-history-csv':'cloudtrail-json',lossy:id===3,sha256:String(id).repeat(64),observedAt:'2026-09-24T00:01:00Z',displayed:id===1}))}),
@@ -367,6 +371,39 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('button',{name:'Cancel export',exact:true}).click();
   await page.getByText('Export cancelled; no incomplete file was saved.',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.captureTest.exportedFilter),null);
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  // Credential lineage supports temporary users and keeps uncertainty visible.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.evaluate(()=>{
+    const state=window.captureTest;
+    state.lineage={applicable:true,sourceIdentity:'recorded-operator',complete:true,status:'observed',reason:'Chain reaches a recorded principal; this does not verify the human operator.',nodes:[{identityType:'IAMUser',arn:'arn:aws:iam::111:user/alice',userName:'alice',accountId:'111',roleArn:'',sessionName:'',invokedBy:'',viaSeq:10,viaEvent:'GetSessionToken',viaTime:'2026-09-24T00:00:00Z',viaSourceIP:'192.0.2.1',evidence:'Exact access-key match to successful STS issuance; expiration not recorded',evidenceSeqs:[10,11]}]};
+    const common={roleArn:'',roleName:'',sessionName:'',invokedBy:'',childCount:1,events:1};
+    state.graph={applicable:true,rootId:'AKIAALICE',currentId:'ASIACHILD',notes:['Recorded sourceIdentity is a session attribute; identity assurance depends on the issuing policy.'],nodes:[{...common,id:'AKIAALICE',kind:'origin',identityType:'IAMUser',arn:'arn:aws:iam::111:user/alice',accountId:'111',userName:'alice',accessKeyId:'AKIAALICE'},{...common,id:'ASIACHILD',kind:'current',identityType:'IAMUser',arn:'arn:aws:iam::111:user/alice',accountId:'111',userName:'alice',accessKeyId:'ASIACHILD'}],edges:[{parent:'AKIAALICE',child:'ASIACHILD',viaSeq:10,viaEvent:'GetSessionToken',viaTime:'2026-09-24T00:00:00Z',viaIP:'192.0.2.1',evidence:'Exact access-key match; issuance precedes use; expiration not recorded',evidenceSeqs:[10,11]}]};
+    state.rawBySeq[10]='{"eventName":"GetSessionToken","eventID":"issuance-evidence"}';state.failGraph=true;
+  });
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.locator('.row').getByText('RunInstances',{exact:true}).click();
+  await page.getByText('principal observed',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'⤢ View full lineage',exact:true}).click();
+  await page.locator('.lgv-error').getByText('Graph query unavailable',{exact:false}).waitFor();
+  await page.evaluate(()=>{window.captureTest.failGraph=false});
+  await page.getByRole('button',{name:'Reload lineage',exact:true}).click();
+  await page.locator('.lgv-canvas .lgv-g').first().waitFor();
+  assert.equal(await page.locator('.lgv-canvas .lgv-g').count(),2);
+  await page.getByRole('button',{name:'Open issuance event',exact:true}).click();
+  await page.getByRole('dialog',{name:'Raw JSON',exact:true}).locator('pre').getByText('issuance-evidence',{exact:false}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.rawSnapshot.generation),'fixture');
+  await page.keyboard.press('Escape');
+  await page.locator('.lgv-modal').waitFor({state:'visible'});
+  await page.getByRole('button',{name:'Open linked observation 11',exact:true}).waitFor();
+  await page.evaluate(()=>{window.captureTest.failExpansion=true});
+  await page.getByRole('button',{name:'Expand 1 issued key',exact:true}).click();
+  await page.locator('.lgv-error').getByText('The dataset changed; reload lineage.',{exact:false}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.expansionSnapshot.generation),'fixture');
+  await page.evaluate(()=>{window.captureTest.failExpansion=false});
+  await page.getByRole('button',{name:'Expand 1 issued key',exact:true}).click();
+  await page.getByText('No further unambiguous child links are present.',{exact:true}).waitFor();
+  await page.screenshot({path:path.join(output,'investigation-context.png'),fullPage:true});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture','invalid search stays unapplied','failed search shows stale results and retries','clear resets unapplied draft'],errors}));

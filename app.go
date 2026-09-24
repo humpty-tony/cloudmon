@@ -283,16 +283,22 @@ func (a *App) QueryLineageGraph(seq int64) (store.LineageTree, error) {
 	return a.db.LineageGraph(seq)
 }
 
-func (a *App) QueryLineageChildren(accessKeyID string) (store.LineageTree, error) {
+func (a *App) QueryLineageChildren(accessKeyID string, snapshot *store.Snapshot) (store.LineageTree, error) {
 	if a.ensureDB() == nil {
 		return store.LineageTree{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	if snapshot != nil {
+		return a.db.LineageChildren(accessKeyID, *snapshot)
 	}
 	return a.db.LineageChildren(accessKeyID)
 }
 
-func (a *App) QueryLineageEvents(accessKeyID string) (store.LineageTree, error) {
+func (a *App) QueryLineageEvents(accessKeyID string, snapshot *store.Snapshot) (store.LineageTree, error) {
 	if a.ensureDB() == nil {
 		return store.LineageTree{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	if snapshot != nil {
+		return a.db.LineageEvents(accessKeyID, *snapshot)
 	}
 	return a.db.LineageEvents(accessKeyID)
 }
@@ -598,4 +604,11 @@ func (a *App) ApplyCaptureFilter(pattern string) {
 	a.cfg.CapturePattern = pattern
 	a.mu.Unlock()
 	a.Log("info", "capture filter stored (applies on next start)")
+}
+
+func (a *App) QueryLineageRaw(seq int64, snapshot store.Snapshot) (string, error) {
+	if a.ensureDB() == nil {
+		return "", fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.LineageRaw(seq, snapshot)
 }
