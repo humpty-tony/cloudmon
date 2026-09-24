@@ -95,7 +95,7 @@ export function TitleBar({ connected, canExport, canExportMatches, view, onView,
 
       {connected && (
         <div className="tbar-views">
-          <button className={`tbar-view ${view === "console" ? "on" : ""}`} onClick={() => onView("console")}>Console</button>
+          <button className={`tbar-view ${view === "console" ? "on" : ""}`} onClick={() => onView("console")}>Workbench</button>
           <button className={`tbar-view ${view === "sigma" ? "on" : ""}`} onClick={() => onView("sigma")}>⬡ Sigma</button>
           <button className={`tbar-view ${view === "analysis" ? "on" : ""}`} onClick={() => onView("analysis")}>Analysis</button>
           <button className={`tbar-view ${view === "hunts" ? "on" : ""}`} onClick={() => onView("hunts")}>Hunts</button>

@@ -36,7 +36,7 @@ export function FacetSidebar({ facets, collapsed, activeValues, onToggleCollapse
   return (
     <div className="facets">
       <div className="facets-head">
-        <span>Facets</span>
+        <span>Filters</span>
         <button className="icon-btn" onClick={onToggleCollapse} title="Collapse">
           ⟨
         </button>
@@ -64,10 +64,9 @@ export function FacetSidebar({ facets, collapsed, activeValues, onToggleCollapse
                         key={v.value}
                         className={`facet-row ${active ? "active" : ""}`}
                         style={{ "--bar": `${Math.max(3, v.fraction * 100)}%` } as React.CSSProperties}
-                        onClick={() => onPick(g.field, v.value, "include")}
                         title={v.value}
                       >
-                        <span className="facet-val">{v.value}</span>
+                        <button className="facet-val facet-include" aria-pressed={active} onClick={() => onPick(g.field, v.value, "include")}>{v.value}</button>
                         <span className="facet-count">{v.count.toLocaleString()}</span>
                         <button
                           className="facet-excl"

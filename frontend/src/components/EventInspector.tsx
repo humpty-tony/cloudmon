@@ -109,8 +109,8 @@ function SelectedInspector({ event: e, snapshot, rawJSON, rawLoading, rawError, 
       {e.errorMessage && <p className="ei-error-message" title={`${e.errorCode || "Error"}: ${e.errorMessage}`}>{e.errorMessage}</p>}
     </div>
     <div className="ei-actions" aria-label="Selected event actions">
-      <button className="ei-investigate" onClick={() => setDialog("investigate")}>Investigate</button>
-      <button onClick={() => setDialog("sources")}>Sources &amp; hashes</button>
+      <button className="ei-investigate" disabled={!snapshot} onClick={() => setDialog("investigate")}>Investigate</button>
+      <button disabled={!snapshot} onClick={() => setDialog("sources")}>Sources &amp; hashes</button>
       <span className="ei-comparison">{hasRaw ? <PinComparisonButton event={e} json={rawJSON} /> : <button disabled title="Load the original record before pinning">Pin comparison</button>}</span>
     </div>
     <div className="ei-tabs" role="tablist" aria-label="Event details">
