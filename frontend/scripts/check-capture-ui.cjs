@@ -5,6 +5,16 @@ const fs = require('node:fs');
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'test-results', 'capture');
 fs.mkdirSync(output, {recursive:true});
+async function checkStatusBar(page) {
+ const bounds=await page.locator('.newpill').evaluate(button=>{
+  const pill=button.getBoundingClientRect();
+  const bar=button.closest('.statusbar').getBoundingClientRect();
+  return {inside:pill.top>=bar.top && pill.bottom<=bar.bottom && pill.left>=bar.left && pill.right<=bar.right,
+   visible:bar.bottom<=innerHeight && bar.right<=innerWidth,
+   pill:{width:pill.width,height:pill.height},bar:{width:bar.width,height:bar.height}};
+ });
+ assert.ok(bounds.inside && bounds.visible,`New-event badge spills out of the footer: ${JSON.stringify(bounds)}`);
+}
 (async()=>{
  const vite=await import('vite');
  const server=await vite.createServer({root,server:{host:'127.0.0.1',port:5181,strictPort:true}}); await server.listen();
@@ -165,6 +175,7 @@ fs.mkdirSync(output, {recursive:true});
   await page.clock.runFor(6000);
   assert.deepEqual(await page.evaluate(()=>({agg:window.captureTest.aggCalls,newer:window.captureTest.newerCalls})),frozen,'inspection did not freeze the visible window');
   await page.screenshot({path:path.join(output,'live-inspection.png'),fullPage:true});
+  await checkStatusBar(page);
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture'],errors}));
