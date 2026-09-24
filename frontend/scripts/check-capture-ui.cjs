@@ -463,6 +463,55 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.ok(fits,'investigation spilled out of the window');
   await investigation.getByRole('button',{name:'Close investigation',exact:true}).click();
   await investigation.waitFor({state:'hidden'});
+  // Pin exact originals, compare in a worker, and keep copies stable after reloads.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.evaluate(()=>{
+    const state=window.captureTest;state.emit(2);state.rows.forEach(r=>{r.eventName='PutRolePolicy';r.eventSource='iam.amazonaws.com'});
+    state.rawBySeq[1]='{"eventID":"saved-1","eventName":"PutRolePolicy","requestParameters":{"roleName":"Deployment","policyDocument":{"Action":["s3:GetObject"],"Resource":"arn:aws:s3:::artifacts/*"}},"opaque":9007199254740993,"optional":null}';
+    state.rawBySeq[2]='{"eventID":"live-2","eventName":"PutRolePolicy","requestParameters":{"roleName":"Deployment","policyDocument":{"Action":["s3:*"],"Resource":"*"}},"opaque":9007199254740992}';
+  });
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.locator('.row').getByText('PutRolePolicy',{exact:true}).nth(1).click();
+  await page.getByRole('button',{name:'Pin event A',exact:true}).click();
+  await page.locator('.etbody').evaluate(el=>{el.scrollTop=0});await page.clock.runFor(100);
+  await page.locator('.row').getByText('PutRolePolicy',{exact:true}).first().click();
+  await page.getByRole('button',{name:'Pin event B',exact:true}).click();
+  await page.evaluate(()=>{window.captureTest.rawBySeq[1]='{"eventID":"changed-after-pin","eventName":"Replacement"}'});
+  await page.getByRole('button',{name:'Compare events',exact:true}).click();
+  const comparison=page.getByRole('dialog',{name:'Compare original records',exact:true});
+  await comparison.getByText('9007199254740993',{exact:true}).waitFor();
+  await comparison.getByText('9007199254740992',{exact:true}).waitFor();
+  await comparison.getByText('Not present',{exact:true}).waitFor();
+  await comparison.getByRole('button',{name:'Open original A',exact:true}).click();
+  const original=page.getByRole('dialog',{name:'Raw JSON',exact:true});
+  assert.ok((await original.locator('pre').textContent()).includes('9007199254740993'));
+  assert.ok(!(await original.locator('pre').textContent()).includes('changed-after-pin'),'pinned original was replaced by a later source');
+  await page.keyboard.press('Escape');
+  await comparison.waitFor({state:'visible'});
+  await page.screenshot({path:path.join(output,'investigation-compare.png'),fullPage:true});
+  assert.ok(await comparison.evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&el.scrollWidth<=el.clientWidth}));
+  await comparison.getByRole('button',{name:'Swap A/B',exact:true}).click();
+  await comparison.locator('.comparison-change').filter({hasText:'/opaque'}).locator('pre').first().getByText('9007199254740992',{exact:true}).waitFor();
+  await comparison.getByRole('button',{name:'Close comparison',exact:true}).click();
+  await page.getByRole('button',{name:'Clear pins',exact:true}).click();
+  assert.equal(await page.locator('.comparison-bar').count(),0);
+  // A large number of changes must be labelled incomplete, never "no differences".
+  await page.locator('.row').getByText('PutRolePolicy',{exact:true}).first().click();
+  await page.evaluate(()=>{
+    const state=window.captureTest;
+    state.rawBySeq[1]='{"eventID":"saved-1","eventName":"PutRolePolicy"}';
+    state.rawBySeq[2]=JSON.stringify({eventID:'live-2',eventName:'PutRolePolicy',...Object.fromEntries(Array.from({length:1000},(_,i)=>[`change${i}`,i]))});
+  });
+  await page.locator('.row').getByText('PutRolePolicy',{exact:true}).nth(1).click();
+  await page.getByRole('button',{name:'Pin event A',exact:true}).click();
+  await page.locator('.etbody').evaluate(el=>{el.scrollTop=0});await page.clock.runFor(100);
+  await page.locator('.row').getByText('PutRolePolicy',{exact:true}).first().click();
+  await page.getByRole('button',{name:'Pin event B',exact:true}).click();
+  await page.getByRole('button',{name:'Compare events',exact:true}).click();
+  await comparison.getByText('500 differences found · comparison incomplete',{exact:true}).waitFor();
+  assert.ok(await comparison.locator('.comparison-change').count()<30,'comparison rendered every change');
+  await comparison.getByRole('button',{name:'Close comparison',exact:true}).click();
+  await page.getByRole('button',{name:'Clear pins',exact:true}).click();
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture','invalid search stays unapplied','failed search shows stale results and retries','clear resets unapplied draft'],errors}));
  } finally {await browser.close();await server.close()}

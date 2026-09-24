@@ -24,6 +24,7 @@ CloudMon removes that gate. It reads CloudTrail directly (a downloaded dump, or 
 - facets, a time histogram, and live stats to pivot through millions of events,
 - [event investigation](docs/investigation-context.md) with surrounding-event timelines, resource correlations, and explicit relationship evidence,
 - [credential lineage](docs/credential-lineage.md) with qualified STS links, explicit gaps/conflicts, and snapshot-consistent expansion,
+- [original-record comparison](docs/event-comparison.md) with two pinned source copies and exact numeric evidence,
 - a Sigma testbench to write and validate detections against real data.
 
 Nothing leaves the host. It is for the people who do this work without a Splunk budget: detection engineers, incident responders, researchers, and anyone learning what CloudTrail actually contains.
