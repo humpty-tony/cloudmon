@@ -123,9 +123,10 @@ class ReleaseChecks(unittest.TestCase):
         calls = []
         def api(method, endpoint, data=None):
             calls.append((method, endpoint, data))
-            if method == "GET" and "/tags/" in endpoint:
-                if forbidden or new:
-                    raise subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 403" if forbidden else "HTTP 404")
+            if method == "GET" and "?per_page=" in endpoint:
+                if forbidden:
+                    raise subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 403")
+                return [] if new else [record]
             if method == "PATCH":
                 return {"html_url": "https://github.com/owner/repo/releases/tag/" + self.tag}
             return record
@@ -144,6 +145,13 @@ class ReleaseChecks(unittest.TestCase):
             except (ValueError, subprocess.CalledProcessError) as caught:
                 error = caught
         return calls, error
+
+    def test_draft_lookup_paginates_authenticated_release_list(self):
+        unrelated = [{"tag_name": f"v0.0.{i}", "draft": False} for i in range(100)]
+        draft = {"tag_name": self.tag, "draft": True}
+        with patch.object(release, "api", side_effect=[unrelated, [draft]]) as api:
+            self.assertEqual(release.find_release("repos/owner/repo/releases", self.tag), draft)
+        self.assertEqual(api.call_args_list[-1].args, ("GET", "repos/owner/repo/releases?per_page=100&page=2"))
 
     def test_new_release_is_draft_until_verified_then_prerelease(self):
         calls, error = self.exercise_publish(new=True)

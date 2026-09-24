@@ -9,7 +9,6 @@ from pathlib import Path
 import re
 import subprocess
 import tarfile
-from urllib.parse import quote
 import zipfile
 
 
@@ -155,6 +154,20 @@ def api(method, endpoint, data=None):
     return json.loads(gh(*args, data=data))
 
 
+def find_release(endpoint, tag):
+    # The by-tag REST endpoint only finds published releases. The authenticated
+    # list includes drafts too, so interrupted uploads can actually resume.
+    page = 1
+    while True:
+        records = api("GET", f"{endpoint}?per_page=100&page={page}")
+        for record in records:
+            if record["tag_name"] == tag:
+                return record
+        if len(records) < 100:
+            return None
+        page += 1
+
+
 def publish(tag, directory, repo, commit):
     _, prerelease = version_info(tag)
     marker = f"<!-- cloudmon-release:{commit} -->"
@@ -162,11 +175,8 @@ def publish(tag, directory, repo, commit):
     # Recheck the remote tag/main after the build, before any release mutation.
     refresh_tag(tag, commit)
     endpoint = f"repos/{repo}/releases"
-    try:
-        release = api("GET", f"{endpoint}/tags/{quote(tag, safe='')}")
-    except subprocess.CalledProcessError as error:
-        if "HTTP 404" not in (error.stderr or ""):
-            raise
+    release = find_release(endpoint, tag)
+    if release is None:
         release = api("POST", endpoint, {
             "tag_name": tag, "target_commitish": commit, "name": f"CloudMon {tag}",
             "draft": True, "prerelease": prerelease, "generate_release_notes": True,
@@ -230,4 +240,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except subprocess.CalledProcessError as error:
+        raise SystemExit(error.stderr or str(error)) from None
