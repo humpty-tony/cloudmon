@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "check:capture-ui": "node scripts/check-capture-ui.cjs",
     "check:search": "node scripts/check-search.mjs",
-    "check:inspector": "node scripts/check-inspector.mjs"
+    "check:inspector": "node scripts/check-inspector.mjs",
+    "check:labels": "node scripts/check-aliases.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",

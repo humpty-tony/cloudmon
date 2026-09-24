@@ -1,3 +1,4 @@
+import {AliasBadge} from "./AliasBadge";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { stratify, tree, type HierarchyNode } from "d3-hierarchy";
@@ -328,10 +329,11 @@ export function LineageView({ seq, initialSnapshot, onClose, onPivot }: Props) {
                 <dl className="lgv-kv">
                   {sel.invokedBy && (<><dt>service</dt><dd>{sel.invokedBy}</dd></>)}
                   <dt>identity</dt><dd>{sel.identityType}</dd>
-                  {sel.roleArn && (<><dt>role</dt><dd>{sel.roleArn}</dd></>)}
+                  {sel.arn&&<><dt>ARN</dt><dd>{sel.arn}<AliasBadge kind="arn" value={sel.arn}/></dd></>}
+                  {sel.roleArn && (<><dt>role</dt><dd>{sel.roleArn}<AliasBadge kind="arn" value={sel.roleArn}/></dd></>)}
                   {sel.sessionName && (<><dt>session</dt><dd>{sel.sessionName}</dd></>)}
                   {sel.userName && (<><dt>user</dt><dd>{sel.userName}</dd></>)}
-                  {sel.accountId && (<><dt>account</dt><dd>{sel.accountId}</dd></>)}
+                  {sel.accountId && (<><dt>account</dt><dd>{sel.accountId}<AliasBadge kind="account" value={sel.accountId}/></dd></>)}
                   {sel.accessKeyId && (<><dt>access key</dt><dd>{sel.accessKeyId}</dd></>)}
                   {/* "this session" is keyed-session framing; a service/root has no key */}
                   {sel.accessKeyId && (<><dt>this session</dt><dd>{sel.events} event{sel.events === 1 ? "" : "s"}</dd></>)}

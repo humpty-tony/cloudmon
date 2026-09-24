@@ -1,3 +1,4 @@
+import {AliasBadge} from "./AliasBadge";
 import {useEffect, useRef, useState} from "react";
 import {createPortal} from "react-dom";
 import {useVirtualizer} from "@tanstack/react-virtual";
@@ -105,11 +106,11 @@ export function InvestigationView({event,onClose,initialSnapshot}:{event:CloudTr
           </div>
           <aside className="investigation-detail">
             {selected&&<section><h3>{selected.event.eventName}</h3><p className="investigation-sub">{selected.event.eventTime}</p><h4>Why this event is shown</h4>
-              <ul>{selected.reasons.map((r,i)=><li key={i}><b>{r.label}</b>{r.value&&<code>{r.value}</code>}</li>)}</ul>
+              <ul>{selected.reasons.map((r,i)=><li key={i}><b>{r.label}</b>{r.value&&<><code>{r.value}</code><AliasBadge field={r.kind==="ip"?"sourceIPAddress":""} value={r.value}/></>}</li>)}</ul>
               <div className="investigation-actions"><button onClick={showRaw} disabled={rawBusy}>{rawBusy?"Loading record…":"Open original record"}</button>{selected.event.seq!==anchor.seq&&<button onClick={()=>center(selected)}>Center on this event</button>}</div>
               {rawError&&<p role="alert">{rawError}</p>}
             </section>}
-            <section><h3>Anchor resource references</h3>{result.resources.length===0?<p>No complete resource ARNs recorded.</p>:<ul className="investigation-resources">{result.resources.map((r,i)=><li key={i}><code>{r.arn}</code><span>{r.kind||"Recorded ARN"} · {r.source}</span></li>)}</ul>}{result.resourcesTruncated&&<p>First 100 references shown.</p>}</section>
+            <section><h3>Anchor resource references</h3>{result.resources.length===0?<p>No complete resource ARNs recorded.</p>:<ul className="investigation-resources">{result.resources.map((r,i)=><li key={i}><code>{r.arn}</code><AliasBadge kind="arn" value={r.arn}/><span>{r.kind||"Recorded ARN"} · {r.source}</span></li>)}</ul>}{result.resourcesTruncated&&<p>First 100 references shown.</p>}</section>
           </aside>
         </div>
         <details className="investigation-notes"><summary>Evidence and coverage notes</summary>{result.notes.map((note,i)=><p key={i}>{note}</p>)}</details>
