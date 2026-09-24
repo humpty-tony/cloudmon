@@ -2,6 +2,7 @@ import React from 'react'
 import {createRoot} from 'react-dom/client'
 import './app.css'
 import App from './App'
+import {EvidenceComparisonProvider} from './components/EvidenceComparison'
 
 const container = document.getElementById('root')
 
@@ -9,6 +10,6 @@ const root = createRoot(container!)
 
 root.render(
     <React.StrictMode>
-        <App/>
+        <EvidenceComparisonProvider><App/></EvidenceComparisonProvider>
     </React.StrictMode>
 )
