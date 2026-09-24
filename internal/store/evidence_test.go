@@ -82,6 +82,17 @@ func TestImportIsAtomicAcrossFilesAndFormats(t *testing.T) {
 	if n, err := s.Count(); err != nil || n != 3 {
 		t.Fatalf("failed import changed old dataset: %d %v", n, err)
 	}
+	// Also fail inside the SQL transaction, after its DROP/CREATE statements.
+	badStage := filepath.Join(t.TempDir(), "invalid-stage.ndjson")
+	if err := os.WriteFile(badStage, []byte(`{"position":"not-a-number","raw":"{}"}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.commitStage(badStage, true); err == nil {
+		t.Fatal("invalid stage committed")
+	}
+	if n, err := s.Count(); err != nil || n != 3 {
+		t.Fatalf("SQL failure replaced evidence: %d %v", n, err)
+	}
 	if err := os.Remove(filepath.Join(dir, "03.json")); err != nil {
 		t.Fatal(err)
 	}

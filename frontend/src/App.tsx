@@ -262,16 +262,15 @@ export default function App() {
     setRefreshTick(n=>n+1);setConnected(true);maximizeWindow();
   };
   const connect = async (cfg: ConnectionConfig) => {
-    let total = 0;
     if (cfg.mode === "import-dump") {
-      total = cfg.dumpPath ? await backend.ingestPath(cfg.dumpPath) : await backend.ingestText(cfg.dumpText);
+      cfg.dumpPath ? await backend.ingestPath(cfg.dumpPath) : await backend.ingestText(cfg.dumpText);
     } else {
       await backend.setConnection(cfg);
-      total = await backend.ingestNetworkBacklog();
+      await backend.ingestNetworkBacklog();
       await backend.startCapture();
     }
     const state = await backend.getRecoveryState();
-    enterDataset(cfg, total, state.capture, state.active);
+    enterDataset(cfg, state.evidence.events, state.capture, state.active);
   };
   const restoreDataset = async (state: RecoveryState, resume: boolean) => {
     if(resume) await backend.resumeCapture();

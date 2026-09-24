@@ -45,18 +45,26 @@ func (s *Store) Open() error {
 		var rows []struct {
 			N int `json:"n"`
 		}
-		if err := s.queryJSON(`SELECT count(*) AS n FROM information_schema.tables WHERE table_name='events';`, &rows); err != nil {
+		if err := s.queryJSON(`SELECT count(*) AS n FROM information_schema.tables WHERE table_name IN ('events','observations');`, &rows); err != nil {
 			return err
 		}
 		if len(rows) > 0 && rows[0].N > 0 {
 			return fmt.Errorf("unversioned evidence database; open a new database and re-import the source files")
 		}
-	}
-	if _, err := s.run(false, false, evidenceSchema()); err != nil {
-		return err
-	}
-	if err := s.SetState("evidenceVersion", evidenceVersion); err != nil {
-		return err
+		// Schema and version become durable together, including on first launch.
+		if _, err := s.run(false, false, "BEGIN TRANSACTION;"+evidenceSchema()+"INSERT INTO app_state VALUES ('evidenceVersion',"+sqlStr(evidenceVersion)+"); COMMIT;"); err != nil {
+			return err
+		}
+	} else {
+		var rows []struct {
+			N int `json:"n"`
+		}
+		if err := s.queryJSON(`SELECT count(*) AS n FROM information_schema.tables WHERE table_name IN ('events','observations');`, &rows); err != nil {
+			return err
+		}
+		if len(rows) != 1 || rows[0].N != 2 {
+			return fmt.Errorf("saved evidence schema is incomplete; the database has been retained")
+		}
 	}
 	return os.Chmod(s.dbPath, 0o600)
 }

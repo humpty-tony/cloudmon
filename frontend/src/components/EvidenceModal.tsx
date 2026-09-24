@@ -11,6 +11,8 @@ export function EvidenceModal({ seq, onClose }: { seq: number; onClose: () => vo
   const [loadingSource, setLoadingSource] = useState(false);
   const [retry, setRetry] = useState(0);
   const request = useRef(0);
+  const original = useRef<HTMLElement>(null);
+  useEffect(()=>{if(source){original.current?.focus({preventScroll:true});original.current?.scrollIntoView({block:"nearest"})}},[source]);
   useEffect(() => {
     let alive = true;
     setError(""); setPage(null); setSource(null); setLoadingSource(false); request.current++;
@@ -47,7 +49,7 @@ export function EvidenceModal({ seq, onClose }: { seq: number; onClose: () => vo
         {!page && !error && <p role="status">Loading source observations…</p>}
         {error && <div role="alert" className="recovery-warning">{error} <button className="btn-ghost" onClick={()=>setRetry(n=>n+1)}>Retry</button></div>}
         {loadingSource && <p role="status">Loading source record…</p>}
-        {source && <section aria-label="Original source record" className="evidence-original">
+        {source && <section ref={original} tabIndex={-1} aria-label="Original source record" className="evidence-original">
           <h3>Original source #{source.meta.id}</h3>
           {source.meta.lossy && <p className="recovery-warning">CSV includes only exported columns. This is the original header and row; missing CloudTrail fields cannot be reconstructed.</p>}
           <pre>{source.text}</pre>

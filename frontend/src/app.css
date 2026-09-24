@@ -1241,5 +1241,5 @@ body { font-feature-settings: "liga", "calt"; }
 .evidence-item time { font-size: 11px; color: var(--tx-3); }
 .evidence-original { border-top: 1px solid var(--line-struct); margin-top: 16px; }
 .evidence-original h3 { color: var(--tx-1); font-size: 13px; }
-.evidence-original pre { max-height: 260px; overflow: auto; background: var(--bg-0); padding: 12px; color: var(--tx-1); user-select: text; }
+.evidence-original pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; background: var(--bg-0); padding: 12px; color: var(--tx-1); user-select: text; }
 .evidence-footnote { color: var(--tx-3); margin: 14px 0 0; }

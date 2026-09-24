@@ -44,7 +44,7 @@ function Content({ tab }: { tab: string }) {
           <p>
             CloudMon provisions an EventBridge rule → SQS queue and streams live management events. Needs{" "}
             <code>events:PutRule/PutTargets</code> and <code>sqs:CreateQueue/SetQueueAttributes/ReceiveMessage</code>.
-            Use when starting fresh.
+            Closing the app pauses consumption and retains its resources. Resume or remove them from the saved-session card on the next launch. AWS charges and queue retention still apply.
           </p>
           <h4>Connect to existing SQS</h4>
           <p>
@@ -55,7 +55,7 @@ function Content({ tab }: { tab: string }) {
           <p>
             Load a local export offline - <b>no AWS access required</b>. Accepts console “Event history → Download as
             JSON”, S3 log files (<code>.json.gz</code>), <code>aws cloudtrail lookup-events</code> output, NDJSON, and
-            CSV. Best for forensics on data you already have.
+            CSV. The previous dataset remains intact if an import fails. Expand a record and choose <b>Sources &amp; hashes</b> to inspect its original observations.
           </p>
         </>
       );
