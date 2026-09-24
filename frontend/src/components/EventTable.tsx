@@ -8,6 +8,8 @@ import type { TimeZonePref } from "../api/settings";
 import { InlineDetail } from "./InlineDetail";
 
 interface Props {
+  detailMode?: "inline" | "external";
+  compact?: boolean;
   events: CloudTrailEvent[]; // newest-first; rendered newest-on-top (index 0 = top row)
   columns: ColumnDef[];
   colWidths: Record<string, number>;
@@ -87,15 +89,22 @@ function ResultCell({ e }: { e: CloudTrailEvent }) {
 // scroll render path. Selection, columns, density and time zone still update
 // through explicit props; alias subscriptions update directly.
 const EventRow = memo(function EventRow({
-  event: e, className, grid, rowHeight, columns, timeZone, onSelect, onCursor, onPivot,
+  event: e, className, grid, rowHeight, columns, timeZone, onSelect, onCursor, onPivot, compact, selected,
 }: Pick<Props, "rowHeight" | "columns" | "timeZone" | "onSelect" | "onCursor" | "onPivot"> & {
   event: CloudTrailEvent;
   className: string;
   grid: string;
+  compact?: boolean;
+  selected: boolean;
 }) {
   return (
     <div
       className={className}
+      role="row"
+      aria-selected={selected}
+      tabIndex={className.includes("row--cursor") ? 0 : -1}
+      data-event-seq={e.seq}
+      aria-label={`${e.eventName} · ${eventUser(e)} · ${e.eventTime}`}
       style={{ gridTemplateColumns: grid, height: rowHeight }}
       onClick={() => {
         onSelect(e);
@@ -109,10 +118,14 @@ const EventRow = memo(function EventRow({
         if (c.key === "time") content = <TimeCell e={e} tz={timeZone} />;
         else if (c.key === "identity") content = <IdentityCell e={e} />;
         else if (c.key === "result") content = <ResultCell e={e} />;
+        else if (c.key === "name" && compact) content = <span className="workbench-action">
+          <span className="workbench-action-name">{e.eventName}</span>
+          <span className="workbench-action-meta">{eventUser(e)}<AliasBadge kind="arn" value={e.userIdentity.arn || ""} /></span>
+        </span>;
         else content = displayValue;
         const pivotable = c.field !== "eventTime";
         return (
-          <div key={c.key} className={`cell ${c.mono ? "mono" : ""} c-${c.key}`} title={displayValue}>
+          <div key={c.key} role="cell" className={`cell ${c.mono ? "mono" : ""} c-${c.key}`} title={displayValue}>
             <span className="cell-inner">{content}{c.key!=="identity"&&<AliasBadge field={c.field} value={rawVal}/>}</span>
             {pivotable && (
               <span className="pivot-icons">
@@ -148,6 +161,8 @@ const EventRow = memo(function EventRow({
 });
 
 export const EventTable = memo(function EventTable({
+  detailMode = "inline",
+  compact = false,
   events,
   columns,
   colWidths,
@@ -240,7 +255,7 @@ export const EventTable = memo(function EventTable({
 
   useEffect(() => {
     if (follow || cursorSeq < 0) return;
-    if (selected && selected.seq === cursorSeq) return; // the expand effect below owns this row
+    if (detailMode === "inline" && selected && selected.seq === cursorSeq) return; // the expand effect below owns this row
     const ci = events.findIndex((e) => e.seq === cursorSeq);
     if (ci >= 0) rowVirtualizer.scrollToIndex(ci, { align: "auto" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -251,11 +266,11 @@ export const EventTable = memo(function EventTable({
   // height - which avoids the align:"auto" re-resolve that otherwise overshoots and
   // parks the expanded panel's bottom edge at the very top of the viewport.
   useEffect(() => {
-    if (!selected) return;
+    if (!selected || detailMode === "external") return;
     const si = events.findIndex((e) => e.seq === selected.seq);
     if (si >= 0) rowVirtualizer.scrollToIndex(si, { align: "start" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selected?.seq]);
+  }, [selected?.seq, detailMode]);
 
   const onScroll = () => {
     const el = parentRef.current;
@@ -297,12 +312,13 @@ export const EventTable = memo(function EventTable({
   const padBottom = virtualItems.length ? totalSize - virtualItems[virtualItems.length - 1].end : 0;
 
   return (
-    <div className="etable">
+    <div className={`etable ${compact ? "etable--compact" : ""}`} role="table" aria-label="CloudTrail events" aria-rowcount={n}>
       <div className="ethead-wrap" ref={headRef}>
-        <div className="ethead" style={{ gridTemplateColumns: grid, width: "100%", minWidth: minTotal }}>
+        <div className="ethead" role="row" style={{ gridTemplateColumns: grid, width: "100%", minWidth: minTotal }}>
           {columns.map((c) => (
             <div
               key={c.key}
+              role="columnheader"
               className={`eth ${overKey === c.key ? "eth--drop" : ""}`}
               onDragOver={(e) => {
                 if (dragKey.current && dragKey.current !== c.key) {
@@ -338,7 +354,7 @@ export const EventTable = memo(function EventTable({
           ))}
         </div>
       </div>
-      <div className="etbody" ref={parentRef} onScroll={onScroll}>
+      <div className="etbody" ref={parentRef} onScroll={onScroll} tabIndex={0} aria-label="Event list; use arrow keys to inspect events">
         {n === 0 && (
           <div className="et-empty">
             No events to show - adjust filters, widen the time range, or import a dump. Press <kbd>?</kbd> for help.
@@ -367,8 +383,8 @@ export const EventTable = memo(function EventTable({
                 className="rowwrap"
               >
                 <EventRow event={e} className={cls} grid={grid} rowHeight={rowHeight}
-                  columns={columns} timeZone={timeZone} onSelect={onSelect} onCursor={onCursor} onPivot={onPivot} />
-                {expanded && (
+                  columns={columns} compact={compact} selected={expanded} timeZone={timeZone} onSelect={onSelect} onCursor={onCursor} onPivot={onPivot} />
+                {expanded && detailMode === "inline" && (
                   <div className="row-expand">
                     <div className="row-expand-pin" style={{ width: viewportW || undefined }}>
                       {selectedRaw ? (

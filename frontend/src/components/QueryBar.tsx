@@ -117,11 +117,12 @@ export function QueryBar({ terms, queryText, error, inputRef, onQueryChange, onR
             }}
             onKeyDown={onKeyDown}
             onScroll={syncScroll}
-            placeholder={'eventSource="ec2.amazonaws.com" and eventName="List*"   -   press Enter to search'}
+            placeholder={'Search events · eventName="AssumeRole"'}
             spellCheck={false}
             autoComplete="off"
           />
         </div>
+        <button className="qbar-search" onClick={() => { if (!draftError) onQueryChange(draft.trim()); }} disabled={!!draftError}>Search</button>
         {active && (
           <button className="qbar-clear" onClick={() => { setDraft(""); onClear(); }} title="Clear all filters">
             clear

@@ -55,7 +55,7 @@ function Content({ tab }: { tab: string }) {
           <p>
             Load a local export offline - <b>no AWS access required</b>. Accepts console “Event history → Download as
             JSON”, S3 log files (<code>.json.gz</code>), <code>aws cloudtrail lookup-events</code> output, NDJSON, and
-            CSV. The previous dataset remains intact if an import fails. Expand a record and choose <b>Sources &amp; hashes</b> to inspect its original observations.
+            CSV. The previous dataset remains intact if an import fails. Select a record and choose <b>Sources &amp; hashes</b> to inspect its original observations.
           </p>
         </>
       );
@@ -114,10 +114,10 @@ function Content({ tab }: { tab: string }) {
           <div className="help-keys">
             <div className="help-keys-group">
               <div className="help-keys-title">Navigation</div>
-              <Key k="j / ↓" desc="move cursor down" />
-              <Key k="k / ↑" desc="move cursor up" />
+              <Key k="j / ↓" desc="inspect the next event" />
+              <Key k="k / ↑" desc="inspect the previous event" />
               <Key k="g / G" desc="jump to newest / oldest" />
-              <Key k="Enter · o" desc="expand the focused row" />
+              <Key k="Enter · o" desc="inspect the focused event" />
             </div>
             <div className="help-keys-group">
               <div className="help-keys-title">Query & view</div>
@@ -144,8 +144,8 @@ function Content({ tab }: { tab: string }) {
           </p>
           <ul>
             <li><b>Left</b> - facet sidebar: top values per field, click to filter.</li>
-            <li><b>Center</b> - a time histogram, the query bar, and the event table.</li>
-            <li><b>Row click</b> - expands inline to the event's full field tree.</li>
+            <li><b>Center</b> - a stable event list. Search and the optional histogram sit above the panes.</li>
+            <li><b>Right</b> - click a row to select it in the fixed inspector. Use Fields, Original JSON, and Lineage to inspect it without moving the list.</li>
           </ul>
           <h4>Your first query</h4>
           <ol>

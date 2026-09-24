@@ -88,6 +88,7 @@ export interface Backend {
   startCapture(): Promise<CaptureInfra>; // provision rule+queue, start polling; returns the infra
   resumeCapture(): Promise<CaptureInfra>;
   getRecoveryState(): Promise<RecoveryState>;
+  getEvidenceSnapshot(): Promise<EvidenceSnapshot>;
   getEventEvidence(seq: number, offset: number,snapshot?:EvidenceSnapshot): Promise<EvidencePage>;
   getObservation(id: number,snapshot?:EvidenceSnapshot): Promise<string>;
   stopCapture(): Promise<void>; // stop polling, keep infra
@@ -232,6 +233,7 @@ class WailsBackend implements Backend {
   }
   resumeCapture() { return this.app.ResumeCapture() as Promise<CaptureInfra>; }
   getRecoveryState() { return this.app.GetRecoveryState() as Promise<RecoveryState>; }
+  getEvidenceSnapshot() { return this.app.GetEvidenceSnapshot() as Promise<EvidenceSnapshot>; }
   getEventEvidence(seq: number, offset: number,snapshot?:EvidenceSnapshot) { return (snapshot?this.app.GetEventEvidenceSnapshot(seq,offset,snapshot):this.app.GetEventEvidence(seq, offset)) as Promise<EvidencePage>; }
   getObservation(id: number,snapshot?:EvidenceSnapshot) { return (snapshot?this.app.GetObservationSnapshot(id,snapshot):this.app.GetObservation(id)) as Promise<string>; }
   stopCapture() {
@@ -326,6 +328,7 @@ class MockBackend implements Backend {
   private connection: ConnectionConfig | null = null;
   private active = false;
   private data: CloudTrailEvent[] = [];
+  private maxSeq = 0;
   private generation = requestID();
   private mode: ConnectionMode | "" = ""; // tracked from setConnection so startCapture mirrors the real owned flag
 
@@ -378,19 +381,27 @@ class MockBackend implements Backend {
   async getRecoveryState(): Promise<RecoveryState> {
     return {evidence: {events: this.data.length, observations: this.data.length, variantEvents: 0, lossy: 0}, capture: this.capture, captureError: "", active: this.active};
   }
-  async getEventEvidence(seq: number): Promise<EvidencePage> {
-    const raw = await this.getEventRaw(seq);
+  async getEvidenceSnapshot(): Promise<EvidenceSnapshot> {
+    return {generation:this.generation,maxSeq:this.maxSeq,capturedAt:new Date().toISOString()};
+  }
+  private validateSnapshot(snapshot: EvidenceSnapshot) {
+    if(snapshot.generation!==this.generation)throw new Error('The dataset changed; run the search again');
+    if(!Number.isSafeInteger(snapshot.maxSeq)||snapshot.maxSeq<0||snapshot.maxSeq>this.maxSeq)throw new Error('Invalid search snapshot; run the search again');
+  }
+  async getEventEvidence(seq: number, _offset = 0, snapshot?:EvidenceSnapshot): Promise<EvidencePage> {
+    const raw = snapshot ? await this.queryLineageRaw(seq,snapshot) : await this.getEventRaw(seq);
     const digest = await crypto.subtle.digest("SHA-256",new TextEncoder().encode(raw));
     const sha256 = [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,"0")).join("");
     return {total: 1, variants: 1, observations: [{id: seq, sha256, source: "browser-preview", ordinal: seq, format: "demo-json", lossy: false, observedAt: "", displayed: true}]};
   }
-  getObservation(id: number) { return this.getEventRaw(id); }
+  getObservation(id: number, snapshot?:EvidenceSnapshot) { return snapshot ? this.queryLineageRaw(id,snapshot) : this.getEventRaw(id); }
   async stopCapture() { this.feed.stop(); this.active = false; }
   async teardownCapture() { this.feed.stop(); this.active = false; this.capture = null; }
   async applyCaptureFilter() {}
   onEvent(cb: EventCb): () => void {
     return this.feed.onEvent((e) => {
       this.data.push(e);
+      this.maxSeq = Math.max(this.maxSeq,e.seq);
       cb(e);
     });
   }
@@ -406,11 +417,13 @@ class MockBackend implements Backend {
   }
   async ingestText(text: string) {
     this.data = parseDump(text);
+    this.maxSeq = this.data.reduce((max,event)=>Math.max(max,event.seq),0);
     this.generation = requestID();
     return this.data.length;
   }
   async ingestNetworkBacklog() {
     this.data = this.feed.backlog(2000);
+    this.maxSeq = this.data.reduce((max,event)=>Math.max(max,event.seq),0);
     this.generation = requestID();
     return this.data.length;
   }
@@ -430,7 +443,7 @@ class MockBackend implements Backend {
     checkAborted(signal);
     const filtered = applyFilter(this.data, filter);
     return {
-      snapshot:{generation:this.generation,maxSeq:this.data.reduce((max,event)=>Math.max(max,event.seq),0),capturedAt:new Date().toISOString()},
+      snapshot:{generation:this.generation,maxSeq:this.maxSeq,capturedAt:new Date().toISOString()},
       total: filtered.length,
       facets: computeFacets(filtered),
       histogram: computeHistogram(filtered, Date.now()),
@@ -444,12 +457,12 @@ class MockBackend implements Backend {
     return {aggregates,events};
   }
   async querySnapshotPage(filter:QueryFilter,snapshot:EvidenceSnapshot,before:number,limit:number){
-    if(snapshot.generation!==this.generation)throw new Error('The dataset changed; run the search again');
+    this.validateSnapshot(snapshot);
     return applyFilter(this.data,filter).filter(event=>event.seq<=snapshot.maxSeq && (!before || event.seq<before)).sort((a,b)=>b.seq-a.seq).slice(0,Math.min(limit,2000));
   }
   async exportFiltered(filter:QueryFilter,snapshot:EvidenceSnapshot,signal?:AbortSignal):Promise<FilteredExport>{
     checkAborted(signal);
-    if(snapshot.generation!==this.generation)throw new Error('The dataset changed; run the search again');
+    this.validateSnapshot(snapshot);
     const events=applyFilter(this.data,filter).filter(event=>event.seq<=snapshot.maxSeq).sort((a,b)=>b.seq-a.seq);
     const path=await exportEvents(events);
     return {path:path??'',count:events.length};
@@ -461,7 +474,13 @@ class MockBackend implements Backend {
   async exportInvestigation(): Promise<InvestigationExport> { throw new Error("Investigation report export requires the desktop app."); }
   async analyze(): Promise<ActivityAnalysis> { throw new Error("Activity analysis requires the desktop query engine."); }
   async hunt(): Promise<HuntResult> { throw new Error("Investigation hunts require the desktop query engine."); }
-  async queryLineageRaw(): Promise<string> { throw new Error("Credential lineage requires the desktop query engine."); }
+  async queryLineageRaw(seq:number,snapshot:EvidenceSnapshot): Promise<string> {
+    this.validateSnapshot(snapshot);
+    if(seq>snapshot.maxSeq)throw new Error('The event is outside this evidence snapshot');
+    const raw=await this.getEventRaw(seq);
+    if(!raw)throw new Error('The event is no longer available');
+    return raw;
+  }
   async queryLineage(): Promise<Lineage> {
     return { applicable: false, sourceIdentity: "", complete: false, nodes: [] }; // no engine in the browser preview
   }

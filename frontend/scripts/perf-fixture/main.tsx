@@ -2,6 +2,7 @@ import { Profiler, useCallback, useLayoutEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
 import { EventTable } from "../../src/components/EventTable";
+import { EventInspector } from "../../src/components/EventInspector";
 import { EvidenceComparisonProvider } from "../../src/components/EvidenceComparison";
 import { COLUMNS } from "../../src/api/columns";
 import type { CloudTrailEvent, Lineage } from "../../src/api/types";
@@ -68,13 +69,14 @@ function Fixture() {
   const [counter, setCounter] = useState(0);
   const events = datasets[count];
   const select = useCallback((event: CloudTrailEvent) => {
-    setSelected(previous => previous === event ? null : event);
+    setSelected(event);
   }, []);
+  const closeInspector = useCallback(() => setSelected(null), []);
 
   useLayoutEffect(() => {
     window.perfFixture = {
       snapshot: () => ({ ...metrics }),
-      async update(kind: "cursor" | "scroll" | "counter", steps = 20) {
+      async update(kind: "cursor" | "scroll" | "counter" | "selection", steps = 20) {
         const before = { ...metrics };
         const durations: number[] = [];
         for (let step = 0; step < steps; step++) {
@@ -82,6 +84,7 @@ function Fixture() {
           if (kind === "cursor") flushSync(() => setCursor(count - step));
           if (kind === "counter") flushSync(() => setCounter(value => value + 1));
           if (kind === "scroll") document.querySelector<HTMLDivElement>(".etbody")!.scrollTop = (step + 1) * 160;
+          if (kind === "selection") flushSync(() => { setSelected(datasets[count][step % count]); setCursor(count - step % count); });
           await painted();
           durations.push(performance.now() - start);
         }
@@ -102,10 +105,16 @@ function Fixture() {
   return <EvidenceComparisonProvider>
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", minHeight: 0 }}>
       <div style={{ padding: 8 }}>Synthetic fixture · {count.toLocaleString()} rows · counter <span data-testid="counter">{counter}</span></div>
-      <EventTable key={count} events={events} columns={columns} colWidths={widths} rowHeight={32}
-        selected={selected} cursorSeq={cursor} follow={false} onSelect={select} onCursor={setCursor}
-        onPivot={noop} onDisengageFollow={noop} onReachTop={noop} onResizeColumn={noop}
-        onRetryDetail={noop} selectedRaw={selected?.rawJSON} selectedLineage={lineage} isSensitive={notSensitive} timeZone="utc" />
+      <div style={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, minWidth: 0, overflow: "hidden" }}>
+          <EventTable key={count} events={events} columns={columns} colWidths={widths} rowHeight={32} detailMode="external"
+            selected={selected} cursorSeq={cursor} follow={false} onSelect={select} onCursor={setCursor}
+            onPivot={noop} onDisengageFollow={noop} onReachTop={noop} onResizeColumn={noop}
+            onRetryDetail={noop} isSensitive={notSensitive} timeZone="utc" />
+        </div>
+        <EventInspector event={selected} rawJSON={selected?.rawJSON ?? ""} lineage={lineage}
+          onRetry={noop} onPivot={noop} onClose={closeInspector} timeZone="utc" />
+      </div>
     </div>
   </EvidenceComparisonProvider>;
 }
@@ -114,7 +123,7 @@ declare global {
   interface Window {
     perfFixture: {
       snapshot(): typeof metrics;
-      update(kind: "cursor" | "scroll" | "counter", steps?: number): Promise<{keyReads:number;commits:number;rowResizes:number;durations:number[]}>;
+      update(kind: "cursor" | "scroll" | "counter" | "selection", steps?: number): Promise<{keyReads:number;commits:number;rowResizes:number;durations:number[]}>;
       smallDataset(): Promise<void>;
     };
   }

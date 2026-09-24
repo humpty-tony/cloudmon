@@ -27,11 +27,12 @@ import { Toolbar } from "./components/Toolbar";
 import { QueryBar } from "./components/QueryBar";
 import { FacetSidebar } from "./components/FacetSidebar";
 import { HistogramStrip } from "./components/HistogramStrip";
+import { EventInspector } from "./components/EventInspector";
+import "./workbench.css";
 import { EventTable } from "./components/EventTable";
 import { StatusBar } from "./components/StatusBar";
 import { CommandPalette, type Command } from "./components/CommandPalette";
 import { HelpModal } from "./components/HelpModal";
-import { StatsBar } from "./components/StatsBar";
 import { DEFAULT_THEME } from "./api/themes";
 import { TitleBar } from "./components/TitleBar";
 import { LineageView } from "./components/LineageView";
@@ -128,19 +129,21 @@ export default function App() {
   const [queryText, setQueryText] = useState("");
   const [sensitiveOnly, setSensitiveOnly] = useState<boolean>(() => load("sensitiveOnly", false)); // sticky across sessions
   const [selected, setSelected] = useState<CloudTrailEvent | null>(null);
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  const [selectedSnapshot, setSelectedSnapshot] = useState<EvidenceSnapshot | null>(null);
   const [cursorSeq, setCursorSeq] = useState(-1); // anchored to event identity, not row position
   const [follow, setFollow] = useState(true);
   const [newCount, setNewCount] = useState(0);
 
-  const [presetKey, setPresetKey] = useState<string>(() => load("preset", DEFAULT_PRESET.key));
-  const [visibleCols, setVisibleCols] = useState<string[]>(() => load("cols", DEFAULT_PRESET.columns));
-  const [colWidths, setColWidths] = useState<Record<string, number>>(() => load("colw", {}));
+  const [presetKey, setPresetKey] = useState<string>(() => load("workbench.preset", DEFAULT_PRESET.key));
+  const [visibleCols, setVisibleCols] = useState<string[]>(() => load("workbench.cols", DEFAULT_PRESET.columns));
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => load("workbench.colw", {}));
   const [customPresets, setCustomPresets] = useState<Preset[]>(() => load("customPresets", []));
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => load("sidebar", false));
-  const [histCollapsed, setHistCollapsed] = useState<boolean>(() => load("hist", false));
+  const [histCollapsed, setHistCollapsed] = useState<boolean>(() => load("workbench.hist", true));
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [help, setHelp] = useState<{ open: boolean; tab: string }>({ open: false, tab: "getting-started" });
-  const [narrow, setNarrow] = useState(false);
   const [theme, setTheme] = useState<string>(() => load("theme", DEFAULT_THEME));
   const [uiView, setUiView] = useState<"console" | "sigma" | "analysis" | "hunts">("console");
   // ---- user settings (config menu) ----
@@ -174,30 +177,31 @@ export default function App() {
   const aggregateInFlight = useRef(false);
   const initialQuery = useRef<number | null>(null);
 
+  const closeInspector = useCallback(() => {
+    ++detailReq.current;
+    setSelected(null); setSelectedSnapshot(null); setSelectedRaw(""); setSelectedRawErr(false);
+    setSelectedLineage(null); setSelectedLineageError(false);
+  }, []);
+
   // Persist uncaught errors/rejections to cloudmon.log (mount-once, before anything else).
   useEffect(() => installCrashLogging(), []);
 
-  // Native Help-menu events + responsive sidebar collapse (mount-once).
+  // Native Help-menu events (mount-once).
   useEffect(() => {
-    const mq = window.matchMedia("(max-width: 900px)");
-    const onMq = () => setNarrow(mq.matches);
-    onMq();
-    mq.addEventListener("change", onMq);
     const offHelp = onMenuEvent("help:open", (t) =>
       setHelp({ open: true, tab: typeof t === "string" && t ? t : "getting-started" })
     );
     return () => {
-      mq.removeEventListener("change", onMq);
       offHelp();
     };
   }, []);
 
-  useEffect(() => save("preset", presetKey), [presetKey]);
-  useEffect(() => save("cols", visibleCols), [visibleCols]);
-  useEffect(() => save("colw", colWidths), [colWidths]);
+  useEffect(() => save("workbench.preset", presetKey), [presetKey]);
+  useEffect(() => save("workbench.cols", visibleCols), [visibleCols]);
+  useEffect(() => save("workbench.colw", colWidths), [colWidths]);
   useEffect(() => save("customPresets", customPresets), [customPresets]);
   useEffect(() => save("sidebar", sidebarCollapsed), [sidebarCollapsed]);
-  useEffect(() => save("hist", histCollapsed), [histCollapsed]);
+  useEffect(() => save("workbench.hist", histCollapsed), [histCollapsed]);
   useEffect(() => save("sensitiveOnly", sensitiveOnly), [sensitiveOnly]);
   useEffect(() => save("sensitiveOverride", sensitiveOverride), [sensitiveOverride]);
   useEffect(() => save("timeZone", timeZone), [timeZone]);
@@ -249,7 +253,7 @@ export default function App() {
     datasetTotalRef.current = total;
     streamVersion.current++;
     setConfig(cfg);setDatasetTotal(total);setSavedCapture(capture);setCapturing(active);
-    setEvents([]);setTerms([]);setQueryText("");setSelected(null);setCursorSeq(-1);setFollow(active);
+    setEvents([]);setTerms([]);setQueryText("");closeInspector();setCursorSeq(-1);setFollow(active);
     setRefreshTick(n=>n+1);setConnected(true);maximizeWindow();
   };
   const connect = async (cfg: ConnectionConfig) => {
@@ -270,10 +274,11 @@ export default function App() {
     enterDataset(resume && fresh.capture ? {...fresh.capture.config, dumpText: ""} : OFFLINE_CONFIG, fresh.evidence.events, fresh.capture, resume);
   };
 
-  const columns = useMemo(
-    () => visibleCols.map((k) => COLUMN_BY_KEY[k]).filter(Boolean),
-    [visibleCols]
-  );
+  const columns = useMemo(() => visibleCols.map((key) => COLUMN_BY_KEY[key]).filter(Boolean).map(column => {
+    if (presetKey !== "workbench" || uiView !== "console") return column;
+    const width = column.key === "time" ? 88 : column.key === "name" ? 160 : column.key === "result" ? 108 : column.width;
+    return {...column, width, label: column.key === "time" ? "Time" : column.key === "name" ? "Action / principal" : column.key === "result" ? "Result" : column.label};
+  }), [visibleCols, presetKey, uiView]);
 
   // Invalid applied expressions fail closed; never discard an invalid predicate
   // and accidentally broaden the search.
@@ -415,6 +420,8 @@ export default function App() {
         if (id !== reqId.current) return;
         aggregateVersion.current = version;
         setAgg({ ...a, stats: { ...a.stats, total: datasetTotalRef.current } });
+        const inspected = selectedRef.current;
+        if (inspected && !page.some(event => event.seq === inspected.seq && event.eventID === inspected.eventID)) closeInspector();
         setEvents(page); // newest-first
         pageSnapshot.current = a.snapshot;
         unloadedSnapshotRows.current = Math.max(0,a.total-page.length);
@@ -434,7 +441,7 @@ export default function App() {
         if (initialQuery.current === id) initialQuery.current = null;
       });
     return () => { ++reqId.current; controller.abort(); };
-  }, [connected, filter, refreshTick, compiled.error]);
+  }, [connected, filter, refreshTick, compiled.error, closeInspector]);
 
   // Fetch the NEXT page and append (never re-fetch the whole window). Capped so a
   // deep scroll can't balloon memory; loadingMoreRef prevents overlapping loads.
@@ -555,57 +562,46 @@ export default function App() {
   // Engine returns newest-first and the table renders newest-on-top → display index
   // equals array index.
   const rowAtDisplay = (d: number) => events[d];
-  const displayIndexOf = (seq: number) => (seq < 0 ? -1 : events.findIndex((e) => e.seq === seq));
+  const cursorIndex = useMemo(() => cursorSeq < 0 ? -1 : events.findIndex(e => e.seq === cursorSeq), [events, cursorSeq]);
 
-  // Raw JSON + lineage aren't in the page rows; fetch them lazily on expand.
-  const fetchDetail = useCallback((e: CloudTrailEvent) => {
-    const id = ++detailReq.current; // a newer expand must win if an older fetch resolves late
-    setSelectedRaw("");
-    setSelectedRawErr(false);
-    backend
-      .getEventRaw(e.seq)
-      .then((raw) => {
-        if (id !== detailReq.current) return; // superseded by a newer selection
-        if (raw) setSelectedRaw(raw);
-        else setSelectedRawErr(true); // empty result: show a message instead of a forever "loading"
-      })
-      .catch(() => {
-        if (id === detailReq.current) setSelectedRawErr(true);
-      });
-    // The store checks whether the recorded credentials are temporary.
-    setSelectedLineage(null);
-    setSelectedLineageError(false);
-    if (hasCredentialLineage(e)) {
-      backend
-        .queryLineage(e.seq)
-        .then((l) => {
-          if (id === detailReq.current) setSelectedLineage(l);
-        })
-        .catch(() => {
-          if (id === detailReq.current) setSelectedLineageError(true);
-        });
-    }
+  // Capture one cheap evidence cutoff before loading details. Raw records,
+  // lineage and downstream investigation all retain that scope while live data
+  // continues arriving; a new selection supersedes every pending response.
+  const fetchDetail = useCallback((e: CloudTrailEvent, retainedSnapshot?: EvidenceSnapshot) => {
+    const id = ++detailReq.current;
+    const expectedGeneration = pageSnapshot.current?.generation;
+    setSelectedRaw(""); setSelectedRawErr(false);
+    setSelectedLineage(null); setSelectedLineageError(false);
+    if (!retainedSnapshot) setSelectedSnapshot(null);
+    const scope = retainedSnapshot ? Promise.resolve(retainedSnapshot) : backend.getEvidenceSnapshot();
+    void scope.then(snapshot => {
+      if (id !== detailReq.current) return;
+      if (expectedGeneration !== undefined && snapshot.generation !== expectedGeneration) throw new Error("The dataset changed; run the search again");
+      setSelectedSnapshot(snapshot);
+      void backend.queryLineageRaw(e.seq, snapshot).then(raw => {
+        if (id !== detailReq.current) return;
+        if (raw) setSelectedRaw(raw); else setSelectedRawErr(true);
+      }).catch(() => { if (id === detailReq.current) setSelectedRawErr(true); });
+      if (hasCredentialLineage(e)) {
+        void backend.queryLineage(e.seq, snapshot).then(lineage => {
+          if (id === detailReq.current) setSelectedLineage(lineage);
+        }).catch(() => { if (id === detailReq.current) setSelectedLineageError(true); });
+      }
+    }).catch(() => {
+      if (id !== detailReq.current) return;
+      setSelectedRawErr(true); setSelectedLineageError(true);
+    });
   }, []);
-  const retryDetail = useCallback(() => { if (selected) fetchDetail(selected); }, [selected, fetchDetail]);
+  const retryDetail = useCallback(() => { if (selected) fetchDetail(selected, selectedSnapshot ?? undefined); }, [selected, selectedSnapshot, fetchDetail]);
   const openAt = (d: number) => {
     const e = rowAtDisplay(d);
-    if (e) {
-      setSelected(e);
-      setCursorSeq(e.seq);
-      fetchDetail(e);
-    }
+    if (e) handleRowClick(e);
   };
-  // Row click: anchor here (disable follow) and toggle the inline detail.
+  // Inspection is a separate pane; selecting a row never changes its height.
   const handleRowClick = useCallback((e: CloudTrailEvent) => {
     setFollow(false);
-    if (selected?.seq === e.seq) {
-      detailReq.current++; // cancel any in-flight detail fetch for the row being collapsed
-      setSelected(null);
-      setSelectedRaw("");
-      setSelectedRawErr(false);
-      setSelectedLineage(null);
-      return;
-    }
+    setCursorSeq(e.seq);
+    if (selected?.seq === e.seq) return;
     setSelected(e);
     fetchDetail(e);
   }, [selected?.seq, fetchDetail]);
@@ -623,20 +619,28 @@ export default function App() {
         setPaletteOpen((v) => !v);
         return;
       }
-      if (typing) {
+      if (typing || el?.isContentEditable || el?.tagName === "SELECT") {
         if (e.key === "Escape") (el as HTMLInputElement).blur();
         return;
       }
+      if (e.key === "Escape" && selected) {
+        e.preventDefault(); closeInspector();
+        document.querySelector<HTMLElement>(".workbench-results .etbody")?.focus({preventScroll: true});
+        return;
+      }
+      // Buttons, tabs and the inspector own their keyboard interaction. In
+      // particular, Enter on Search must not open a row behind the control.
+      if (el?.closest('button, a, [role="tablist"], .event-inspector, [role="listbox"]')) return;
       // Everything below is a single-key (vim-style) shortcut. Never hijack
       // modifier combos - Ctrl+F, Cmd+F, Ctrl+G, Ctrl+J … belong to the
       // browser/OS, not to the pivot/move keys.
       if (e.ctrlKey || e.metaKey || e.altKey) return;
-      const d = displayIndexOf(cursorSeq);
+      const d = cursorIndex;
       const moveTo = (nd: number) => {
         const ev = rowAtDisplay(nd);
         if (ev) {
           setFollow(false);
-          setCursorSeq(ev.seq);
+          handleRowClick(ev);
         }
       };
       if (e.key === "j" || e.key === "ArrowDown") {
@@ -665,13 +669,13 @@ export default function App() {
         setHelp({ open: true, tab: "getting-started" });
       } else if (e.key === "Escape") {
         if (help.open) setHelp((h) => ({ ...h, open: false }));
-        else if (selected) setSelected(null);
+        else if (selected) closeInspector();
         else if (terms.length) clearQ();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, lineageSeq, uiView]);
+  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, lineageSeq, uiView, handleRowClick, closeInspector, cursorIndex]);
 
   const toggleCapture = async () => {
     if(captureBusy)return;
@@ -699,7 +703,7 @@ export default function App() {
   const clearEvents = async () => {
     // Streaming-only; the engine owns imported data. Reset the local view.
     setEvents([]);
-    setSelected(null);
+    closeInspector();
     setCursorSeq(-1);
   };
   const openDataset = async () => {
@@ -753,7 +757,7 @@ export default function App() {
   );
 
   return (
-    <div className="app">
+    <div className={`app ${connected && uiView === "console" ? "app--workbench" : ""}`}>
       <TitleBar
         connected={connected}
         canExport={uiView === "console" && events.length > 0}
@@ -789,6 +793,10 @@ export default function App() {
         />
       ) : (
       <>
+      <div className="workbench-context">
+        <div><h1>Event workbench</h1><span>{capInfra ? `${capInfra.account} · ${capInfra.region}` : config?.mode === "import-dump" ? "Imported evidence" : "CloudTrail activity"}</span></div>
+        <span className="workbench-scope">{datasetTotal.toLocaleString()} recorded events · {backend.live ? "Local evidence" : "Browser preview"}</span>
+      </div>
       <Toolbar
         capturing={capturing}
         follow={follow}
@@ -823,34 +831,26 @@ export default function App() {
         <details><summary>{capturing ? "Capture running" : savedCapture.phase === "ready" ? "Capture paused" : "Capture needs cleanup"} · {savedCapture.infra.account} · {savedCapture.infra.region} <span>Resources retained after exit</span></summary><CaptureDescription capture={savedCapture} /></details>
         <button className="btn-ghost" disabled={captureBusy} onClick={teardownCapture}>{savedCapture.infra.owned ? "Remove infrastructure…" : "Disconnect queue…"}</button>
       </div>}
-      <StatsBar stats={stats} />
-      <div className="obs-body">
-        <FacetSidebar
-          facets={facets}
-          collapsed={sidebarCollapsed || narrow}
-          activeValues={activeValues}
-          onToggleCollapse={() => setSidebarCollapsed((v) => !v)}
-          onPick={(field, value, op) => pivot(field, value, op)}
-        />
-        <div className="center">
-          <HistogramStrip
-            hist={hist}
-            collapsed={histCollapsed}
-            timeZone={timeZone}
-            onToggleCollapse={() => setHistCollapsed((v) => !v)}
-            onBrush={(from, to) =>
-              addQ(timeTerm(from, to, `${fmtClock(from, timeZone)}–${fmtClock(to, timeZone)}`))
-            }
-          />
-          <QueryBar
-            terms={terms}
-            queryText={queryText}
-            error={compiled.error}
-            inputRef={queryInputRef}
-            onQueryChange={setQueryText}
-            onRemove={removeQ}
-            onClear={clearQ}
-          />
+      <div className="workbench-search">
+        <div className="workbench-search-tools">
+          <button className={`tb-btn ${!sidebarCollapsed ? "active" : ""}`} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(v => !v)}>Filters</button>
+          <button className={`tb-btn ${!histCollapsed ? "active" : ""}`} aria-expanded={!histCollapsed} onClick={() => setHistCollapsed(v => !v)}>Histogram</button>
+        </div>
+        <QueryBar terms={terms} queryText={queryText} error={compiled.error} inputRef={queryInputRef}
+          onQueryChange={setQueryText} onRemove={removeQ} onClear={clearQ} />
+      </div>
+      {!histCollapsed && <HistogramStrip hist={hist} collapsed={false} timeZone={timeZone}
+        onToggleCollapse={() => setHistCollapsed(true)}
+        onBrush={(from, to) => addQ(timeTerm(from, to, `${fmtClock(from, timeZone)}–${fmtClock(to, timeZone)}`))} />}
+      <div className={`workbench-body ${sidebarCollapsed ? "workbench-body--no-filters" : ""}`}>
+        {!sidebarCollapsed && <FacetSidebar facets={facets} collapsed={false} activeValues={activeValues}
+          onToggleCollapse={() => setSidebarCollapsed(true)} onPick={pivot} />}
+        <section className="workbench-results" aria-label="Event results">
+          <div className="workbench-list-heading">
+            <strong>{agg.total.toLocaleString()} matches</strong>
+            <span>{stats.errors.toLocaleString()} errors · {stats.principals.toLocaleString()} principals</span>
+            <span className="workbench-order">Newest received first · {timeZone === "utc" ? "UTC" : "Local time"}</span>
+          </div>
           {queryFailure ? (
             <div className="search-notice search-notice--error" role="alert">
               <div><strong>Search failed.</strong> Displayed results have not been updated. Retry to refresh them.
@@ -862,10 +862,12 @@ export default function App() {
             <div className="search-notice" role="status">Applying search… previous results remain visible until it completes.</div>
           ) : null}
           <EventTable
+            detailMode="external"
+            compact={presetKey === "workbench"}
             events={events}
             columns={columns}
             colWidths={colWidths}
-            rowHeight={rowH}
+            rowHeight={presetKey === "workbench" ? Math.max(rowH, 52) : rowH}
             selected={selected}
             cursorSeq={cursorSeq}
             follow={follow}
@@ -877,10 +879,6 @@ export default function App() {
             onResizeColumn={resizeColumn}
             onReorderColumns={moveColumn}
             onNeedMore={loadMore}
-            selectedRaw={selectedRaw}
-            selectedRawError={selectedRawErr}
-            selectedLineage={selectedLineage}
-            selectedLineageError={selectedLineageError}
             onRetryDetail={retryDetail}
             onOpenLineage={setLineageSeq}
             loadingMore={loadingMore}
@@ -888,13 +886,20 @@ export default function App() {
             isSensitive={isSensitiveFn}
             timeZone={timeZone}
           />
-        </div>
+          <div className="workbench-list-footer">↑ ↓ Inspect events · / Search · {events.length.toLocaleString()} loaded</div>
+        </section>
+        <EventInspector key={selected?.seq ?? "empty"} event={selected} snapshot={selectedSnapshot ?? undefined} rawJSON={selectedRaw}
+          rawLoading={!!selected && !selectedRaw && !selectedRawErr}
+          rawError={selectedRawErr ? "Could not load this event." : undefined}
+          lineage={selectedLineage} lineageLoading={!!selected && hasCredentialLineage(selected) && !selectedLineage && !selectedLineageError}
+          lineageError={selectedLineageError} onRetry={retryDetail} onPivot={pivot}
+          onOpenLineage={setLineageSeq} onClose={closeInspector} timeZone={timeZone} />
       </div>
       <StatusBar
         streaming={!captureBusy && (savedCapture?.phase === "ready" || (!savedCapture && config?.mode !== "import-dump"))}
         following={follow}
         live={backend.live}
-        cursorIndex={displayIndexOf(cursorSeq)}
+        cursorIndex={cursorIndex}
         total={agg.total}
         bufferUsed={events.length}
         bufferMax={datasetTotal || 1}
@@ -909,6 +914,7 @@ export default function App() {
         <ErrorBoundary label="Lineage view" onReset={() => setLineageSeq(null)}>
           <LineageView
             seq={lineageSeq}
+            initialSnapshot={uiView === "console" && lineageSeq === selected?.seq ? selectedSnapshot ?? undefined : undefined}
             onClose={() => setLineageSeq(null)}
             onPivot={(f, v, o) => {
               pivot(f, v, o);

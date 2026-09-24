@@ -15,6 +15,57 @@ import (
 	"cloudmon/internal/model"
 )
 
+func TestCurrentSnapshotTracksArrivalsAndRejectsReplacement(t *testing.T) {
+	s := newStore(t)
+	ctx := context.Background()
+	first, err := s.SnapshotContext(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.Generation == "" || first.MaxSeq != 3 {
+		t.Fatalf("unexpected initial snapshot: %+v", first)
+	}
+	if _, err := time.Parse(time.RFC3339Nano, first.CapturedAt); err != nil {
+		t.Fatalf("invalid snapshot timestamp: %v", err)
+	}
+	const lateRaw = `{"eventID":"late-detail","eventName":"InspectArrival","number":9007199254740993}`
+	if _, err := s.AppendEvents([]model.CloudTrailEvent{liveEvent(t, lateRaw)}); err != nil {
+		t.Fatal(err)
+	}
+	current, err := s.SnapshotContext(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.Generation != first.Generation || current.MaxSeq != 4 {
+		t.Fatalf("snapshot missed the appended event: %+v", current)
+	}
+	if raw, err := s.LineageRaw(current.MaxSeq, current); err != nil || raw != lateRaw {
+		t.Fatalf("current snapshot did not retain the exact arrival: %q %v", raw, err)
+	}
+	if _, err := s.LineageRaw(current.MaxSeq, first); err == nil {
+		t.Fatal("older snapshot accepted an event beyond its cutoff")
+	}
+	if _, err := s.IngestReader(strings.NewReader(`{"eventID":"replacement","eventName":"NewDataset"}`), "replacement"); err != nil {
+		t.Fatal(err)
+	}
+	// Sequence 1 exists in both datasets; the generation must prevent reading
+	// replacement evidence under the original selected event's snapshot.
+	if _, err := s.LineageRaw(1, current); err == nil {
+		t.Fatal("stale snapshot accepted a reused event sequence")
+	}
+	fresh, err := s.SnapshotContext(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh.Generation == current.Generation || fresh.MaxSeq != 1 {
+		t.Fatalf("snapshot did not identify the replacement dataset: %+v", fresh)
+	}
+	rows, err := s.PageSnapshot(ctx, Filter{}, fresh, 0, 100)
+	if err != nil || len(rows) != 1 || rows[0].EventID != "replacement" {
+		t.Fatalf("fresh snapshot failed: %+v %v", rows, err)
+	}
+}
+
 func TestSnapshotPagesRemainStableAcrossArrivals(t *testing.T) {
 	s := newStore(t)
 	first, err := s.Search(context.Background(), Filter{}, 2)
