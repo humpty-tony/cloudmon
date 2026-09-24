@@ -59,7 +59,7 @@ export function QueryBar({ terms, queryText, error, inputRef, onQueryChange, onR
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
-      onQueryChange(draft.trim());
+      if (!draftError) onQueryChange(draft.trim());
       return;
     }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -107,6 +107,9 @@ export function QueryBar({ terms, queryText, error, inputRef, onQueryChange, onR
           <input
             ref={inputRef}
             className="qbar-input"
+            aria-label="Search query"
+            aria-invalid={!!draftError}
+            aria-describedby="query-status"
             value={draft}
             onChange={(e) => {
               setDraft(e.target.value);
@@ -120,7 +123,7 @@ export function QueryBar({ terms, queryText, error, inputRef, onQueryChange, onR
           />
         </div>
         {active && (
-          <button className="qbar-clear" onClick={onClear} title="Clear all filters">
+          <button className="qbar-clear" onClick={() => { setDraft(""); onClear(); }} title="Clear all filters">
             clear
           </button>
         )}
@@ -144,9 +147,9 @@ export function QueryBar({ terms, queryText, error, inputRef, onQueryChange, onR
         </div>
       )}
 
-      <div className="qbar-status">
+      <div className="qbar-status" id="query-status" aria-live="polite">
         {draftError ? (
-          <span className="qbar-error">⚠ {draftError}</span>
+          <span className="qbar-error">⚠ {draftError} · not applied</span>
         ) : dirty ? (
           <span className="qbar-apply">press Enter to apply</span>
         ) : error ? (

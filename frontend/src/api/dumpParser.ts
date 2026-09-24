@@ -12,6 +12,8 @@ function str(v: unknown): string {
 
 function recordToEvent(raw: RawRecord): CloudTrailEvent {
   const ui = (raw.userIdentity as RawRecord) || {};
+  const context = (ui.sessionContext as RawRecord) || {};
+  const issuer = (context.sessionIssuer as RawRecord) || {};
   const errorCode = str(raw.errorCode) || undefined;
   return {
     seq: 0,
@@ -27,10 +29,12 @@ function recordToEvent(raw: RawRecord): CloudTrailEvent {
       principalId: str(ui.principalId),
       arn: str(ui.arn),
       accountId: str(ui.accountId),
-      userName: str(ui.userName),
+      userName: str(ui.userName ?? issuer.userName),
+      roleArn: str(issuer.arn),
+      sessionName: str(ui.principalId).split(":")[1] ?? "",
     },
     readOnly: raw.readOnly === true,
-    managementEvent: raw.managementEvent === undefined ? true : raw.managementEvent === true,
+    managementEvent: raw.managementEvent == null ? true : raw.managementEvent === true,
     errorCode,
     errorMessage: str(raw.errorMessage) || undefined,
     recipientAccountId: str(raw.recipientAccountId),

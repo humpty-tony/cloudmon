@@ -28,8 +28,7 @@ import type {
 import { rowToEvent } from "./types";
 import { MockFeed, mockPermissions } from "./mock";
 import { parseDump } from "./dumpParser";
-import { searchableText } from "./query";
-import { evalAst } from "./queryLang";
+import { applyFilter } from "./searchFilter";
 import { computeFacets, type FacetGroup } from "./facets";
 import { computeHistogram, type Histogram } from "./histogram";
 import { computeStats, fmtSpan, type Stats } from "../components/StatsBar";
@@ -260,51 +259,6 @@ class WailsBackend implements Backend {
 }
 
 // ---- in-memory mock (browser preview): same windowed API over a JS array ----
-
-function colValue(e: CloudTrailEvent, col: string): string {
-  switch (col) {
-    case "userName":
-      return e.userIdentity.userName;
-    case "identityArn":
-      return e.userIdentity.arn;
-    case "identityType":
-      return e.userIdentity.type;
-    case "accountId":
-      return e.userIdentity.accountId;
-    case "principalId":
-      return e.userIdentity.principalId;
-    case "roleArn":
-      return e.userIdentity.roleArn ?? "";
-    case "sessionName":
-      return e.userIdentity.sessionName ?? "";
-    default:
-      return String((e as unknown as Record<string, unknown>)[col] ?? "");
-  }
-}
-
-function applyFilter(events: CloudTrailEvent[], f: QueryFilter): CloudTrailEvent[] {
-  const text = f.text.trim().toLowerCase();
-  return events.filter((e) => {
-    for (const col in f.includes) {
-      const vals = f.includes[col];
-      if (vals.length && !vals.includes(colValue(e, col))) return false;
-    }
-    for (const col in f.excludes) {
-      const vals = f.excludes[col];
-      if (vals.length && vals.includes(colValue(e, col))) return false;
-    }
-    if (f.errorsOnly && !e.errorCode) return false;
-    if (f.hideReadOnly && e.readOnly) return false;
-    if (f.fromMs || f.toMs) {
-      const t = Date.parse(e.eventTime);
-      if (f.fromMs && t < f.fromMs) return false;
-      if (f.toMs && t > f.toMs) return false;
-    }
-    if (text && !searchableText(e).includes(text)) return false;
-    if (f.expr && !evalAst(e, f.expr)) return false;
-    return true;
-  });
-}
 
 class MockBackend implements Backend {
   readonly live = false;

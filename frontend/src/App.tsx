@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { SavedCapture, RecoveryState, CloudTrailEvent, ConnectionConfig, FilterField, Lineage, QueryExpr, QueryFilter, QueryOp, QueryTerm } from "./api/types";
+import type { SavedCapture, RecoveryState, CloudTrailEvent, ConnectionConfig, FilterField, Lineage, QueryFilter, QueryOp, QueryTerm } from "./api/types";
 import { backend, maximizeWindow, exportEvents, onMenuEvent, type QueryResult } from "./api/backend";
 import { COLUMN_BY_KEY } from "./api/columns";
 import { DEFAULT_PRESET, PRESETS, type Preset } from "./api/presets";
@@ -16,6 +16,7 @@ import {
 } from "./api/settings";
 import { addTerm, applyPivot, removeTerm, timeTerm, toggleFieldTerm } from "./api/query";
 import { compileQuery } from "./api/queryLang";
+import { buildFilter } from "./api/searchFilter";
 import { fmtClock, fmtStamp } from "./api/time";
 import { QUERY_FIELDS } from "./api/types";
 import { CaptureDescription, removalPrompt } from "./components/RecoveryCard";
@@ -51,51 +52,7 @@ const EMPTY_AGG: QueryResult = {
   stats: { shown: 0, total: 0, errors: 0, errorRate: 0, principals: 0, sources: 0, regions: 0, span: "-" },
 };
 
-// FilterField → engine column (the DuckDB events table's column names).
-const FIELD_COL: Record<string, string> = {
-  eventName: "eventName", eventSource: "eventSource", awsRegion: "awsRegion",
-  sourceIPAddress: "sourceIPAddress", identityType: "identityType", user: "userName",
-  errorCode: "errorCode", recipientAccountId: "recipientAccountId", eventID: "eventID",
-  // concrete, round-tripping identity fields (extracted by the engine)
-  userName: "userName", identityArn: "identityArn", roleArn: "roleArn",
-  sessionName: "sessionName", principalId: "principalId", accountId: "accountId",
-  userAgent: "userAgent",
-};
-
-// Query-language field tokens, for case-insensitive resolution + validation.
-const QUERY_FIELD_SET = new Set<string>(QUERY_FIELDS.map(String));
-
-/** Compile the click-driven terms + toggles + the parsed query expression into
- *  the engine's structured filter. The expression carries the free-text bar. */
-function buildFilter(terms: QueryTerm[], sensitiveOnly: boolean, expr: QueryExpr | null, sensitiveSet: Set<string> | null): QueryFilter {
-  const includes: Record<string, string[]> = {};
-  const excludes: Record<string, string[]> = {};
-  let errorsOnly = false;
-  let hideReadOnly = false;
-  let fromMs = 0;
-  let toMs = 0;
-  for (const t of terms) {
-    if (t.kind === "time") { fromMs = t.from; toMs = t.to; continue; }
-    const f = String(t.field);
-    if (f === "errorCode" && t.op === "exists") { errorsOnly = true; continue; }
-    if (f === "readOnly") { if (t.op === "exclude" && t.value === "true") hideReadOnly = true; continue; }
-    if (f === "result") continue; // derivable, not a stored column
-    const col = FIELD_COL[f];
-    if (!col) continue;
-    if (t.op === "include") (includes[col] || (includes[col] = [])).push(t.value);
-    else if (t.op === "exclude") (excludes[col] || (excludes[col] = [])).push(t.value);
-  }
-  // "Sensitive only": NARROW to the effective set. Intersect with any explicit
-  // eventName filter so it never widens one, and use a no-match sentinel when the
-  // set/intersection is empty - an empty IN-list is a no-op that would otherwise
-  // show everything, diverging from the (correctly empty) row highlight.
-  if (sensitiveOnly && sensitiveSet) {
-    const existing = includes.eventName;
-    const narrowed = existing && existing.length ? existing.filter((v) => sensitiveSet.has(v)) : [...sensitiveSet];
-    includes.eventName = narrowed.length ? narrowed : ["\u0000__none__"];
-  }
-  return { includes, excludes, errorsOnly, hideReadOnly, fromMs, toMs, text: "", expr };
-}
+const QUERY_FIELD_SET = new Set<string>(QUERY_FIELDS);
 
 // Browser-only file picker (desktop uses the native dialog via backend.selectDumpPath).
 function pickFileText(): Promise<string> {
@@ -139,6 +96,9 @@ export default function App() {
   const [datasetTotal, setDatasetTotal] = useState(0); // total ingested events (unfiltered)
   const [agg, setAgg] = useState<QueryResult>(EMPTY_AGG); // total + facets + histogram + stats for the current filter
   const [querying, setQuerying] = useState(false); // running the filter query (aggregates + first page)
+  const [queryFailure, setQueryFailure] = useState<string | null>(null);
+  const resultsFilter = useRef<QueryFilter | null>(null);
+  const searchBlocked = useRef(true);
   const [loadingMore, setLoadingMore] = useState(false); // fetching the next page
   const [selectedRaw, setSelectedRaw] = useState(""); // lazily-fetched raw JSON for the expanded row
   const [selectedRawErr, setSelectedRawErr] = useState(false); // raw fetch failed (distinct from still-loading)
@@ -268,6 +228,9 @@ export default function App() {
   }, [connected]);
 
   const enterDataset = (cfg: ConnectionConfig, total: number, capture: SavedCapture | null, active: boolean) => {
+    searchBlocked.current = true;
+    resultsFilter.current = null;
+    setQueryFailure(null);
     datasetTotalRef.current = total;
     streamVersion.current++;
     setConfig(cfg);setDatasetTotal(total);setSavedCapture(capture);setCapturing(active);
@@ -297,9 +260,8 @@ export default function App() {
     [visibleCols]
   );
 
-  // Parse the query bar once per applied expression; a parse error keeps the
-  // expression out of the filter (so terms/toggles still apply) and surfaces in
-  // the bar instead of silently querying everything.
+  // Invalid applied expressions fail closed; never discard an invalid predicate
+  // and accidentally broaden the search.
   const compiled = useMemo(() => compileQuery(queryText, QUERY_FIELD_SET), [queryText]);
   // The effective sensitive set = shipped defaults + user overrides. BOTH the
   // "Sensitive only" filter and the row highlight read it, so they never disagree.
@@ -311,7 +273,7 @@ export default function App() {
   // (the row highlight still updates live off sensitiveSet - that's cheap).
   const activeSensitive = sensitiveOnly ? sensitiveSet : null;
   const filter = useMemo(
-    () => buildFilter(terms, sensitiveOnly, compiled.error ? null : compiled.ast, activeSensitive),
+    () => ({ ...buildFilter(terms, sensitiveOnly, compiled.ast, activeSensitive), ...(compiled.error ? { matchNone: true } : {}) }),
     [terms, sensitiveOnly, compiled, activeSensitive]
   );
   const filterRef = useRef(filter);
@@ -321,7 +283,7 @@ export default function App() {
   // it leaves the existing rows/scroll untouched. reqId guards against a filter change
   // landing mid-flight.
   const appendNewRows = useCallback(async () => {
-    if (!followRef.current) return;
+    if (!followRef.current || searchBlocked.current || resultsFilter.current !== filterRef.current) return;
     appendInFlight.current = true;
     const cur = eventsRef.current;
     const maxSeq = cur.length ? cur[0].seq : 0; // events are newest-first → [0] is newest
@@ -330,7 +292,7 @@ export default function App() {
     // flicker the "loading" indicator or clobber the loading state of an in-flight search.
     try {
       const fresh = await backend.queryNewer(filterRef.current, maxSeq, PAGE);
-      if (id !== reqId.current || !followRef.current || fresh.length === 0) return;
+      if (id !== reqId.current || searchBlocked.current || !followRef.current || fresh.length === 0) return;
       setEvents((prev) => {
         const seen = new Set(prev.map((e) => e.seq));
         const add = fresh.filter((e) => !seen.has(e.seq));
@@ -341,8 +303,11 @@ export default function App() {
       // A full page came back → a burst is still draining; keep pulling instead of
       // waiting for the next arrival (Store.Newer returns oldest-unseen, so no gap).
       if (fresh.length >= PAGE) scheduleAppendRef.current();
-    } catch {
-      // Keep the visible rows; a later arrival retries the tail query.
+    } catch (error) {
+      if (id === reqId.current) {
+        searchBlocked.current = true;
+        setQueryFailure(String(error));
+      }
     } finally {
       appendInFlight.current = false;
       if (appendPending.current && followRef.current) scheduleAppendRef.current();
@@ -352,17 +317,20 @@ export default function App() {
   // Facets/histogram/stats are a full scan - refresh them (window untouched) on a
   // slower cadence than the row append.
   const refreshAggregates = useCallback(async () => {
-    if (aggregateInFlight.current || initialQuery.current !== null || aggregateVersion.current === streamVersion.current) return;
+    if (searchBlocked.current || resultsFilter.current !== filterRef.current || aggregateInFlight.current || initialQuery.current !== null || aggregateVersion.current === streamVersion.current) return;
     aggregateInFlight.current = true;
     const id = reqId.current;
     const version = streamVersion.current;
     try {
       const a = await backend.queryAggregates(filterRef.current);
-      if (id !== reqId.current || !followRef.current || !capturingRef.current) return;
+      if (id !== reqId.current || searchBlocked.current || !followRef.current || !capturingRef.current) return;
       aggregateVersion.current = version;
       setAgg({ ...a, stats: { ...a.stats, total: datasetTotalRef.current } });
-    } catch {
-      // Leave this version dirty so the next cadence retries it.
+    } catch (error) {
+      if (id === reqId.current) {
+        searchBlocked.current = true;
+        setQueryFailure(String(error));
+      }
     } finally {
       aggregateInFlight.current = false;
     }
@@ -409,6 +377,13 @@ export default function App() {
   useEffect(() => {
     if (!connected) return;
     const id = ++reqId.current;
+    searchBlocked.current = true;
+    setQueryFailure(null);
+    if (compiled.error) {
+      setQueryFailure(compiled.error);
+      setQuerying(false);
+      return;
+    }
     const version = streamVersion.current;
     initialQuery.current = id;
     setQuerying(true);
@@ -418,17 +393,22 @@ export default function App() {
         aggregateVersion.current = version;
         setAgg({ ...a, stats: { ...a.stats, total: datasetTotalRef.current } });
         setEvents(page); // newest-first
+        resultsFilter.current = filter;
+        searchBlocked.current = false;
         setQuerying(false);
+        if (streamVersion.current !== version && followRef.current) scheduleAppendRef.current();
       })
-      .catch(() => {
+      .catch((error) => {
         if (id !== reqId.current) return;
         // Keep the last results if this request failed.
+        setQueryFailure(String(error));
         setQuerying(false);
       })
       .finally(() => {
         if (initialQuery.current === id) initialQuery.current = null;
       });
-  }, [connected, filter, refreshTick]);
+    return () => { ++reqId.current; };
+  }, [connected, filter, refreshTick, compiled.error]);
 
   // Keep the "total" stat live while paused - datasetTotal climbs from the capture
   // signal - WITHOUT re-querying or replacing the (frozen) event window.
@@ -439,7 +419,7 @@ export default function App() {
   // Fetch the NEXT page and append (never re-fetch the whole window). Capped so a
   // deep scroll can't balloon memory; loadingMoreRef prevents overlapping loads.
   const loadMore = useCallback(() => {
-    if (loadingMoreRef.current || querying) return;
+    if (loadingMoreRef.current || querying || searchBlocked.current || resultsFilter.current !== filter) return;
     if (events.length >= agg.total || events.length >= MAX_LOADED) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
@@ -447,7 +427,7 @@ export default function App() {
     backend
       .queryPage(filter, events.length, PAGE)
       .then((page) => {
-        if (id !== reqId.current) return;
+        if (id !== reqId.current || searchBlocked.current) return;
         setEvents((prev) => {
           // Dedupe: a live append may have prepended rows while this page was in flight,
           // shifting offsets - drop any seq we already hold before concatenating.
@@ -455,6 +435,12 @@ export default function App() {
           const add = page.filter((e) => !seen.has(e.seq));
           return add.length ? [...prev, ...add] : prev;
         });
+      })
+      .catch((error) => {
+        if (id === reqId.current) {
+          searchBlocked.current = true;
+          setQueryFailure(String(error));
+        }
       })
       .finally(() => {
         loadingMoreRef.current = false;
@@ -821,6 +807,16 @@ export default function App() {
             onRemove={removeQ}
             onClear={clearQ}
           />
+          {queryFailure ? (
+            <div className="search-notice search-notice--error" role="alert">
+              <div><strong>Search failed.</strong> Displayed results have not been updated. Retry to refresh them.
+                <details><summary>Error details</summary><pre>{queryFailure}</pre></details>
+              </div>
+              <button className="btn-ghost" onClick={() => setRefreshTick(t => t + 1)}>Retry search</button>
+            </div>
+          ) : querying && events.length > 0 ? (
+            <div className="search-notice" role="status">Applying search… previous results remain visible until it completes.</div>
+          ) : null}
           <EventTable
             events={events}
             columns={columns}

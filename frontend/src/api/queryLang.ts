@@ -16,8 +16,9 @@
 // filtering; the browser mock walks the same tree via evalAst below.
 
 import type { CloudTrailEvent, CmpOp, FilterField, QueryExpr } from "./types";
-import { filterFieldValue } from "./types";
-import { searchableText } from "./query";
+import { filterFieldValue, QUERY_FIELDS } from "./types";
+import { searchableValues } from "./query";
+import { globMatches, searchRegex } from "./searchRegex";
 
 export interface Compiled {
   ast: QueryExpr | null; // null when the query is empty (matches everything)
@@ -29,7 +30,7 @@ interface Tok {
   v: string;
 }
 
-const OP_CHARS = new Set(["=", "!", "~", ":"]);
+const OP_CHARS = new Set(["=", "!", "~", ":", "<", ">"]);
 
 function tokenize(input: string): Tok[] {
   const toks: Tok[] = [];
@@ -48,7 +49,13 @@ function tokenize(input: string): Tok[] {
       let s = "";
       i++;
       while (i < n && input[i] !== q) {
-        if (input[i] === "\\" && i + 1 < n) { s += input[i + 1]; i += 2; }
+        if (input[i] === "\\" && i + 1 < n) {
+          // Decode quote/backslash escapes only. Keep regex tokens such as \d
+          // and literal Windows-path backslashes instead of silently dropping them.
+          const next = input[i + 1];
+          s += next === q || next === "\\" ? next : "\\" + next;
+          i += 2;
+        }
         else { s += input[i]; i++; }
       }
       if (i >= n) throw new Error("unterminated string");
@@ -65,6 +72,7 @@ function tokenize(input: string): Tok[] {
       }
       if (i >= n) throw new Error("unterminated regex");
       i++;
+      if (i < n && /[a-z]/i.test(input[i])) throw new Error("regex suffix flags are unsupported; use inline RE2 flags such as (?s)");
       toks.push({ t: "regex", v: s });
       continue;
     }
@@ -72,6 +80,7 @@ function tokenize(input: string): Tok[] {
       // longest match: != !~ == = ~ :
       const two = input.slice(i, i + 2);
       if (two === "!=" || two === "!~" || two === "==") { toks.push({ t: "op", v: two }); i += 2; continue; }
+      if (c === "!" || c === "<" || c === ">") throw new Error(`unsupported operator "${c}"`);
       toks.push({ t: "op", v: c }); i++; continue;
     }
     // word: run until whitespace, paren, quote, slash, or operator char
@@ -89,16 +98,12 @@ function tokenize(input: string): Tok[] {
   return toks;
 }
 
-function globToRegExp(glob: string): RegExp {
-  const esc = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
-  return new RegExp("^" + esc + "$", "i");
-}
-
 // Map an operator token + value token → a comparison node. Glob-vs-exact and
 // exists (empty value) are decided by the engine/evaluator from the value, so
 // `=`/`!=` collapse to eq/ne here.
 function makeComparison(field: string, op: string, valTok: Tok): QueryExpr {
   const isRegexTok = valTok.t === "regex";
+  if (op === ":" && isRegexTok) throw new Error("use ~ for a regex, or quote the literal value after :");
   let cmp: CmpOp;
   if (op === "~" || op === "!~" || isRegexTok) cmp = op === "!~" || op === "!=" ? "nregex" : "regex";
   else if (op === ":") cmp = "contains";
@@ -107,6 +112,7 @@ function makeComparison(field: string, op: string, valTok: Tok): QueryExpr {
 }
 
 export function compileQuery(input: string, fields: Set<string>): Compiled {
+  if (new TextEncoder().encode(input).length > 16384) return { ast: null, error: "query exceeds 16384 bytes" };
   const trimmed = input.trim();
   if (!trimmed) return { ast: null, error: null };
 
@@ -125,47 +131,45 @@ export function compileQuery(input: string, fields: Set<string>): Compiled {
   const peek = () => toks[pos];
   const eof = () => pos >= toks.length;
 
-  function parseExpr(): QueryExpr {
-    return parseOr();
+  function parseExpr(depth = 0): QueryExpr {
+    return parseOr(depth);
   }
-  function parseOr(): QueryExpr {
-    let left = parseAnd();
+  function parseOr(depth: number): QueryExpr {
+    const nodes = [parseAnd(depth)];
     while (!eof() && peek().t === "or") {
       pos++;
-      const right = parseAnd();
-      left = { t: "or", nodes: [left, right] };
+      nodes.push(parseAnd(depth));
     }
-    return left;
+    return nodes.length === 1 ? nodes[0] : { t: "or", nodes };
   }
-  function parseAnd(): QueryExpr {
-    let left = parseNot();
+  function parseAnd(depth: number): QueryExpr {
+    const nodes = [parseNot(depth)];
     while (!eof()) {
       const t = peek().t;
       if (t === "and") {
         pos++;
-        const right = parseNot();
-        left = { t: "and", nodes: [left, right] };
+        nodes.push(parseNot(depth));
       } else if (t === "lp" || t === "not" || t === "str" || t === "regex" || t === "word") {
         // implicit AND
-        const right = parseNot();
-        left = { t: "and", nodes: [left, right] };
+        nodes.push(parseNot(depth));
       } else break;
     }
-    return left;
+    return nodes.length === 1 ? nodes[0] : { t: "and", nodes };
   }
-  function parseNot(): QueryExpr {
+  function parseNot(depth: number): QueryExpr {
+    if (depth > 32) throw new Error("query nesting exceeds 32 levels");
     if (!eof() && peek().t === "not") {
       pos++;
-      return { t: "not", node: parseNot() };
+      return { t: "not", node: parseNot(depth + 1) };
     }
-    return parsePrimary();
+    return parsePrimary(depth);
   }
-  function parsePrimary(): QueryExpr {
+  function parsePrimary(depth: number): QueryExpr {
     if (eof()) throw new Error("unexpected end of query");
     const tk = peek();
     if (tk.t === "lp") {
       pos++;
-      const inner = parseExpr();
+      const inner = parseExpr(depth + 1);
       if (eof() || peek().t !== "rp") throw new Error("missing closing )");
       pos++;
       return inner;
@@ -183,9 +187,10 @@ export function compileQuery(input: string, fields: Set<string>): Compiled {
           pos++;
           return makeComparison(field, op, vt);
         }
-        // bare operator with no value → exists / not-exists convenience.
+        if (op !== "=" && op !== "==" && op !== "!=") throw new Error(`missing value after ${op}`);
+        // Bare equality with no value → exists / not-exists convenience.
         // (An explicit `field=""` keeps its literal meaning via makeComparison above.)
-        return { t: "cmp", field, op: op === "!=" || op === "!~" ? "nexists" : "exists", value: "" };
+        return { t: "cmp", field, op: op === "!=" ? "nexists" : "exists", value: "" };
       }
       return { t: "text", value: tk.v };
     }
@@ -203,10 +208,34 @@ export function compileQuery(input: string, fields: Set<string>): Compiled {
   try {
     const ast = parseExpr();
     if (!eof()) throw new Error(`unexpected "${peek().v}"`);
+    validateQueryExpr(ast, fields);
     return { ast, error: null };
   } catch (err) {
     return { ast: null, error: (err as Error).message };
   }
+}
+
+export function validateQueryExpr(ast: QueryExpr, fields = new Set<string>(QUERY_FIELDS)): void {
+  let count = 0;
+  const walk = (node: QueryExpr, depth: number) => {
+    if (!node) throw new Error("missing expression operand");
+    if (++count > 512 || depth > 32) throw new Error("query is too complex (maximum depth 32, 512 nodes)");
+    switch (node.t) {
+      case "and": case "or":
+        if (!node.nodes.length) throw new Error(`${node.t} requires operands`);
+        node.nodes.forEach(child => walk(child, depth + 1));
+        break;
+      case "not": walk(node.node, depth + 1); break;
+      case "cmp":
+        if (!fields.has(node.field)) throw new Error(`unknown field "${node.field}"`);
+        if (!["eq", "ne", "contains", "regex", "nregex", "exists", "nexists"].includes(node.op)) throw new Error(`unknown operator "${node.op}"`);
+        if (node.op === "regex" || node.op === "nregex") searchRegex(node.value);
+        break;
+      case "text": if (node.regex) searchRegex(node.value); break;
+      default: throw new Error("unknown query expression");
+    }
+  };
+  walk(ast, 0);
 }
 
 // ---- browser/mock evaluation: walk the same tree as a predicate ----
@@ -223,13 +252,10 @@ export function evalAst(e: CloudTrailEvent, node: QueryExpr): boolean {
       return !evalAst(e, node.node);
     case "text": {
       if (node.regex) {
-        try {
-          return new RegExp(node.value, "i").test(searchableText(e));
-        } catch {
-          return false;
-        }
+        const re = searchRegex(node.value);
+        return searchableValues(e).some(value => re.test(value));
       }
-      return searchableText(e).includes(node.value.toLowerCase());
+      return searchableValues(e).some(value => value.toLowerCase().includes(node.value.toLowerCase()));
     }
     case "cmp":
       return evalCmp(e, node);
@@ -246,13 +272,7 @@ function evalCmp(e: CloudTrailEvent, node: Extract<QueryExpr, { t: "cmp" }>): bo
       return actual === "";
     case "regex":
     case "nregex": {
-      let re: RegExp;
-      try {
-        re = new RegExp(v, "i");
-      } catch {
-        return false;
-      }
-      const m = re.test(actual);
+      const m = searchRegex(v).test(actual);
       return node.op === "nregex" ? !m : m;
     }
     case "contains":
@@ -261,8 +281,8 @@ function evalCmp(e: CloudTrailEvent, node: Extract<QueryExpr, { t: "cmp" }>): bo
     case "ne": {
       const neg = node.op === "ne";
       let m: boolean;
-      if (v === "") m = actual === ""; // literal empty: `field=""` is-empty, `field!=""` has-a-value
-      else if (v.includes("*") || v.includes("?")) m = globToRegExp(v).test(actual);
+      if (v === "*") m = actual !== "";
+      else if (v.includes("*") || v.includes("?")) m = globMatches(v, actual);
       else m = actual.toLowerCase() === v.toLowerCase();
       return neg ? !m : m;
     }
