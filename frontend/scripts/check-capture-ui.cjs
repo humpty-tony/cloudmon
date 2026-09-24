@@ -115,7 +115,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
    window.go={main:{App:{
     Log:async()=>{},MaximizeWindow:async()=>{},
     GetRecoveryState:async()=>structuredClone(state.recovery),
-    GetEvidenceSnapshot:async()=>{const snap=snapshot();state.snapshotCalls.push(snap);if(state.failSnapshot)throw Error('Snapshot unavailable');if(state.delaySnapshot)return new Promise(resolve=>{state.resolveSnapshot=()=>resolve(snap)});return snap},
+    GetEvidenceSnapshot:async()=>{const snap={...snapshot(),generation:state.snapshotGeneration||'fixture'};state.snapshotCalls.push(snap);if(state.failSnapshot)throw Error('Snapshot unavailable');if(state.delaySnapshot)return new Promise(resolve=>{state.resolveSnapshot=()=>resolve(snap)});return snap},
     StartCapture:async()=>{state.startCalls++;throw Error('Unexpected provisioning')},
     ResumeCapture:async()=>{state.resumeCalls++;state.recovery.active=true;return infra},
     StopCapture:async()=>{state.recovery.active=false},
@@ -533,6 +533,22 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await workbenchInspector.getByRole('button',{name:'Retry event',exact:true}).click();
   await fields.getByText('saved-1',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.captureTest.snapshotCalls.length),2,'Retry did not acquire the missing evidence cutoff');
+  // An import can replace the backend before the old event list is cleared.
+  // A reused sequence number from that new generation must never load here.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.locator('.row').getByText('RunInstances',{exact:true}).waitFor();
+  await page.evaluate(()=>{window.captureTest.snapshotGeneration='replacement-dataset'});
+  await page.locator('.row').getByText('RunInstances',{exact:true}).click();
+  await workbenchInspector.getByRole('button',{name:'Retry event',exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.rawCalls),0,'A selected event loaded a reused sequence from another dataset');
+  assert.equal(await page.evaluate(()=>window.captureTest.lineageSnapshot),undefined,'Lineage crossed the selected dataset generation');
+  for(const name of ['Sources & hashes','Investigate'])assert.ok(await workbenchInspector.getByRole('button',{name,exact:true}).isDisabled(),`${name} accepted a different dataset generation`);
+  await page.evaluate(()=>{window.captureTest.snapshotGeneration='fixture'});
+  await workbenchInspector.getByRole('button',{name:'Retry event',exact:true}).click();
+  await fields.getByText('saved-1',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.rawSnapshot.generation),'fixture');
+  assert.equal(await page.evaluate(()=>window.captureTest.snapshotCalls.length),2,'Retry reused the rejected dataset generation');
   // Late details must not replace a different event; failures have an explicit retry.
   await page.goto('http://127.0.0.1:5181/?recovery');
   await page.evaluate(()=>{
