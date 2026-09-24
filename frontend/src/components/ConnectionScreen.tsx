@@ -496,7 +496,7 @@ export function ConnectionScreen({ onConnect }: Props) {
                 spellCheck={false}
               />
             </label>
-            <div className="mode-note">CloudMon consumes (deletes) messages as it reads them, like any SQS consumer - point it at a queue dedicated to CloudMon, not one shared with other readers. It never modifies the queue or its feeding rule.</div>
+            <div className="mode-note">CloudMon deletes messages only after their local commit succeeds. Use a dedicated queue because other consumers compete for the same messages. The queue and its feeding rule remain yours.</div>
           </div>
         )}
 
