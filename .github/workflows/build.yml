@@ -3,7 +3,7 @@ name: Build and check
 on:
   pull_request:
   push:
-    branches: [main, 'codex/**']
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -16,6 +16,7 @@ concurrency:
 jobs:
   desktop:
     name: ${{ matrix.platform }}
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -37,11 +38,14 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@v4
+          cache-dependency-path: go.sum
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: '22'
           cache: npm
@@ -68,8 +72,15 @@ jobs:
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
       - name: Build desktop application
         run: wails build -platform "${{ matrix.platform }}" -tags "${{ matrix.tags }}"
-      - uses: actions/upload-artifact@v4
+      - name: Check macOS universal executable
+        if: runner.os == 'macOS'
+        run: lipo -verify_arch x86_64 arm64 build/bin/cloudmon.app/Contents/MacOS/cloudmon
+      - name: Package desktop artifact
+        # Preserve executable permissions and app-bundle symlinks inside the archive.
+        run: tar -czf "$RUNNER_TEMP/cloudmon-${{ runner.os }}.tar.gz" -C build/bin .
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: cloudmon-${{ runner.os }}
-          path: build/bin/
+          path: ${{ runner.temp }}/cloudmon-${{ runner.os }}.tar.gz
+          if-no-files-found: error
           retention-days: 7
