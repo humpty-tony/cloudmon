@@ -16,6 +16,7 @@ import type {
   ConnectionMode,
   TrailStatus,
   EngineAggregates,
+  EvidenceSnapshot,
   EventRow,
   FilterField,
   Lineage,
@@ -37,11 +38,14 @@ type EventCb = (e: CloudTrailEvent) => void;
 
 /** Aggregates in the shapes the UI components already consume. */
 export interface QueryResult {
+  snapshot: EvidenceSnapshot | null;
   total: number;
   facets: FacetGroup[];
   histogram: Histogram;
   stats: Stats;
 }
+export interface SearchResult { aggregates: QueryResult; events: CloudTrailEvent[] }
+export interface FilteredExport { path: string; count: number }
 
 /** Sigma test outcome with rows already mapped to the event shape the UI uses. */
 export interface SigmaOutcome {
@@ -83,7 +87,10 @@ export interface Backend {
   ingestNetworkBacklog(): Promise<number>; // for non-import modes (mock feed)
   queryPage(filter: QueryFilter, offset: number, limit: number): Promise<CloudTrailEvent[]>; // newest-first
   queryNewer(filter: QueryFilter, sinceSeq: number, limit: number): Promise<CloudTrailEvent[]>; // seq>sinceSeq, newest-first (live append)
-  queryAggregates(filter: QueryFilter): Promise<QueryResult>;
+  queryAggregates(filter: QueryFilter, signal?: AbortSignal): Promise<QueryResult>;
+  querySearch(filter: QueryFilter, limit: number, signal?: AbortSignal): Promise<SearchResult>;
+  querySnapshotPage(filter: QueryFilter, snapshot: EvidenceSnapshot, before: number, limit: number): Promise<CloudTrailEvent[]>;
+  exportFiltered(filter: QueryFilter, snapshot: EvidenceSnapshot, signal?: AbortSignal): Promise<FilteredExport>;
   getEventRaw(seq: number): Promise<string>;
   queryLineage(seq: number): Promise<Lineage>; // assumed-role ancestry chain
   queryLineageGraph(seq: number): Promise<LineageTree>; // full lineage tree centred on the event
@@ -107,7 +114,7 @@ function wailsApp(): Record<string, (...args: unknown[]) => Promise<unknown>> | 
 const FACET_DEFS: [string, FilterField, string][] = [
   ["eventSource", "eventSource", "eventSource"],
   ["eventName", "eventName", "eventName"],
-  ["userName", "user", "user"],
+  ["userName", "userName", "userName"],
   ["roleArn", "roleArn", "roleArn"],
   ["identityType", "identityType", "identityType"],
   ["sourceIPAddress", "sourceIPAddress", "sourceIPAddress"],
@@ -159,9 +166,23 @@ function mapStats(agg: EngineAggregates): Stats {
   };
 }
 
+function mapAggregates(agg:EngineAggregates):QueryResult {
+  return {snapshot:agg.snapshot??null,total:agg.total,facets:mapFacets(agg),histogram:mapHistogram(agg),stats:mapStats(agg)};
+}
+function requestID():string { return Array.from(crypto.getRandomValues(new Uint32Array(4)),n=>n.toString(16)).join('-'); }
+function checkAborted(signal?:AbortSignal){if(signal?.aborted)throw new Error('Search cancelled')}
+
 class WailsBackend implements Backend {
   readonly live = true;
   private app = wailsApp()!;
+  private async request<T>(signal: AbortSignal | undefined, invoke:(id:string)=>Promise<unknown>):Promise<T> {
+    checkAborted(signal);
+    const id=requestID();
+    const cancel=()=>{void this.app.CancelQuery(id).catch(()=>{})};
+    signal?.addEventListener('abort',cancel,{once:true});
+    try {return await invoke(id) as T}
+    finally {signal?.removeEventListener('abort',cancel)}
+  }
 
   requiredPermissions(mode: ConnectionMode) {
     return this.app.RequiredPermissions(mode) as Promise<RequiredPermission[]>;
@@ -229,9 +250,20 @@ class WailsBackend implements Backend {
     const rows = (await this.app.QueryNewer(filter, sinceSeq, limit)) as EventRow[];
     return (rows || []).map(rowToEvent);
   }
-  async queryAggregates(filter: QueryFilter): Promise<QueryResult> {
-    const agg = (await this.app.QueryAggregates(filter)) as EngineAggregates;
-    return { total: agg.total, facets: mapFacets(agg), histogram: mapHistogram(agg), stats: mapStats(agg) };
+  async queryAggregates(filter: QueryFilter, signal?: AbortSignal): Promise<QueryResult> {
+    const agg = await this.request<EngineAggregates>(signal,id=>this.app.QueryAggregatesRequest(filter,id));
+    return mapAggregates(agg);
+  }
+  async querySearch(filter: QueryFilter, limit: number, signal?: AbortSignal): Promise<SearchResult> {
+    const result=await this.request<{aggregates:EngineAggregates;events:EventRow[]}>(signal,id=>this.app.QuerySearch(filter,id,limit));
+    return {aggregates:mapAggregates(result.aggregates),events:(result.events??[]).map(rowToEvent)};
+  }
+  async querySnapshotPage(filter:QueryFilter,snapshot:EvidenceSnapshot,before:number,limit:number){
+    const rows=await this.app.QuerySnapshotPage(filter,snapshot,before,limit) as EventRow[];
+    return (rows??[]).map(rowToEvent);
+  }
+  exportFiltered(filter:QueryFilter,snapshot:EvidenceSnapshot,signal?:AbortSignal){
+    return this.request<FilteredExport>(signal,id=>this.app.ExportFiltered(filter,snapshot,id));
   }
   getEventRaw(seq: number) {
     return this.app.GetEventRaw(seq) as Promise<string>;
@@ -267,6 +299,7 @@ class MockBackend implements Backend {
   private connection: ConnectionConfig | null = null;
   private active = false;
   private data: CloudTrailEvent[] = [];
+  private generation = requestID();
   private mode: ConnectionMode | "" = ""; // tracked from setConnection so startCapture mirrors the real owned flag
 
   async requiredPermissions(mode: ConnectionMode) {
@@ -346,10 +379,12 @@ class MockBackend implements Backend {
   }
   async ingestText(text: string) {
     this.data = parseDump(text);
+    this.generation = requestID();
     return this.data.length;
   }
   async ingestNetworkBacklog() {
     this.data = this.feed.backlog(2000);
+    this.generation = requestID();
     return this.data.length;
   }
   async queryPage(filter: QueryFilter, offset: number, limit: number) {
@@ -361,17 +396,36 @@ class MockBackend implements Backend {
   async queryNewer(filter: QueryFilter, sinceSeq: number, limit: number) {
     const filtered = applyFilter(this.data, filter)
       .filter((e) => e.seq > sinceSeq)
-      .sort((a, b) => b.seq - a.seq);
-    return filtered.slice(0, limit);
+      .sort((a, b) => a.seq - b.seq);
+    return filtered.slice(0, limit).reverse();
   }
-  async queryAggregates(filter: QueryFilter): Promise<QueryResult> {
+  async queryAggregates(filter: QueryFilter, signal?: AbortSignal): Promise<QueryResult> {
+    checkAborted(signal);
     const filtered = applyFilter(this.data, filter);
     return {
+      snapshot:{generation:this.generation,maxSeq:this.data.reduce((max,event)=>Math.max(max,event.seq),0),capturedAt:new Date().toISOString()},
       total: filtered.length,
       facets: computeFacets(filtered),
       histogram: computeHistogram(filtered, Date.now()),
       stats: computeStats(filtered, this.data.length),
     };
+  }
+  async querySearch(filter:QueryFilter,limit:number,signal?:AbortSignal):Promise<SearchResult>{
+    const aggregates=await this.queryAggregates(filter,signal);
+    checkAborted(signal);
+    const events=await this.querySnapshotPage(filter,aggregates.snapshot!,0,limit);
+    return {aggregates,events};
+  }
+  async querySnapshotPage(filter:QueryFilter,snapshot:EvidenceSnapshot,before:number,limit:number){
+    if(snapshot.generation!==this.generation)throw new Error('The dataset changed; run the search again');
+    return applyFilter(this.data,filter).filter(event=>event.seq<=snapshot.maxSeq && (!before || event.seq<before)).sort((a,b)=>b.seq-a.seq).slice(0,Math.min(limit,2000));
+  }
+  async exportFiltered(filter:QueryFilter,snapshot:EvidenceSnapshot,signal?:AbortSignal):Promise<FilteredExport>{
+    checkAborted(signal);
+    if(snapshot.generation!==this.generation)throw new Error('The dataset changed; run the search again');
+    const events=applyFilter(this.data,filter).filter(event=>event.seq<=snapshot.maxSeq).sort((a,b)=>b.seq-a.seq);
+    const path=await exportEvents(events);
+    return {path:path??'',count:events.length};
   }
   async getEventRaw(seq: number) {
     return this.data.find((e) => e.seq === seq)?.rawJSON ?? "";

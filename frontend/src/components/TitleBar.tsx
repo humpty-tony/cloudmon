@@ -5,15 +5,17 @@ import logo from "../assets/logo.png";
 interface Props {
   connected: boolean;
   canExport: boolean;
+  canExportMatches: boolean;
   view: "console" | "sigma";
   onView: (v: "console" | "sigma") => void;
   onOpenDataset: () => void;
   onExport: () => void;
+  onExportMatches: () => void;
   onHelp: (tab: string) => void;
   onSettings: () => void;
 }
 
-export function TitleBar({ connected, canExport, view, onView, onOpenDataset, onExport, onHelp, onSettings }: Props) {
+export function TitleBar({ connected, canExport, canExportMatches, view, onView, onOpenDataset, onExport, onExportMatches, onHelp, onSettings }: Props) {
   const [menu, setMenu] = useState<null | "file" | "help">(null);
   const close = () => setMenu(null);
   const run = (fn: () => void) => () => {
@@ -40,7 +42,10 @@ export function TitleBar({ connected, canExport, view, onView, onOpenDataset, on
                   Open dataset…
                 </button>
                 <button className="tbar-item" onClick={run(onExport)} disabled={!connected || !canExport}>
-                  Export current selection…
+                  Export loaded events…
+                </button>
+                <button className="tbar-item" onClick={run(onExportMatches)} disabled={!connected || !canExportMatches}>
+                  Export all matching events…
                 </button>
                 <div className="menu-divider" />
                 <button className="tbar-item" onClick={run(onSettings)}>

@@ -145,7 +145,9 @@ export interface QueryFilter {
 }
 
 /** Raw aggregate shape returned by the Go engine (App.QueryAggregates). */
+export interface EvidenceSnapshot { generation: string; maxSeq: number; capturedAt: string }
 export interface EngineAggregates {
+  snapshot: EvidenceSnapshot;
   total: number;
   stats: { errors: number; principals: number; sources: number; regions: number; minMs: number; maxMs: number };
   facets: Record<string, { value: string; count: number }[]>;
