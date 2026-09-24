@@ -379,6 +379,9 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   const workbenchFields=workbenchInspector.getByRole('region',{name:'Event fields',exact:true});
   await workbenchFields.getByRole('button',{name:/requestParameters/}).click();
   await workbenchFields.getByRole('button',{name:/items/}).click();
+  // Advancing the animation clock does not complete the field worker request.
+  // Wait for an actual array child before measuring/scrolling the loaded page.
+  await workbenchFields.getByTitle('requestParameters.items.0',{exact:true}).waitFor();
   await page.clock.runFor(100);
   const tableScrollBefore=await workbenchTable.evaluate(el=>el.scrollTop);
   await workbenchFields.evaluate(el=>{el.scrollTop=el.scrollHeight});
@@ -470,6 +473,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await fields.getByText('9007199254740993',{exact:true}).waitFor();
   await fields.getByRole('button',{name:/requestParameters/}).click();
   await fields.getByRole('button',{name:/items/}).click();
+  await fields.getByTitle('requestParameters.items.0',{exact:true}).waitFor();
   await page.clock.runFor(50);
   assert.ok(await fields.locator('.ft-row').count()<40,'field tree mounted the full large array');
   await fields.evaluate(el=>{el.scrollTop=el.scrollHeight});
