@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { backend } from "../api/backend";
 import type { EvidencePage, SourceEvidence } from "../api/types";
+import { SourceText } from "./SourceText";
 
 export function EvidenceModal({ seq, onClose }: { seq: number; onClose: () => void }) {
   const [page, setPage] = useState<EvidencePage | null>(null);
@@ -52,7 +53,7 @@ export function EvidenceModal({ seq, onClose }: { seq: number; onClose: () => vo
         {source && <section ref={original} tabIndex={-1} aria-label="Original source record" className="evidence-original">
           <h3>Original source #{source.meta.id}</h3>
           {source.meta.lossy && <p className="recovery-warning">CSV includes only exported columns. This is the original header and row; missing CloudTrail fields cannot be reconstructed.</p>}
-          <pre>{source.text}</pre>
+          <SourceText text={source.text} />
         </section>}
         <p className="evidence-footnote">Hashes identify the saved bytes; they do not verify CloudTrail signatures or authenticate the source. JSON evidence preserves the event object, not its surrounding delivery envelope.</p>
       </div>

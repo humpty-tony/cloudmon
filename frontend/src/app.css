@@ -529,6 +529,23 @@ body { font-size: var(--fs-body); }
 .ft-nested { padding-left: 14px; margin-left: 4px; border-left: 1px solid var(--line-row); }
 .ft-pivot { display: inline-flex; gap: 2px; opacity: 0; }
 .ft-row:hover .ft-pivot { opacity: 1; }
+.ft-pivot:focus-within { opacity: 1; }
+.ft-view { min-width: 0; }
+.ft-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: var(--fs-label); color: var(--tx-3); padding: 5px 0; }
+.ft-toolbar button, .ft-page button { white-space: nowrap; flex-shrink: 0; }
+.ft-viewport { overflow: auto; overscroll-behavior: contain; position: relative; min-width: 0; }
+.ft-viewport .ft-row { align-items: center; overflow: hidden; }
+.ft-viewport .ft-key { max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-viewport .ft-toggle { max-width: 100%; min-width: 0; align-items: center; }
+.ft-viewport .ft-toggle .ft-key { flex: 0 1 auto; max-width: none; }
+.ft-viewport .ft-val, .ft-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-viewport .ft-pivot, .ft-viewport .ft-meta { flex-shrink: 0; }
+.ft-page { gap: 8px; font-size: var(--fs-label); }
+.ft-footnote { display: block; color: var(--tx-3); font: var(--fs-cap)/1.5 var(--sans); padding: 5px 0; }
+.source-pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; flex: none; padding: 8px 12px; border-bottom: 1px solid var(--line-struct); color: var(--tx-2); font-size: var(--fs-label); }
+.source-pager button { white-space: nowrap; }
+.source-text { white-space: pre-wrap; overflow-wrap: anywhere; min-height: 0; }
+.xd-head { position: sticky; top: 0; z-index: 2; background: var(--bg-0); padding-top: 6px; padding-bottom: 6px; }
 
 /* ============================================================
    DESKTOP-FEEL PASS (from research) - resize, gutters, help

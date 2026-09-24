@@ -25,6 +25,8 @@ interface Props {
   selectedRaw?: string; // lazily-fetched raw JSON for the expanded row ("" = loading)
   selectedRawError?: boolean; // the raw fetch failed (show an error instead of "loading" forever)
   selectedLineage?: Lineage | null; // assumed-role ancestry for the expanded row
+  selectedLineageError?: boolean;
+  onRetryDetail: () => void;
   onOpenLineage?: (seq: number) => void; // open the full lineage graph view
   loadingMore?: boolean;
   atLoadCap?: boolean;
@@ -96,6 +98,8 @@ export function EventTable({
   selectedRaw,
   selectedRawError,
   selectedLineage,
+  selectedLineageError,
+  onRetryDetail,
   onOpenLineage,
   loadingMore,
   atLoadCap,
@@ -107,6 +111,7 @@ export function EventTable({
   const dragKey = useRef<string | null>(null); // header being dragged (reorder)
   const [overKey, setOverKey] = useState<string | null>(null); // header under the drag
   const [viewportW, setViewportW] = useState(0); // visible width → the pinned panel's fixed width
+  const [viewportH, setViewportH] = useState(400);
 
   const widths = columns.map((c) => colWidths[c.key] ?? c.width);
   const minTotal = widths.reduce((a, b) => a + b, 0);
@@ -143,7 +148,7 @@ export function EventTable({
   useEffect(() => {
     const el = parentRef.current;
     if (!el) return;
-    const update = () => setViewportW(el.clientWidth);
+    const update = () => { setViewportW(el.clientWidth); setViewportH(el.clientHeight); };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
@@ -337,9 +342,9 @@ export function EventTable({
                   <div className="row-expand">
                     <div className="row-expand-pin" style={{ width: viewportW || undefined }}>
                       {selectedRaw ? (
-                        <InlineDetail event={{ ...e, rawJSON: selectedRaw }} lineage={selectedLineage} onPivot={onPivot} onOpenLineage={onOpenLineage} />
+                        <InlineDetail key={e.seq} event={e} rawJSON={selectedRaw} fieldHeight={Math.max(84,Math.min(392,viewportH-160))} lineage={selectedLineage} lineageError={selectedLineageError} onRetry={onRetryDetail} onPivot={onPivot} onOpenLineage={onOpenLineage} />
                       ) : selectedRawError ? (
-                        <div className="xd-loading">Could not load this event (the database was busy). Collapse and reopen to retry.</div>
+                        <div className="xd-loading" role="alert">Could not load this event. <button className="btn-ghost" onClick={onRetryDetail}>Retry event</button></div>
                       ) : (
                         <div className="xd-loading">Loading event…</div>
                       )}

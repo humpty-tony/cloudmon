@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { backend, type SigmaOutcome } from "../api/backend";
 import type { ColumnDef } from "../api/columns";
 import type { TimeZonePref } from "../api/settings";
@@ -45,12 +45,19 @@ export function SigmaView(p: Props) {
   const [selected, setSelected] = useState<CloudTrailEvent | null>(null);
   const [cursorSeq, setCursorSeq] = useState(-1);
   const [selectedRaw, setSelectedRaw] = useState("");
+  const [selectedRawError, setSelectedRawError] = useState(false);
+  const [selectedLineageError, setSelectedLineageError] = useState(false);
+  const detailReq = useRef(0);
+  useEffect(()=>()=>{++detailReq.current;++reqId.current},[]);
   const [selectedLineage, setSelectedLineage] = useState<Lineage | null>(null);
   const [userRules, setUserRules] = useState<SigmaRuleEntry[]>(() => loadUserRules());
 
   // Load a rule into the editor and clear the previous run (so the results/pill reset
   // to idle instead of showing stale matches for a different rule).
   const loadRule = (yaml: string) => {
+    ++detailReq.current;
+    ++reqId.current;
+    setRunning(false);
     setRule(yaml);
     setOut(null);
     setSelected(null);
@@ -66,6 +73,7 @@ export function SigmaView(p: Props) {
   // Explicit run - Run button or Ctrl/Cmd+Enter (no auto-run, so switching tabs
   // doesn't fire a query). Reads the latest rule via a ref.
   const run = useCallback(() => {
+    ++detailReq.current;
     const id = ++reqId.current;
     setRunning(true);
     setSelected(null);
@@ -76,16 +84,22 @@ export function SigmaView(p: Props) {
   }, []);
 
   // Raw JSON + lineage aren't in the row; fetch lazily on expand (as the console does).
-  const fetchDetail = (e: CloudTrailEvent) => {
+  const fetchDetail = useCallback((e: CloudTrailEvent) => {
+    const id=++detailReq.current;
     setSelectedRaw("");
-    backend.getEventRaw(e.seq).then((raw) => setSelectedRaw(raw)).catch(() => setSelectedRaw(""));
+    setSelectedRawError(false);setSelectedLineageError(false);
+    backend.getEventRaw(e.seq).then(raw=>{if(id===detailReq.current){setSelectedRaw(raw);setSelectedRawError(!raw)}})
+      .catch(()=>{if(id===detailReq.current)setSelectedRawError(true)});
     setSelectedLineage(null);
     if (e.userIdentity.type === "AssumedRole") {
-      backend.queryLineage(e.seq).then(setSelectedLineage).catch(() => setSelectedLineage(null));
+      backend.queryLineage(e.seq).then(lineage=>{if(id===detailReq.current)setSelectedLineage(lineage)})
+        .catch(()=>{if(id===detailReq.current)setSelectedLineageError(true)});
     }
-  };
+  },[]);
+  const retryDetail=useCallback(()=>{if(selected)fetchDetail(selected)},[selected,fetchDetail]);
   const onRowClick = (e: CloudTrailEvent) => {
     if (selected?.seq === e.seq) {
+      ++detailReq.current;
       setSelected(null);
       setSelectedRaw("");
       setSelectedLineage(null);
@@ -156,7 +170,10 @@ export function SigmaView(p: Props) {
                 onReorderColumns={p.onReorderColumns}
                 onNeedMore={() => {}}
                 selectedRaw={selectedRaw}
+                selectedRawError={selectedRawError}
                 selectedLineage={selectedLineage}
+                selectedLineageError={selectedLineageError}
+                onRetryDetail={retryDetail}
                 onOpenLineage={p.onOpenLineage}
                 isSensitive={p.isSensitive}
                 timeZone={p.timeZone}
