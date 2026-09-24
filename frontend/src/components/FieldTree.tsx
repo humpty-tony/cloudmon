@@ -1,5 +1,5 @@
 import {AliasBadge} from "./AliasBadge";
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { FilterField, QueryOp } from "../api/types";
 import { InspectorClient } from "../api/inspectorClient";
@@ -85,8 +85,10 @@ export const FieldTree = memo(function FieldTree({ json, height, onPivot }: { js
     };
     visit([],0);return result;
   },[pages,open,errors]);
-  const virtual=useVirtualizer({count:rows.length,getScrollElement:()=>scroll.current,estimateSize:()=>28,overscan:6,
-    getItemKey:index=>{const row=rows[index];return row.kind==='field'?pathKey(row.field.path):row.kind+pathKey(row.kind==='page'?row.page.path:row.path)}});
+  const getScrollElement=useCallback(()=>scroll.current,[]);
+  const estimateSize=useCallback(()=>28,[]);
+  const getItemKey=useCallback((index:number)=>{const row=rows[index];return row.kind==='field'?pathKey(row.field.path):row.kind+pathKey(row.kind==='page'?row.page.path:row.path)},[rows]);
+  const virtual=useVirtualizer({count:rows.length,getScrollElement,estimateSize,overscan:6,getItemKey});
   return <div className="ft-view">
     <div className="ft-toolbar"><span>Event fields · expand a section to inspect it</span><button className="btn-ghost" onClick={()=>setOpen(new Set())}>Collapse all</button></div>
     <div className="ft ft-viewport" ref={scroll} role="region" aria-label="Event fields" tabIndex={0} style={{height:Math.min(height,Math.max(56,rows.length*28))}}>

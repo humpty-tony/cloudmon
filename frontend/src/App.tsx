@@ -436,12 +436,6 @@ export default function App() {
     return () => { ++reqId.current; controller.abort(); };
   }, [connected, filter, refreshTick, compiled.error]);
 
-  // Keep the "total" stat live while paused - datasetTotal climbs from the capture
-  // signal - WITHOUT re-querying or replacing the (frozen) event window.
-  useEffect(() => {
-    setAgg((a) => ({ ...a, stats: { ...a.stats, total: datasetTotal } }));
-  }, [datasetTotal]);
-
   // Fetch the NEXT page and append (never re-fetch the whole window). Capped so a
   // deep scroll can't balloon memory; loadingMoreRef prevents overlapping loads.
   const loadMore = useCallback(() => {
@@ -474,11 +468,14 @@ export default function App() {
         loadingMoreRef.current = false;
         setLoadingMore(false);
       });
-  }, [filter, events, agg.total, querying]);
+  }, [filter, events, querying]);
 
   const facets = agg.facets;
   const hist = agg.histogram;
-  const stats = agg.stats;
+  // The capture counter changes independently of the frozen search snapshot.
+  // Derive its display value instead of scheduling a second App render for every
+  // progress notification by copying it back into aggregate state.
+  const stats = useMemo(() => ({ ...agg.stats, total: datasetTotal }), [agg.stats, datasetTotal]);
   const atLoadCap = events.length >= MAX_LOADED && events.length < agg.total;
 
   const activeValues = useMemo(() => {
@@ -528,7 +525,7 @@ export default function App() {
       setVisibleCols(DEFAULT_PRESET.columns);
     }
   };
-  const resizeColumn = (key: string, px: number) => setColWidths((prev) => ({ ...prev, [key]: px }));
+  const resizeColumn = useCallback((key: string, px: number) => setColWidths((prev) => ({ ...prev, [key]: px })), []);
   const toggleColumn = (key: string) =>
     setVisibleCols((prev) => (prev.includes(key) ? (prev.length > 1 ? prev.filter((k) => k !== key) : prev) : [...prev, key]));
   // Move a column to sit before another shown column - drives the header drag and
@@ -548,11 +545,11 @@ export default function App() {
   };
   const clearTime = () => setTerms((prev) => prev.filter((t) => t.kind !== "time"));
 
-  const repin = () => {
+  const repin = useCallback(() => {
     setFollow(true);
     setNewCount(0);
     setRefreshTick((t) => t + 1); // catch up to the newest page immediately on re-pin
-  };
+  }, []);
   const disengageFollow = useCallback(() => setFollow(false), []);
 
   // Engine returns newest-first and the table renders newest-on-top → display index
@@ -599,7 +596,7 @@ export default function App() {
     }
   };
   // Row click: anchor here (disable follow) and toggle the inline detail.
-  const handleRowClick = (e: CloudTrailEvent) => {
+  const handleRowClick = useCallback((e: CloudTrailEvent) => {
     setFollow(false);
     if (selected?.seq === e.seq) {
       detailReq.current++; // cancel any in-flight detail fetch for the row being collapsed
@@ -611,7 +608,7 @@ export default function App() {
     }
     setSelected(e);
     fetchDetail(e);
-  };
+  }, [selected?.seq, fetchDetail]);
 
   // ---- keyboard ----
   useEffect(() => {

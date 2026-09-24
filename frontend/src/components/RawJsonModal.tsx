@@ -56,7 +56,13 @@ export function RawJsonModal({ title, json, onClose }: Props) {
   // otherwise the overlay is contained by (and offset within) the clicked row.
   return createPortal(
     <div className="rawmodal-scrim" onClick={onClose}>
-      <div className="rawmodal" role="dialog" aria-modal="true" aria-label="Raw JSON" onClick={(e) => e.stopPropagation()}>
+      <div className="rawmodal" role="dialog" aria-modal="true" aria-label="Raw JSON" onClick={(e) => e.stopPropagation()} onKeyDown={event => {
+        if (event.key !== "Tab") return;
+        const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]'));
+        const first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }}>
         <div className="rawmodal-head">
           <div className="rawmodal-title">{title}</div>
           <div className="rawmodal-actions">

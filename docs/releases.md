@@ -38,6 +38,8 @@ Extract the archive before launching the executable or app. Tar archives retain 
 - Linux builds target updated Ubuntu 22.04 (glibc 2.35) and require GTK 3, WebKit2GTK 4.1 and a GCC 12-compatible C++ runtime (`GLIBCXX_3.4.30`, `CXXABI_1.3.13`). On Ubuntu 22.04, install the current `libgtk-3-0`, `libwebkit2gtk-4.1-0` and `libstdc++6` packages. Other glibc-based distributions need equivalent runtimes. These are not a portable AppImage or a static Linux desktop executable; older glibc and musl/Alpine are not supported.
 - macOS archives include both architectures; the workflow verifies the universal executable. These builds are not signed with a publisher certificate or notarized, and Windows builds are not Authenticode-signed. OS trust prompts may therefore apply.
 
+Linux requests WebKit accelerated rendering instead of Wails' software-only default. If a particular graphics driver produces a blank window or rendering corruption, start with `CLOUDMON_DISABLE_GPU=1 ./cloudmon` to use the software fallback. The CI native startup check uses Mesa software rendering and verifies both the accelerated policy and the explicit fallback; it cannot establish performance on every GPU, compositor, or display resolution.
+
 ## Checks and retries
 
 The Linux job builds on Ubuntu 22.04, extracts the actual release archive, and rejects executable imports newer than the glibc 2.35 / GCC 12 ABI baseline. It checks runtime library resolution and starts the packaged app under Xvfb, requiring a visible window, a mounted React UI calling the Go bridge, and an initialized DuckDB database. Native startup logs and a screenshot are retained as the `linux-startup` artifact. This complements the existing browser checks, which do not exercise the native loader or WebKit runtime.

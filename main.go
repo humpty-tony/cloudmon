@@ -10,6 +10,7 @@ import (
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
+	"github.com/wailsapp/wails/v2/pkg/options/linux"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 	"github.com/wailsapp/wails/v2/pkg/options/windows"
 )
@@ -19,6 +20,13 @@ var assets embed.FS
 
 func main() {
 	app := NewApp()
+	// Wails v2 disables Linux acceleration when Linux options are nil. Keep
+	// WebKit's accelerated compositor available for large windows and scrolling.
+	// Some driver stacks need the software fallback; it must remain selectable.
+	gpuPolicy := linux.WebviewGpuPolicyAlways
+	if os.Getenv("CLOUDMON_DISABLE_GPU") == "1" {
+		gpuPolicy = linux.WebviewGpuPolicyNever
+	}
 
 	// Use a dedicated WebView2 user-data dir (NOT the default %APPDATA%\cloudmon.exe,
 	// whose HTTP cache had pinned the UI to a stale build). A fresh dir + the no-cache
@@ -77,6 +85,7 @@ func main() {
 			TitleBar:   mac.TitleBarHiddenInset(),
 			Appearance: mac.NSAppearanceNameDarkAqua,
 		},
+		Linux: &linux.Options{WebviewGpuPolicy: gpuPolicy, ProgramName: "cloudmon"},
 	})
 
 	if err != nil {

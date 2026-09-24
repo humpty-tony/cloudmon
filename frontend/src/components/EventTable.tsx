@@ -1,5 +1,5 @@
 import {AliasBadge} from "./AliasBadge";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CloudTrailEvent, EvidenceSnapshot, FilterField, Lineage, QueryOp } from "../api/types";
 import { filterFieldValue, eventUser, identityGlyph, truncateArn } from "../api/types";
@@ -82,7 +82,72 @@ function ResultCell({ e }: { e: CloudTrailEvent }) {
   );
 }
 
-export function EventTable({
+// Scrolling changes the virtual range, not the contents of rows that remain
+// visible. Keep those cells (including labels and pivot controls) out of the
+// scroll render path. Selection, columns, density and time zone still update
+// through explicit props; alias subscriptions update directly.
+const EventRow = memo(function EventRow({
+  event: e, className, grid, rowHeight, columns, timeZone, onSelect, onCursor, onPivot,
+}: Pick<Props, "rowHeight" | "columns" | "timeZone" | "onSelect" | "onCursor" | "onPivot"> & {
+  event: CloudTrailEvent;
+  className: string;
+  grid: string;
+}) {
+  return (
+    <div
+      className={className}
+      style={{ gridTemplateColumns: grid, height: rowHeight }}
+      onClick={() => {
+        onSelect(e);
+        onCursor(e.seq);
+      }}
+    >
+      {columns.map((c) => {
+        const rawVal = filterFieldValue(e, c.field);
+        const displayValue = c.get(e);
+        let content;
+        if (c.key === "time") content = <TimeCell e={e} tz={timeZone} />;
+        else if (c.key === "identity") content = <IdentityCell e={e} />;
+        else if (c.key === "result") content = <ResultCell e={e} />;
+        else content = displayValue;
+        const pivotable = c.field !== "eventTime";
+        return (
+          <div key={c.key} className={`cell ${c.mono ? "mono" : ""} c-${c.key}`} title={displayValue}>
+            <span className="cell-inner">{content}{c.key!=="identity"&&<AliasBadge field={c.field} value={rawVal}/>}</span>
+            {pivotable && (
+              <span className="pivot-icons">
+                <button
+                  className="pv"
+                  title={`Filter for ${rawVal}`}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    onPivot(c.field, rawVal, "include");
+                  }}
+                >
+                  <span className="pv-loupe">⌕</span>
+                  <span className="pv-sign">+</span>
+                </button>
+                <button
+                  className="pv"
+                  title={`Filter out ${rawVal}`}
+                  onClick={(ev) => {
+                    ev.stopPropagation();
+                    onPivot(c.field, rawVal, "exclude");
+                  }}
+                >
+                  <span className="pv-loupe">⌕</span>
+                  <span className="pv-sign">−</span>
+                </button>
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+});
+
+export const EventTable = memo(function EventTable({
   events,
   columns,
   colWidths,
@@ -117,30 +182,38 @@ export function EventTable({
   const [viewportW, setViewportW] = useState(0); // visible width → the pinned panel's fixed width
   const [viewportH, setViewportH] = useState(400);
 
-  const widths = columns.map((c) => colWidths[c.key] ?? c.width);
-  const minTotal = widths.reduce((a, b) => a + b, 0);
-  // grow-flagged columns (that the user hasn't manually resized) absorb spare
-  // width via fr so text isn't cropped when there's room; everything else is
-  // fixed. If NOTHING is flexible (every column pinned by a manual resize, or a
-  // grow-less preset) promote the last track to 1fr so the grid always fills the
-  // width - no dead right gutter (native last-column-autoexpand). minWidth:minTotal
-  // on the surfaces keeps rows scrollable when there are too many columns to fit.
-  const hasFlex = columns.some((c) => !colWidths[c.key] && c.grow);
-  const tracks = columns.map((c, i) =>
-    !colWidths[c.key] && c.grow ? `minmax(${widths[i]}px, ${c.grow}fr)` : `${widths[i]}px`
-  );
-  if (tracks.length && !hasFlex) {
-    tracks[tracks.length - 1] = `minmax(${widths[widths.length - 1]}px, 1fr)`;
-  }
-  const grid = tracks.join(" ");
+  const {grid, minTotal} = useMemo(() => {
+    const widths = columns.map((c) => colWidths[c.key] ?? c.width);
+    const minTotal = widths.reduce((a, b) => a + b, 0);
+    // grow-flagged columns (that the user hasn't manually resized) absorb spare
+    // width via fr so text isn't cropped when there's room; everything else is
+    // fixed. If NOTHING is flexible (every column pinned by a manual resize, or a
+    // grow-less preset) promote the last track to 1fr so the grid always fills the
+    // width - no dead right gutter (native last-column-autoexpand). minWidth:minTotal
+    // on the surfaces keeps rows scrollable when there are too many columns to fit.
+    const hasFlex = columns.some((c) => !colWidths[c.key] && c.grow);
+    const tracks = columns.map((c, i) =>
+      !colWidths[c.key] && c.grow ? `minmax(${widths[i]}px, ${c.grow}fr)` : `${widths[i]}px`
+    );
+    if (tracks.length && !hasFlex) {
+      tracks[tracks.length - 1] = `minmax(${widths[widths.length - 1]}px, 1fr)`;
+    }
+    return { grid: tracks.join(" "), minTotal };
+  }, [columns, colWidths]);
   const n = events.length;
 
+  // getItemKey participates in TanStack's measurement-cache dependencies.
+  // A fresh callback on each scroll render rebuilds every loaded row's layout.
+  // Change it only when row identities/order can actually have changed.
+  const getItemKey = useCallback((index: number) => events[index].seq, [events]);
+  const getScrollElement = useCallback(() => parentRef.current, []);
+  const estimateSize = useCallback(() => rowHeight, [rowHeight]);
   const rowVirtualizer = useVirtualizer({
     count: n,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => rowHeight,
+    getScrollElement,
+    estimateSize,
     overscan: 10,
-    getItemKey: (index) => events[index].seq,
+    getItemKey,
   });
 
   useEffect(() => {
@@ -293,55 +366,8 @@ export function EventTable({
                 ref={rowVirtualizer.measureElement}
                 className="rowwrap"
               >
-                <div
-                  className={cls}
-                  style={{ gridTemplateColumns: grid, height: rowHeight }}
-                  onClick={() => {
-                    onSelect(e);
-                    onCursor(e.seq);
-                  }}
-                >
-                  {columns.map((c) => {
-                    const rawVal = filterFieldValue(e, c.field);
-                    let content;
-                    if (c.key === "time") content = <TimeCell e={e} tz={timeZone} />;
-                    else if (c.key === "identity") content = <IdentityCell e={e} />;
-                    else if (c.key === "result") content = <ResultCell e={e} />;
-                    else content = c.get(e);
-                    const pivotable = c.field !== "eventTime";
-                    return (
-                      <div key={c.key} className={`cell ${c.mono ? "mono" : ""} c-${c.key}`} title={c.get(e)}>
-                        <span className="cell-inner">{content}{c.key!=="identity"&&<AliasBadge field={c.field} value={rawVal}/>}</span>
-                        {pivotable && (
-                          <span className="pivot-icons">
-                            <button
-                              className="pv"
-                              title={`Filter for ${rawVal}`}
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                onPivot(c.field, rawVal, "include");
-                              }}
-                            >
-                              <span className="pv-loupe">⌕</span>
-                              <span className="pv-sign">+</span>
-                            </button>
-                            <button
-                              className="pv"
-                              title={`Filter out ${rawVal}`}
-                              onClick={(ev) => {
-                                ev.stopPropagation();
-                                onPivot(c.field, rawVal, "exclude");
-                              }}
-                            >
-                              <span className="pv-loupe">⌕</span>
-                              <span className="pv-sign">−</span>
-                            </button>
-                          </span>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
+                <EventRow event={e} className={cls} grid={grid} rowHeight={rowHeight}
+                  columns={columns} timeZone={timeZone} onSelect={onSelect} onCursor={onCursor} onPivot={onPivot} />
                 {expanded && (
                   <div className="row-expand">
                     <div className="row-expand-pin" style={{ width: viewportW || undefined }}>
@@ -367,4 +393,4 @@ export function EventTable({
       </div>
     </div>
   );
-}
+});
