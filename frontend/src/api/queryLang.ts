@@ -220,6 +220,7 @@ export function validateQueryExpr(ast: QueryExpr, fields = new Set<string>(QUERY
   const walk = (node: QueryExpr, depth: number) => {
     if (!node) throw new Error("missing expression operand");
     if (++count > 512 || depth > 32) throw new Error("query is too complex (maximum depth 32, 512 nodes)");
+    if ((node.t === "text" || node.t === "cmp") && new TextEncoder().encode(node.value).length > 16384) throw new Error("query value exceeds 16384 bytes");
     switch (node.t) {
       case "and": case "or":
         if (!node.nodes.length) throw new Error(`${node.t} requires operands`);

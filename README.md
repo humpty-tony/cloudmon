@@ -20,7 +20,7 @@ The result is a gate: unless you already run a log pipeline, investigating your 
 
 CloudMon removes that gate. It reads CloudTrail directly (a downloaded dump, or a live stream from a trail you already have) and gives you the exploration you would expect from a SIEM, running entirely on your laptop, offline, for free:
 
-- a real query language over every field,
+- a query language over supported event and identity fields ([semantics and limits](docs/search-correctness.md)),
 - facets, a time histogram, and live stats to pivot through millions of events,
 - assumed-role lineage that walks an AssumeRole chain back to its origin identity,
 - a Sigma testbench to write and validate detections against real data.

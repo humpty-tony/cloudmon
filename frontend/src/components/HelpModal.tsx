@@ -70,11 +70,18 @@ function Content({ tab }: { tab: string }) {
             <code>!~</code> regex-not · <code>*</code>/<code>?</code> wildcards (glob) · <code>field=</code> means
             “exists”. Combine with <code>and</code> / <code>or</code> / <code>not</code> and parentheses.
           </p>
+          <p>Matches are case-insensitive. Missing and empty values count as absent: <code>errorCode=*</code> finds
+            errors, while <code>errorCode!=*</code> finds events without an error. <code>not</code> includes missing
+            values when its comparison does not match.</p>
+          <p>Regex uses RE2 syntax; lookarounds, backreferences, and trailing flags such as <code>/pattern/i</code> are
+            unsupported. Use inline flags such as <code>(?s)</code>. Invalid drafts remain unapplied.</p>
+          <p>Free text searches the supported event and identity fields, not nested request or response JSON.
+            Clicked values are literal, including any <code>*</code> or <code>?</code> characters.</p>
           <h4>Examples</h4>
           <Row ex={`eventName:ConsoleLogin`} desc="console logins (contains)" />
           <Row ex={`eventName="List*"`} desc="any List… API (glob)" />
           <Row ex={`errorCode=* and not readOnly=true`} desc="failed write attempts" />
-          <Row ex={`userIdentity.type=Root`} desc="root activity" />
+          <Row ex={`identityType=Root`} desc="root activity" />
           <Row ex={`sourceIPAddress:"192.0.2"`} desc="one IP range" />
           <Row ex={`eventName ~ "^Delete"`} desc="deletions (regex)" />
           <Row ex={`(eventSource:iam or eventSource:sts) and errorCode=*`} desc="denied identity calls" />

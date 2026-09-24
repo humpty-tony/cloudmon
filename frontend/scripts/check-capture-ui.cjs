@@ -37,10 +37,16 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
    const infra={owned:true,queueUrl:'https://sqs.us-east-1.amazonaws.com/111122223333/cloudmon-capture-saved',queueName:'cloudmon-capture-saved',queueArn:'arn:aws:sqs:us-east-1:111122223333:cloudmon-capture-saved',ruleName:'cloudmon-cloudtrail-saved',ruleArn:'arn:aws:events:us-east-1:111122223333:rule/cloudmon-cloudtrail-saved',region:'us-east-1',account:'111122223333',allManagement:true};
    const recovering=location.search.includes('recovery');
    const state=window.captureTest={delayIdentity:false,delayTrail:false,failTrail:false,startCalls:0,resumeCalls:0,removeCalls:0,cleanupFails:false,exportFails:false,exported:null,raw,
-     aggCalls:0,aggActive:0,aggMax:0,newerCalls:0,newerActive:0,newerMax:0,delayAgg:false,delayNewer:false,
+     aggCalls:0,aggActive:0,aggMax:0,newerCalls:0,newerActive:0,newerMax:0,delayAgg:false,delayNewer:false,searchMode:false,failSearch:false,
      rows:[{seq:1,eventID:"saved-1",eventName:"RunInstances",eventSource:"ec2.amazonaws.com",eventTime:"2026-09-24T00:00:00Z",awsRegion:"us-east-1",identityType:"IAMUser",userName:"analyst",readOnly:false,managementEvent:true}],
      recovery:{evidence:{events:recovering?1:0,observations:recovering?3:0,variantEvents:recovering?1:0,lossy:recovering?1:0},capture:recovering?{version:1,phase:'ready',config,infra}:null,captureError:'',active:false}};
    const handlers=new Map();
+   const queryRows=(filter)=>{
+    if(state.failSearch)throw Error('Storage temporarily unavailable');
+    // Only the event-ID UI scenarios below need filtering. Real search semantics
+    // are checked against DuckDB in the shared conformance fixture.
+    return state.searchMode && filter?.expr ? state.rows.filter(row=>row.eventID===filter.expr.value) : state.rows;
+   };
    window.runtime={EventsOn:(name,cb)=>{if(!handlers.has(name))handlers.set(name,new Set());handlers.get(name).add(cb);return()=>handlers.get(name).delete(cb)}};
    state.emit=(total,withRows=true)=>{while(withRows && state.rows.length<total){const seq=state.rows.length+1;state.rows.unshift({...state.rows[state.rows.length-1],seq,eventID:`live-${seq}`,eventName:`LiveEvent${seq}`})}state.recovery.evidence.events=total;for(const cb of handlers.get('cloudmon:events')||[])cb({added:1,total})};
    window.go={main:{App:{
@@ -50,8 +56,8 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     ResumeCapture:async()=>{state.resumeCalls++;state.recovery.active=true;return infra},
     StopCapture:async()=>{state.recovery.active=false},
     TeardownCapture:async()=>{state.removeCalls++;state.recovery.active=false;if(state.cleanupFails){state.recovery.capture.phase='cleanup';throw Error('Queue deletion denied; saved resources retained')}state.recovery.capture=null},
-    QueryAggregates:async()=>{state.aggCalls++;state.aggActive++;state.aggMax=Math.max(state.aggMax,state.aggActive);const result={total:state.rows.length,facets:{},histogram:[],histFrom:0,histTo:0,histStep:60000,stats:{errors:0,principals:1,sources:1,regions:1,minMs:0,maxMs:0}};try{if(state.delayAgg)await new Promise(resolve=>{state.resolveAgg=resolve});return result}finally{state.aggActive--}},
-    QueryPage:async()=>state.rows,
+    QueryAggregates:async(filter)=>{state.aggCalls++;const rows=queryRows(filter);state.aggActive++;state.aggMax=Math.max(state.aggMax,state.aggActive);const result={total:rows.length,facets:{},histogram:[],histFrom:0,histTo:0,histStep:60000,stats:{errors:0,principals:1,sources:1,regions:1,minMs:0,maxMs:0}};try{if(state.delayAgg)await new Promise(resolve=>{state.resolveAgg=resolve});return result}finally{state.aggActive--}},
+    QueryPage:async(filter)=>queryRows(filter),
     QueryNewer:async(_filter,since)=>{state.newerCalls++;state.newerActive++;state.newerMax=Math.max(state.newerMax,state.newerActive);const rows=state.rows.filter(r=>r.seq>since);try{if(state.delayNewer)await new Promise(resolve=>{state.resolveNewer=resolve});return rows}finally{state.newerActive--}},
     GetEventRaw:async()=>raw,
     RawBySeqs:async()=>{if(state.exportFails)throw Error('Storage unavailable');return [raw]},
@@ -198,6 +204,40 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('button',{name:'↑ 1,000,000 new events',exact:true}).click();
   await page.locator('.sb-mode.live').waitFor();
   assert.equal(await page.locator('.newpill').count(),0,'explicit Follow did not clear pending arrivals');
+  // Invalid draft syntax must never replace an applied search. A failed engine
+  // request must keep older evidence explicitly labelled until a successful retry.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.evaluate(()=>{window.captureTest.searchMode=true;window.captureTest.emit(2)});
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.getByText('LiveEvent2',{exact:true}).first().waitFor();
+  const query=page.getByRole('textbox',{name:'Search query',exact:true});
+  await query.fill('eventID="saved-1"');
+  await query.press('Enter');
+  await page.getByText('LiveEvent2',{exact:true}).waitFor({state:'hidden'});
+  await page.getByText('RunInstances',{exact:true}).first().waitFor();
+  await page.screenshot({path:path.join(output,'search-valid.png'),fullPage:true});
+  const appliedCalls=await page.evaluate(()=>window.captureTest.aggCalls);
+  await query.fill('eventName~"(?=Run)"');
+  await query.press('Enter');
+  await page.clock.runFor(500);
+  assert.equal(await query.getAttribute('aria-invalid'),'true');
+  assert.equal(await page.evaluate(()=>window.captureTest.aggCalls),appliedCalls,'invalid query reached the engine');
+  assert.equal(await page.getByText('LiveEvent2',{exact:true}).count(),0,'invalid query widened results');
+  await page.screenshot({path:path.join(output,'search-invalid.png'),fullPage:true});
+  await page.evaluate(()=>{window.captureTest.failSearch=true});
+  await query.fill('eventID="missing"');
+  await query.press('Enter');
+  await page.getByRole('alert').filter({hasText:'Search failed.'}).waitFor();
+  await page.getByText('RunInstances',{exact:true}).first().waitFor();
+  await page.evaluate(()=>{window.captureTest.failSearch=false});
+  await page.getByRole('button',{name:'Retry search',exact:true}).click();
+  await page.getByRole('alert').filter({hasText:'Search failed.'}).waitFor({state:'hidden'});
+  await page.getByText('RunInstances',{exact:true}).waitFor({state:'hidden'});
+  await page.getByRole('button',{name:'Clear all filters',exact:true}).click();
+  await page.getByText('LiveEvent2',{exact:true}).first().waitFor();
+  await query.fill('(');
+  await page.getByRole('button',{name:'Clear all filters',exact:true}).click();
+  assert.equal(await query.inputValue(),'','Clear did not discard an unapplied draft');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture'],errors}));

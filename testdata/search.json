@@ -1,0 +1,643 @@
+{
+  "records": [
+    {
+      "eventID": "ok",
+      "eventName": "ListBuckets",
+      "eventSource": "s3.amazonaws.com",
+      "eventTime": "2025-01-01T00:00:01Z",
+      "awsRegion": "us-east-1",
+      "readOnly": true,
+      "userIdentity": {
+        "type": "IAMUser",
+        "userName": "Alice",
+        "arn": "arn:aws:iam::111:user/Alice"
+      },
+      "userAgent": "C:\\tools\\agent42"
+    },
+    {
+      "eventID": "denied",
+      "eventName": "RunInstances",
+      "eventSource": "ec2.amazonaws.com",
+      "eventTime": "2025-01-01T00:00:02Z",
+      "awsRegion": "eu-west-1",
+      "errorCode": "AccessDenied",
+      "errorMessage": "O'Reilly 100% blocked_",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "principalId": "AROA:session42",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111:role/Deploy",
+            "userName": "Deploy"
+          }
+        }
+      }
+    },
+    {
+      "eventID": "empty",
+      "eventName": "GetObject",
+      "eventSource": "s3.amazonaws.com",
+      "eventTime": "2025-01-01T00:00:03Z",
+      "errorCode": "",
+      "userIdentity": {
+        "type": "Root",
+        "userName": "account-alias"
+      },
+      "managementEvent": false
+    },
+    {
+      "eventID": "missing",
+      "eventName": "DeleteBucket",
+      "eventSource": "s3.amazonaws.com",
+      "eventTime": "2025-01-01T00:00:04Z",
+      "userIdentity": {
+        "type": "AWSService",
+        "arn": "arn:aws:iam::111:role/service"
+      },
+      "userAgent": "line1\nline2"
+    }
+  ],
+  "cases": [
+    {
+      "name": "presence",
+      "query": "errorCode=*",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "errorCode",
+          "op": "eq",
+          "value": "*"
+        }
+      },
+      "ids": [
+        "denied"
+      ]
+    },
+    {
+      "name": "bare presence",
+      "query": "errorCode=",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "errorCode",
+          "op": "exists",
+          "value": ""
+        }
+      },
+      "ids": [
+        "denied"
+      ]
+    },
+    {
+      "name": "missing and empty",
+      "query": "errorCode=\"\"",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "errorCode",
+          "op": "eq",
+          "value": ""
+        }
+      },
+      "ids": [
+        "empty",
+        "missing",
+        "ok"
+      ]
+    },
+    {
+      "name": "negation includes missing",
+      "query": "not errorCode=AccessDenied",
+      "filter": {
+        "expr": {
+          "t": "not",
+          "node": {
+            "t": "cmp",
+            "field": "errorCode",
+            "op": "eq",
+            "value": "AccessDenied"
+          }
+        }
+      },
+      "ids": [
+        "empty",
+        "missing",
+        "ok"
+      ]
+    },
+    {
+      "name": "inequality includes missing",
+      "query": "errorCode!=AccessDenied",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "errorCode",
+          "op": "ne",
+          "value": "AccessDenied"
+        }
+      },
+      "ids": [
+        "empty",
+        "missing",
+        "ok"
+      ]
+    },
+    {
+      "name": "negated glob presence",
+      "query": "errorCode!=*",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "errorCode",
+          "op": "ne",
+          "value": "*"
+        }
+      },
+      "ids": [
+        "empty",
+        "missing",
+        "ok"
+      ]
+    },
+    {
+      "name": "empty text negation",
+      "query": "not \"\"",
+      "filter": {
+        "expr": {
+          "t": "not",
+          "node": {
+            "t": "text",
+            "value": ""
+          }
+        }
+      },
+      "ids": []
+    },
+    {
+      "name": "displayed root",
+      "query": "user=root",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "user",
+          "op": "eq",
+          "value": "root"
+        }
+      },
+      "ids": [
+        "empty"
+      ]
+    },
+    {
+      "name": "role issuer name",
+      "query": "userName=deploy",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "userName",
+          "op": "eq",
+          "value": "deploy"
+        }
+      },
+      "ids": [
+        "denied"
+      ]
+    },
+    {
+      "name": "role issuer ARN",
+      "query": "roleArn=\"arn:aws:iam::111:role/Deploy\"",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "roleArn",
+          "op": "eq",
+          "value": "arn:aws:iam::111:role/Deploy"
+        }
+      },
+      "ids": [
+        "denied"
+      ]
+    },
+    {
+      "name": "session name",
+      "query": "sessionName=session42",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "sessionName",
+          "op": "eq",
+          "value": "session42"
+        }
+      },
+      "ids": [
+        "denied"
+      ]
+    },
+    {
+      "name": "displayed fallback",
+      "query": "user=service",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "user",
+          "op": "eq",
+          "value": "service"
+        }
+      },
+      "ids": [
+        "missing"
+      ]
+    },
+    {
+      "name": "region free text",
+      "query": "eu-west-1",
+      "filter": {
+        "expr": {
+          "t": "text",
+          "value": "eu-west-1"
+        }
+      },
+      "ids": [
+        "denied"
+      ]
+    },
+    {
+      "name": "error message free text",
+      "query": "\"blocked_\"",
+      "filter": {
+        "expr": {
+          "t": "text",
+          "value": "blocked_"
+        }
+      },
+      "ids": [
+        "denied"
+      ]
+    },
+    {
+      "name": "no cross-field phrase",
+      "query": "\"ListBuckets s3.amazonaws.com\"",
+      "filter": {
+        "expr": {
+          "t": "text",
+          "value": "ListBuckets s3.amazonaws.com"
+        }
+      },
+      "ids": []
+    },
+    {
+      "name": "literal percent",
+      "query": "errorMessage:\"100%\"",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "errorMessage",
+          "op": "contains",
+          "value": "100%"
+        }
+      },
+      "ids": [
+        "denied"
+      ]
+    },
+    {
+      "name": "literal apostrophe",
+      "query": "errorMessage:\"O'Reilly\"",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "errorMessage",
+          "op": "contains",
+          "value": "O'Reilly"
+        }
+      },
+      "ids": [
+        "denied"
+      ]
+    },
+    {
+      "name": "quoted regex escape",
+      "query": "userAgent~\"agent\\d+\"",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "userAgent",
+          "op": "regex",
+          "value": "agent\\d+"
+        }
+      },
+      "ids": [
+        "ok"
+      ]
+    },
+    {
+      "name": "literal path escapes",
+      "query": "userAgent:\"C:\\tools\"",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "userAgent",
+          "op": "contains",
+          "value": "C:\\tools"
+        }
+      },
+      "ids": [
+        "ok"
+      ]
+    },
+    {
+      "name": "negative regex matches missing",
+      "query": "errorCode!~\"Denied\"",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "errorCode",
+          "op": "nregex",
+          "value": "Denied"
+        }
+      },
+      "ids": [
+        "empty",
+        "missing",
+        "ok"
+      ]
+    },
+    {
+      "name": "regex dot excludes newline",
+      "query": "userAgent~/line1.line2/",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "userAgent",
+          "op": "regex",
+          "value": "line1.line2"
+        }
+      },
+      "ids": []
+    },
+    {
+      "name": "regex inline dotall",
+      "query": "userAgent~/((?s)line1.line2)/",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "userAgent",
+          "op": "regex",
+          "value": "((?s)line1.line2)"
+        }
+      },
+      "ids": [
+        "missing"
+      ]
+    },
+    {
+      "name": "glob includes newline",
+      "query": "userAgent=\"line1?line2\"",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "userAgent",
+          "op": "eq",
+          "value": "line1?line2"
+        }
+      },
+      "ids": [
+        "missing"
+      ]
+    },
+    {
+      "name": "derived result",
+      "query": "result=Success",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "result",
+          "op": "eq",
+          "value": "Success"
+        }
+      },
+      "ids": [
+        "empty",
+        "missing",
+        "ok"
+      ]
+    },
+    {
+      "name": "boolean field",
+      "query": "managementEvent=false",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "managementEvent",
+          "op": "eq",
+          "value": "false"
+        }
+      },
+      "ids": [
+        "empty"
+      ]
+    },
+    {
+      "name": "boolean composition",
+      "query": "(eventName=List* or eventName=Run*) and not readOnly=true",
+      "filter": {
+        "expr": {
+          "t": "and",
+          "nodes": [
+            {
+              "t": "or",
+              "nodes": [
+                {
+                  "t": "cmp",
+                  "field": "eventName",
+                  "op": "eq",
+                  "value": "List*"
+                },
+                {
+                  "t": "cmp",
+                  "field": "eventName",
+                  "op": "eq",
+                  "value": "Run*"
+                }
+              ]
+            },
+            {
+              "t": "not",
+              "node": {
+                "t": "cmp",
+                "field": "readOnly",
+                "op": "eq",
+                "value": "true"
+              }
+            }
+          ]
+        }
+      },
+      "ids": [
+        "denied"
+      ]
+    },
+    {
+      "name": "event ID pivot",
+      "filter": {
+        "includes": {
+          "eventID": [
+            "DENIED"
+          ]
+        }
+      },
+      "ids": [
+        "denied"
+      ]
+    },
+    {
+      "name": "result pivot",
+      "filter": {
+        "includes": {
+          "result": [
+            "Success"
+          ]
+        }
+      },
+      "ids": [
+        "empty",
+        "missing",
+        "ok"
+      ]
+    },
+    {
+      "name": "read only pivot",
+      "filter": {
+        "includes": {
+          "readOnly": [
+            "true"
+          ]
+        }
+      },
+      "ids": [
+        "ok"
+      ]
+    },
+    {
+      "name": "literal pivot stars",
+      "filter": {
+        "includes": {
+          "eventName": [
+            "List*"
+          ]
+        }
+      },
+      "ids": []
+    },
+    {
+      "name": "exists pivot",
+      "filter": {
+        "exists": [
+          "roleArn"
+        ]
+      },
+      "ids": [
+        "denied"
+      ]
+    },
+    {
+      "name": "exclusion with null",
+      "filter": {
+        "excludes": {
+          "errorCode": [
+            "AccessDenied"
+          ]
+        }
+      },
+      "ids": [
+        "empty",
+        "missing",
+        "ok"
+      ]
+    },
+    {
+      "name": "empty sensitive intersection",
+      "filter": {
+        "matchNone": true
+      },
+      "ids": []
+    },
+    {
+      "name": "time boundaries",
+      "filter": {
+        "fromMs": 1735689602000,
+        "toMs": 1735689603000
+      },
+      "ids": [
+        "denied",
+        "empty"
+      ]
+    }
+  ],
+  "invalid": [
+    {
+      "name": "unknown include",
+      "filter": {
+        "includes": {
+          "noSuchField": [
+            "x"
+          ]
+        }
+      }
+    },
+    {
+      "name": "unknown exclude even empty",
+      "filter": {
+        "excludes": {
+          "noSuchField": []
+        }
+      }
+    },
+    {
+      "name": "unknown exists",
+      "filter": {
+        "exists": [
+          "noSuchField"
+        ]
+      }
+    },
+    {
+      "name": "invalid RE2",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "eventName",
+          "op": "regex",
+          "value": "(?=Run)"
+        }
+      }
+    },
+    {
+      "name": "backreference",
+      "filter": {
+        "expr": {
+          "t": "cmp",
+          "field": "eventName",
+          "op": "regex",
+          "value": "(Run)\\1"
+        }
+      }
+    },
+    {
+      "name": "empty conjunction",
+      "filter": {
+        "expr": {
+          "t": "and",
+          "nodes": []
+        }
+      }
+    },
+    {
+      "name": "reversed time",
+      "filter": {
+        "fromMs": 20,
+        "toMs": 10
+      }
+    }
+  ]
+}

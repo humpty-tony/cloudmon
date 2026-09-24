@@ -6,6 +6,10 @@ import { RE2JS } from "re2js";
 const cache = new Map<string, RE2JS>();
 export function searchRegex(pattern: string): RE2JS {
   if (new TextEncoder().encode(pattern).length > 4096) throw new Error("regular expression exceeds 4096 bytes");
+  return cachedRegex(pattern);
+}
+
+function cachedRegex(pattern: string): RE2JS {
   let compiled = cache.get(pattern);
   if (!compiled) {
     try {
@@ -22,5 +26,5 @@ export function searchRegex(pattern: string): RE2JS {
 export function globMatches(pattern: string, value: string): boolean {
   const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
   // LIKE's wildcards include newlines; matches() anchors to the whole value.
-  return searchRegex("(?s)" + escaped).matches(value);
+  return cachedRegex("(?s)" + escaped).matches(value);
 }

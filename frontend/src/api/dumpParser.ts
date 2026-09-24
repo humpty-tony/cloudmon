@@ -29,7 +29,7 @@ function recordToEvent(raw: RawRecord): CloudTrailEvent {
       principalId: str(ui.principalId),
       arn: str(ui.arn),
       accountId: str(ui.accountId),
-      userName: str(ui.userName ?? issuer.userName),
+      userName: str(ui.userName) || str(issuer.userName),
       roleArn: str(issuer.arn),
       sessionName: str(ui.principalId).split(":")[1] ?? "",
     },
