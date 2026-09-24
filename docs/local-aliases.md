@@ -1,7 +1,15 @@
-# Local labels
+# Personal labels
 
-Draft scope: add, rename and remove personal labels for exact account IDs, full ARNs and recorded source addresses. Display labels alongside original identifiers in event inspection, activity analysis and investigation/lineage context. Keep searches, exports, correlation and original records unchanged.
+Open **Settings → Personal labels** to add a familiar name for a full ARN, a 12-digit account ID, or an exact recorded source address. Labels appear alongside original values in event rows/fields, activity analysis, credential lineage details, and investigation resource/relation details. Rename or remove an entry from the same panel; search and pagination keep larger collections manageable.
 
-Labels are local preferences, bounded and validated; save failures must remain visible. ARN/account handling follows AWS [ARN formats](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html) and [account identifiers](https://docs.aws.amazon.com/accounts/latest/reference/manage-acct-identifiers.html). No account discovery or AWS calls are introduced.
+Labels are display preferences. Matching uses the exact identifier and type, including case, partition, leading zeros and textual address spelling. Different identifiers may share a label and remain separate entities. There is no wildcard matching, CIDR expansion, IP normalization, account discovery or ownership inference. An account label names the 12-digit value only; use a full ARN when the partition/resource must be explicit. Source-address labels can name recorded service text such as `AWS Internal` as well as literal IP addresses.
 
-Validation: focused persistence/error checks, browser label/edit/pivot behavior and screenshots, plus Linux/Windows/macOS CI builds.
+Original identifiers remain visible and are still passed to filters and entity drilldowns. Labels do not enter original JSON, hashes, exports, query semantics, correlation keys or lineage edges. The inspector only annotates complete string previews, so a shortened prefix cannot accidentally inherit a label. Raw JSON retains all source bytes. Labels are not a claim that an identity was verified.
+
+Preferences persist on this device in the app's local storage, across datasets and restarts. Nothing is uploaded and no AWS API is called. They are not shared across devices or included in exported evidence. Up to 500 labels are supported; identifiers are at most 2,048 characters and labels at most 100. The manager shows 50 entries per page. Reads are cached; rendering events performs no storage reads or JSON parsing. Updating a label does not reparse the inspected record.
+
+Saving publishes the new display state only after storage succeeds. A quota/unavailable-storage error leaves previous labels intact. An invalid saved collection is preserved with an explicit error, and edits are blocked until it is restored or explicitly reset. **Reset personal labels** removes just this collection; **Reset all preferences** also clears labels. Other open app windows refresh labels through the storage event.
+
+AWS handling was checked against [ARN formats](https://docs.aws.amazon.com/IAM/latest/UserGuide/reference-arns.html) and [account identifiers](https://docs.aws.amazon.com/accounts/latest/reference/manage-acct-identifiers.html). ARN validation checks the general complete shape, including service-specific empty region/account components; it does not validate resource existence or authorization. Account IDs remain strings.
+
+Validation: focused persistence, limits, invalid-data recovery, write failures, case/partition/leading-zero separation and cached-read checks; browser add/rename/remove/reload, original-value pivots, raw-record preservation and no inspector reparse; screenshot review and Linux/Windows/macOS build CI. Run `npm --prefix frontend run check:labels` for the focused checks.

@@ -1444,3 +1444,6 @@ body { font-feature-settings: "liga", "calt"; }
 .alias-error button { margin:6px; }
 .alias-notice { color:var(--sev-ok); }
 .alias-pagination { justify-content:space-between; margin:12px 0; }
+
+.c-ident { max-width:100%; }
+.c-ident-arn { min-width:0; }
