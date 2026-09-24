@@ -6,6 +6,8 @@ const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'test-results', 'capture');
 fs.mkdirSync(output, {recursive:true});
 async function checkStatusBar(page) {
+ // Flush resize/paint work and the badge entrance animation on the test clock.
+ await page.clock.runFor(300);
  await page.locator('.statusbar .newpill').waitFor({state:'visible'});
  // Resolve both live elements in one browser task: resizing can replace nodes
  // between a locator resolving its handle and an evaluation using that handle.
