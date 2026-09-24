@@ -8,6 +8,7 @@ package store
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"cloudmon/internal/model"
@@ -23,8 +25,9 @@ import (
 
 // Store is a handle to an on-disk DuckDB database backing one loaded dataset.
 type Store struct {
-	bin    string // path to the duckdb CLI binary
-	dbPath string // on-disk database file
+	mu     sync.Mutex // one CLI process owns this database at a time
+	bin    string     // path to the duckdb CLI binary
+	dbPath string     // on-disk database file
 }
 
 func New(bin, dbPath string) *Store { return &Store{bin: bin, dbPath: dbPath} }
@@ -79,6 +82,8 @@ const maxObj = "1073741824" // 1 GiB max single JSON object (a whole Records fil
 // and the read-only query subprocesses can momentarily collide; a bounded backoff
 // lets whichever lost the race succeed on a retry instead of surfacing an error.
 func (s *Store) run(jsonOut, readonly bool, sql string) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	const maxTries = 12
 	var lastErr error
 	for try := 0; try < maxTries; try++ {
@@ -112,7 +117,7 @@ func isLockErr(err error) bool {
 }
 
 func (s *Store) runOnce(jsonOut, readonly bool, sql string) ([]byte, error) {
-	args := []string{}
+	args := []string{"-bail"}
 	if readonly {
 		args = append(args, "-readonly")
 	}
@@ -124,7 +129,9 @@ func (s *Store) runOnce(jsonOut, readonly bool, sql string) ([]byte, error) {
 	// eventName IN (~270 values), and the facets query repeats the WHERE clause once
 	// per field - can exceed the Windows ~32 KB command-line limit, making
 	// CreateProcess fail (the query silently returns nothing). stdin has no such cap.
-	cmd := exec.Command(s.bin, args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, s.bin, args...)
 	hideWindow(cmd)
 	cmd.Stdin = strings.NewReader(sql)
 	var out, errb bytes.Buffer
@@ -198,7 +205,8 @@ func (s *Store) AppendEvents(evs []model.CloudTrailEvent) (int, error) {
 	for _, e := range evs {
 		buf.Reset()
 		if json.Compact(&buf, []byte(e.RawJSON)) != nil {
-			continue // skip records whose raw JSON won't compact to one line
+			tmp.Close()
+			return 0, fmt.Errorf("live event %q contains invalid JSON; batch was not committed", e.EventID)
 		}
 		buf.WriteByte('\n')
 		if _, err := tmp.Write(buf.Bytes()); err != nil {
@@ -215,21 +223,20 @@ func (s *Store) AppendEvents(evs []model.CloudTrailEvent) (int, error) {
 	}
 
 	// One JSON record per line → the same `r` projection Ingest uses.
-	src := "(SELECT to_json(j) AS r FROM read_json(" + sqlStr(name) +
-		", format='newline_delimited', records=true, ignore_errors=true, union_by_name=true) AS j)"
+	src := "(SELECT json AS r FROM read_json_objects(" + sqlStr(name) + ", format='newline_delimited'))"
 	// Single subprocess (one exclusive-lock window): create-if-missing, ensure the
 	// indexes, then insert with a MAX(seq)-offset seq. The NOT EXISTS on eventID drops
 	// events already in the table, so an SQS redelivery (e.g. a batch buffered but not
 	// yet acked when capture paused, then re-received on resume) can't create duplicate
 	// rows. Events without an eventID are kept as-is (nothing to dedupe on).
-	sql := "CREATE TABLE IF NOT EXISTS events AS SELECT" + selectCols + "\nFROM " + src + "\nWHERE false;\n" +
+	sql := "BEGIN TRANSACTION;\nCREATE TABLE IF NOT EXISTS events AS SELECT" + selectCols + "\nFROM " + src + "\nWHERE false;\n" +
 		"CREATE INDEX IF NOT EXISTS idx_seq ON events(seq);\n" +
 		"CREATE INDEX IF NOT EXISTS idx_ts ON events(ts);\n" +
 		"CREATE INDEX IF NOT EXISTS idx_akid ON events(accessKeyId);\n" +
 		"CREATE INDEX IF NOT EXISTS idx_ikid ON events(issuedKeyId);\n" +
 		"INSERT INTO events SELECT\n  (SELECT COALESCE(MAX(seq),0) FROM events) + " + seqExpr + " AS seq," + eventCols +
 		"\nFROM " + src + "\nWHERE json_extract_string(r,'$.eventName') IS NOT NULL" +
-		"\n  AND NOT EXISTS (SELECT 1 FROM events e WHERE e.eventID <> '' AND e.eventID = json_extract_string(r,'$.eventID'));"
+		"\n  AND NOT EXISTS (SELECT 1 FROM events e WHERE e.eventID <> '' AND e.eventID = json_extract_string(r,'$.eventID')); COMMIT;"
 	if _, err := s.run(false, false, sql); err != nil {
 		return 0, err
 	}

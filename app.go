@@ -38,14 +38,13 @@ type App struct {
 	logW  *os.File   // cloudmon.log next to the exe (a blank WebView2 leaves no console)
 
 	// Live capture (Flow A) state.
-	capMu     sync.Mutex
-	capCancel context.CancelFunc // cancels the running poller + flusher
-	capInfra  awsflow.Infra      // resources StartCapture created (for teardown)
-	capActive bool
-	capDone   chan struct{} // closed when the flusher has fully drained + exited
-
-	liveBufMu sync.Mutex
-	liveBuf   []model.CloudTrailEvent // coalesced live events awaiting a batched DuckDB write
+	capMu       sync.Mutex
+	capCancel   context.CancelFunc // cancels the running poller
+	capInfra    awsflow.Infra      // resources StartCapture created (for teardown)
+	capActive   bool
+	capDone     chan struct{} // closed only after the poller has exited
+	capProfile  string        // credentials selected when this pipeline was created
+	lifecycleMu sync.Mutex    // serialize start, stop, teardown, and dataset replacement
 }
 
 func NewApp() *App { return &App{} }
@@ -111,6 +110,9 @@ func (a *App) Log(level, msg string) {
 // on disk and only pages + summaries cross the bridge. ---
 
 func (a *App) IngestFile(path string) (int, error) {
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
+	a.stopCapture()
 	if a.ensureDB() == nil {
 		return 0, fmt.Errorf("query engine unavailable: %v", a.dbErr)
 	}
@@ -121,6 +123,9 @@ func (a *App) IngestFile(path string) (int, error) {
 // DuckDB. (Desktop imports should prefer IngestFile with a native path - no bridge
 // transfer - but the file-input flow and the browser preview use this.)
 func (a *App) IngestText(text string) (int, error) {
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
+	a.stopCapture()
 	if a.ensureDB() == nil {
 		return 0, fmt.Errorf("query engine unavailable: %v", a.dbErr)
 	}
@@ -425,6 +430,8 @@ func (a *App) CheckQueue(profile, queueURL string) error {
 }
 
 func (a *App) StartCapture() (awsflow.Infra, error) {
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
 	if a.ensureDB() == nil {
 		return awsflow.Infra{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
 	}
@@ -441,9 +448,7 @@ func (a *App) StartCapture() (awsflow.Infra, error) {
 	// the old queue (and leak it): exactly the "paused-out events never load" symptom.
 	if a.capInfra.QueueURL != "" {
 		infra := a.capInfra
-		a.mu.Lock()
-		profile := a.cfg.Profile
-		a.mu.Unlock()
+		profile := a.capProfile
 		awscfg, err := awsflow.LoadConfig(a.ctx, profile, infra.Region)
 		if err != nil {
 			return awsflow.Infra{}, err
@@ -455,8 +460,8 @@ func (a *App) StartCapture() (awsflow.Infra, error) {
 		poller := awsflow.NewPoller(awscfg, infra.QueueURL, a.onLiveBatch, func(e error) {
 			a.Log("warn", "poll: "+e.Error())
 		})
-		go poller.Run(pctx)
-		go a.liveFlusher(pctx, a.capDone)
+		done := a.capDone
+		go func() { defer close(done); poller.Run(pctx) }()
 		a.Log("info", fmt.Sprintf("capture resumed on existing infra - draining queue=%s rule=%s (region=%s account=%s)",
 			infra.QueueURL, infra.RuleName, infra.Region, infra.Account))
 		return infra, nil
@@ -507,7 +512,9 @@ func (a *App) StartCapture() (awsflow.Infra, error) {
 		if err != nil {
 			a.Log("error", fmt.Sprintf("provision failed: %s - partial resources: queue=%q queueArn=%q rule=%q ruleArn=%q (region=%s account=%s)",
 				err.Error(), infra.QueueURL, infra.QueueArn, infra.RuleName, infra.RuleArn, infra.Region, infra.Account))
-			if tdErr := awsflow.Teardown(context.Background(), awscfg, infra); tdErr != nil {
+			rollbackCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			if tdErr := awsflow.Teardown(rollbackCtx, awscfg, infra); tdErr != nil {
 				a.Log("error", fmt.Sprintf("ROLLBACK INCOMPLETE - destroy these MANUALLY: queue=%q rule=%q (region=%s account=%s): %s",
 					infra.QueueURL, infra.RuleName, infra.Region, infra.Account, tdErr.Error()))
 			} else {
@@ -524,75 +531,43 @@ func (a *App) StartCapture() (awsflow.Infra, error) {
 	pctx, cancel := context.WithCancel(context.Background())
 	a.capCancel = cancel
 	a.capInfra = infra
+	a.capProfile = cfg.Profile
 	a.capActive = true
 	a.capDone = make(chan struct{})
 	poller := awsflow.NewPoller(awscfg, infra.QueueURL, a.onLiveBatch, func(e error) {
 		a.Log("warn", "poll: "+e.Error())
 	})
-	go poller.Run(pctx)
-	go a.liveFlusher(pctx, a.capDone)
+	done := a.capDone
+	go func() { defer close(done); poller.Run(pctx) }()
 	return infra, nil
 }
 
-// onLiveBatch buffers polled events; liveFlusher coalesces them into one DuckDB write
-// per interval, so frequent SQS batches don't each take the exclusive write lock (which
-// would stall the read-only query subprocesses the UI depends on).
-func (a *App) onLiveBatch(evs []model.CloudTrailEvent) {
-	a.liveBufMu.Lock()
-	a.liveBuf = append(a.liveBuf, evs...)
-	a.liveBufMu.Unlock()
-}
-
-// flushLive writes any buffered events in one batch and notifies the UI of the new
-// total. On failure it RE-QUEUES the batch (these events were already deleted from SQS,
-// so dropping them would be permanent loss) so the next tick retries.
-func (a *App) flushLive() {
-	a.liveBufMu.Lock()
-	if len(a.liveBuf) == 0 || a.db == nil {
-		a.liveBufMu.Unlock() // check before swapping so a nil db can't drop the batch
-		return
+// onLiveBatch returns only after the database commits. No acknowledged event is
+// parked in an in-memory buffer; the poller retains and retries a failed batch.
+func (a *App) onLiveBatch(ctx context.Context, evs []model.CloudTrailEvent) error {
+	if err := ctx.Err(); err != nil {
+		return err
 	}
-	batch := a.liveBuf
-	a.liveBuf = nil
-	a.liveBufMu.Unlock()
-
-	total, err := a.db.AppendEvents(batch)
+	total, err := a.db.AppendEvents(evs)
 	if err != nil {
-		a.liveBufMu.Lock()
-		a.liveBuf = append(batch, a.liveBuf...) // put the batch back at the front, keep ordering
-		if len(a.liveBuf) > 50000 {             // cap so a persistently-failing write can't grow unbounded
-			a.liveBuf = a.liveBuf[len(a.liveBuf)-50000:]
-		}
-		a.liveBufMu.Unlock()
-		a.Log("error", "append live batch failed (re-queued for retry): "+err.Error())
-		return
+		return err
 	}
 	if a.ctx != nil {
-		rt.EventsEmit(a.ctx, "cloudmon:events", map[string]int{"added": len(batch), "total": total})
+		rt.EventsEmit(a.ctx, "cloudmon:events", map[string]int{"added": len(evs), "total": total})
 	}
-}
-
-// liveFlusher writes buffered events on a fixed cadence until the capture is cancelled,
-// draining once more on the way out. It closes `done` on exit so Stop can wait for the
-// final drain before the process goes away.
-func (a *App) liveFlusher(ctx context.Context, done chan struct{}) {
-	defer close(done)
-	t := time.NewTicker(750 * time.Millisecond)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			a.flushLive() // final drain
-			return
-		case <-t.C:
-			a.flushLive()
-		}
-	}
+	return nil
 }
 
 // StopCapture halts polling but leaves the provisioned infrastructure in place so
 // capture can resume instantly.
 func (a *App) StopCapture() {
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
+	a.stopCapture()
+}
+
+// Caller holds lifecycleMu; joining prevents writes crossing a dataset switch.
+func (a *App) stopCapture() {
 	a.capMu.Lock()
 	cancel := a.capCancel
 	done := a.capDone
@@ -603,14 +578,8 @@ func (a *App) StopCapture() {
 	if cancel != nil {
 		cancel()
 	}
-	// Wait for the flusher's final drain so buffered (SQS-acked) events are persisted
-	// before we return - bounded so a stuck write can't hang the app close.
 	if done != nil {
-		select {
-		case <-done:
-		case <-time.After(3 * time.Second):
-			a.Log("warn", "live flusher drain timed out on stop")
-		}
+		<-done
 	}
 	a.Log("info", "capture stopped (infrastructure kept)")
 }
@@ -618,9 +587,12 @@ func (a *App) StopCapture() {
 // TeardownCapture stops polling and removes the EventBridge rule, its target, and the
 // SQS queue that StartCapture created - returning the account to its prior state.
 func (a *App) TeardownCapture() error {
-	a.StopCapture()
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
+	a.stopCapture()
 	a.capMu.Lock()
 	infra := a.capInfra
+	profile := a.capProfile
 	a.capMu.Unlock()
 	if infra.QueueURL == "" && infra.RuleName == "" {
 		return nil
@@ -633,12 +605,10 @@ func (a *App) TeardownCapture() error {
 		a.Log("info", "detached from existing queue (left in place - not owned by CloudMon)")
 		return nil
 	}
-	a.mu.Lock()
-	profile := a.cfg.Profile
-	a.mu.Unlock()
 	// context.Background(), not a.ctx: teardown may run during app shutdown when the
 	// Wails context is already cancelled - cleanup must still complete.
-	tctx := context.Background()
+	tctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	awscfg, err := awsflow.LoadConfig(tctx, profile, infra.Region)
 	if err != nil {
 		return err
@@ -674,7 +644,7 @@ func (a *App) RunLoginCommand(command string) error {
 
 // onShutdown runs when the app quits. If CloudMon PROVISIONED the capture, tear it down
 // so the EventBridge rule + SQS queue don't keep running (and billing) after the app is
-// gone. For an existing-queue capture it only drains buffered events - that queue is the
+// gone. For an existing-queue capture it only stops polling - that queue is the
 // user's and is never touched. Best-effort - failures are logged to cloudmon.log.
 func (a *App) onShutdown(_ context.Context) {
 	a.capMu.Lock()
@@ -687,7 +657,7 @@ func (a *App) onShutdown(_ context.Context) {
 			a.Log("error", "shutdown teardown failed - manual cleanup may be needed: "+err.Error())
 		}
 	} else if active {
-		a.StopCapture() // drain buffered events; nothing to tear down (existing queue)
+		a.StopCapture() // join the poller; nothing to tear down (existing queue)
 	}
 }
 
