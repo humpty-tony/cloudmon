@@ -5,6 +5,7 @@ import type {ActivityAnalysis,AnalysisDimension,AnalysisOptions,CloudTrailEvent,
 import {rowToEvent} from "../api/types";
 import {RawJsonModal} from "./RawJsonModal";
 import {InvestigationView} from "./InvestigationView";
+import {ThemedSelect} from "./ThemedSelect";
 
 export const analysisDimensions: [AnalysisDimension,string][] = [["identityArn","Principal / session ARN"],["roleArn","Role ARN"],["eventSource","Service"],["eventName","Operation"],["accountId","Actor account"],["recipientAccountId","Recipient account"],["sourceIPAddress","Source address"],["awsRegion","Region"]];
 const allEvidence:QueryFilter={includes:{},excludes:{},errorsOnly:false,hideReadOnly:false,fromMs:0,toMs:0,text:"",expr:null};
@@ -40,9 +41,9 @@ export function AnalysisView({filter}:{filter:QueryFilter}) {
   return <main className="analysis-view">
     <header className="analysis-heading"><div><h1>Activity analysis</h1><p>Explore recorded activity and compare it with the preceding window.</p></div><button className="btn-primary" disabled={busy} onClick={()=>void run()}>Run analysis</button>{busy&&<button className="btn-ghost btn-sm" onClick={()=>active.current?.abort()}>Cancel analysis</button>}</header>
     <div className="analysis-controls">
-      <label>Group by <select aria-label="Analysis dimension" disabled={busy} value={dimension} onChange={e=>setDimension(e.target.value as AnalysisDimension)}>{analysisDimensions.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+      <label>Group by <ThemedSelect label="Analysis dimension" disabled={busy} value={dimension} onChange={value=>setDimension(value as AnalysisDimension)} options={analysisDimensions.map(([value,label])=>({value,label}))}/></label>
       <label><input type="checkbox" checked={compare} disabled={busy} onChange={e=>setCompare(e.target.checked)}/> Compare previous window</label>
-      {compare&&<label>Each window <select aria-label="Baseline window" disabled={busy} value={hours} onChange={e=>setHours(Number(e.target.value))}><option value={1}>1 hour</option><option value={24}>24 hours</option><option value={168}>7 days</option></select></label>}
+      {compare&&<label>Each window <ThemedSelect label="Baseline window" disabled={busy} value={String(hours)} onChange={value=>setHours(Number(value))} options={[{value:"1",label:"1 hour"},{value:"24",label:"24 hours"},{value:"168",label:"7 days"}]}/></label>}
       <label><input type="checkbox" disabled={busy} checked={useFilter} onChange={e=>setUseFilter(e.target.checked)}/> Use console search, including time filters</label>
     </div>
     <div className="analysis-scope">{useFilter?"Scope: console search. All its filters apply to both windows.":"Scope: all loaded evidence. Console filters are not applied."} Updates run on request.</div>

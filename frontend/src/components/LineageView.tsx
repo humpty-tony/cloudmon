@@ -6,7 +6,7 @@ import type { EvidenceSnapshot, FilterField, GraphEdge, GraphNode, LineageTree, 
 import { identityGlyph } from "../api/types";
 import { backend } from "../api/backend";
 import { logError, logInfo } from "../api/log";
-import { RawJsonModal } from "./RawJsonModal";
+import { LineageEventModal } from "./LineageEventModal";
 
 interface Props {
   seq: number;
@@ -75,11 +75,28 @@ export function LineageView({ seq, initialSnapshot, onClose, onPivot }: Props) {
   const [expEvents, setExpEvents] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
-  const [view, setView] = useState({ x: 0, y: 0, k: 1 });
+  const view = useRef({ x: 0, y: 0, k: 1 });
+  const viewFrame = useRef<number | null>(null);
+  const viewportRef = useRef<SVGGElement>(null);
   const [raw, setRaw] = useState<{ title: string; json: string } | null>(null);
 
   const svgRef = useRef<SVGSVGElement>(null);
   const didCenter = useRef(false);
+
+  // Pointer events can arrive much faster than paint. Keep the viewport outside
+  // React so moving the graph never re-renders its inspector or node details.
+  const moveViewport = useCallback((next: {x: number; y: number; k: number}) => {
+    view.current = next;
+    if (viewFrame.current !== null) return;
+    viewFrame.current = requestAnimationFrame(() => {
+      viewFrame.current = null;
+      const {x, y, k} = view.current;
+      viewportRef.current?.setAttribute("transform", `translate(${x},${y}) scale(${k})`);
+    });
+  }, []);
+  useEffect(() => () => {
+    if (viewFrame.current !== null) cancelAnimationFrame(viewFrame.current);
+  }, []);
 
   useEffect(() => {
     const request = ++generation.current;
@@ -89,6 +106,7 @@ export function LineageView({ seq, initialSnapshot, onClose, onPivot }: Props) {
     graphRef.current = {nodes:new Map(),edges:[]};
     didCenter.current = false;
     setSelected(null);
+    setRaw(null);
     backend
       .queryLineageGraph(seq,initialSnapshot)
       .then((t) => {
@@ -140,14 +158,14 @@ export function LineageView({ seq, initialSnapshot, onClose, onPivot }: Props) {
   );
 
   useEffect(() => {
-    if (didCenter.current || !laidOut) return;
+    if (loading || didCenter.current || !laidOut) return;
     const cur = posOf(meta.currentId);
     const svg = svgRef.current;
     if (!cur || !svg) return;
     const r = svg.getBoundingClientRect();
-    setView({ k: 1, x: r.width / 2 - (cur as { x: number }).x, y: r.height / 3 - (cur as { y: number }).y });
+    moveViewport({ k: 1, x: r.width / 2 - (cur as { x: number }).x, y: r.height / 3 - (cur as { y: number }).y });
     didCenter.current = true;
-  }, [laidOut, posOf, meta.currentId]);
+  }, [loading, laidOut, posOf, meta.currentId, moveViewport]);
 
   const merge = (t: LineageTree) => {
     const next = new Map(graphRef.current.nodes);
@@ -200,33 +218,31 @@ export function LineageView({ seq, initialSnapshot, onClose, onPivot }: Props) {
 
   // ---- pan / zoom ----
   const drag = useRef<{ x: number; y: number } | null>(null);
-  const onDown = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest(".lgv-node, .lgv-ev-node")) return;
+  const onDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (e.button !== 0 || (e.target as Element).closest(".lgv-g")) return;
     e.preventDefault();
-    drag.current = { x: e.clientX - view.x, y: e.clientY - view.y };
+    drag.current = { x: e.clientX - view.current.x, y: e.clientY - view.current.y };
+    e.currentTarget.setPointerCapture(e.pointerId);
   };
-  const onMove = (e: React.MouseEvent) => {
-    // Capture the drag anchor + pointer NOW. The setView updater runs later, during
-    // React's render phase - if onUp/onMouseLeave has nulled drag.current by then,
-    // reading drag.current.x inside the updater throws (null.x) mid-render. (That was
-    // the "crash while moving around": a null-deref race, not the SVG size.)
+  const onMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const d = drag.current;
     if (!d) return;
-    const cx = e.clientX, cy = e.clientY;
-    setView((v) => ({ ...v, x: cx - d.x, y: cy - d.y }));
+    moveViewport({ ...view.current, x: e.clientX - d.x, y: e.clientY - d.y });
   };
-  const onUp = () => (drag.current = null);
+  const onUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    drag.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  };
   const onWheel = (e: React.WheelEvent) => {
     const svg = svgRef.current;
     if (!svg) return;
     const r = svg.getBoundingClientRect();
     const mx = e.clientX - r.left, my = e.clientY - r.top;
     const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
-    setView((v) => {
-      const k = Math.min(2.5, Math.max(0.2, v.k * factor));
-      const s = k / v.k;
-      return { k, x: mx - (mx - v.x) * s, y: my - (my - v.y) * s };
-    });
+    const v = view.current;
+    const k = Math.min(2.5, Math.max(0.2, v.k * factor));
+    const s = k / v.k;
+    moveViewport({ k, x: mx - (mx - v.x) * s, y: my - (my - v.y) * s });
   };
 
   // Build the SVG once per layout/selection - NOT per pan frame. Panning/zooming
@@ -306,8 +322,8 @@ export function LineageView({ seq, initialSnapshot, onClose, onPivot }: Props) {
           <div className="lgv-empty">{error ? "The graph could not be loaded." : "No credential links are available for this event."}</div>
         ) : (
           <div className="lgv-body">
-            <svg ref={svgRef} className="lgv-canvas" onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp} onWheel={onWheel}>
-              <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
+            <svg ref={svgRef} className="lgv-canvas" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onLostPointerCapture={() => { drag.current = null; }} onWheel={onWheel}>
+              <g ref={viewportRef} transform="translate(0,0) scale(1)">
                 {linkEls}
                 {nodeEls}
               </g>
@@ -369,7 +385,7 @@ export function LineageView({ seq, initialSnapshot, onClose, onPivot }: Props) {
           </div>
         )}
       </div>
-      {raw && <RawJsonModal title={raw.title} json={raw.json} onClose={() => setRaw(null)} />}
+      {raw && <LineageEventModal title={raw.title} json={raw.json} onClose={() => setRaw(null)} onPivot={(field, value, op) => { onPivot(field, value, op); onClose(); }} />}
     </div>,
     document.body
   );

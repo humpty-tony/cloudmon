@@ -5,6 +5,7 @@ import {useVirtualizer} from "@tanstack/react-virtual";
 import {backend} from "../api/backend";
 import type {CloudTrailEvent, EvidenceSnapshot, InvestigationOptions, InvestigationResult} from "../api/types";
 import {RawJsonModal} from "./RawJsonModal";
+import {ThemedSelect} from "./ThemedSelect";
 
 type Anchor = {seq:number;eventID:string;eventName:string};
 type Match = InvestigationResult["events"][number];
@@ -42,7 +43,11 @@ export function InvestigationView({event,onClose,initialSnapshot}:{event:CloudTr
     return ()=>{rawRequest.current++;previous?.focus()};
   },[]);
   useEffect(()=>{
-    const onKey=(e:KeyboardEvent)=>{if(e.key==="Escape"&&!raw){e.stopImmediatePropagation();onClose()}};
+    const onKey=(e:KeyboardEvent)=>{
+      // The first Escape dismisses an open select; the next closes this dialog.
+      if((e.target as HTMLElement)?.closest('[role="combobox"][aria-expanded="true"]'))return;
+      if(e.key==="Escape"&&!raw){e.stopImmediatePropagation();onClose()}
+    };
     window.addEventListener("keydown",onKey,true);return ()=>window.removeEventListener("keydown",onKey,true);
   },[onClose,raw]);
   useEffect(()=>{
@@ -103,8 +108,8 @@ export function InvestigationView({event,onClose,initialSnapshot}:{event:CloudTr
         <button ref={closeRef} onClick={onClose} aria-label="Close investigation">✕ Close</button>
       </header>
       <div className="investigation-controls">
-        <label>Window <select aria-label="Investigation window" value={minutes} onChange={e=>setMinutes(Number(e.target.value))}>{[1,5,15,60].map(n=><option key={n} value={n}>±{n} minute{n===1?"":"s"}</option>)}</select></label>
-        <label>Relationship <select aria-label="Investigation relationship" value={relation} onChange={e=>setRelation(e.target.value)}>{relationships.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+        <label>Window <ThemedSelect label="Investigation window" value={String(minutes)} onChange={value=>setMinutes(Number(value))} options={[1,5,15,60].map(n=>({value:String(n),label:`±${n} minute${n===1?"":"s"}`}))}/></label>
+        <label>Relationship <ThemedSelect label="Investigation relationship" value={relation} onChange={setRelation} options={relationships.map(([value,label])=>({value,label}))}/></label>
         <span>Scope: all recorded evidence in this window</span>
         <button onClick={()=>{snapshot.current=null;setReload(n=>n+1)}}>Refresh snapshot</button>
       </div>

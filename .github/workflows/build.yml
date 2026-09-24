@@ -134,12 +134,18 @@ jobs:
         run: |
           npx playwright install --with-deps chromium --only-shell
           npm run check:capture-ui
+      - name: UI interaction performance checks
+        if: runner.os == 'Linux'
+        working-directory: frontend
+        run: npm run check:ui-performance
       - name: Upload capture UI screenshots
         if: runner.os == 'Linux' && !cancelled()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: capture-ui
-          path: frontend/test-results/capture/*.png
+          path: |
+            frontend/test-results/capture/*.png
+            frontend/test-results/performance/*
           if-no-files-found: warn
           retention-days: 7
       - name: Install Wails

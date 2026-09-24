@@ -11,7 +11,8 @@
     "check:search": "node scripts/check-search.mjs",
     "check:inspector": "node scripts/check-inspector.mjs",
     "check:labels": "node scripts/check-aliases.mjs",
-    "check:saved-hunts": "node scripts/check-saved-hunts.mjs"
+    "check:saved-hunts": "node scripts/check-saved-hunts.mjs",
+    "check:ui-performance": "node scripts/check-ui-performance.cjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
