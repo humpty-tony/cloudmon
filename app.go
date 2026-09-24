@@ -377,11 +377,11 @@ func (a *App) SelectDumpFile() (string, error) {
 }
 
 // ExportEventsJSON opens a native save dialog and writes the supplied JSON
-// (the frontend serializes the currently-filtered events). Returns the path
+// for the loaded UI rows. ExportFiltered handles the complete search. Returns the path
 // written, or "" if the user cancelled.
 func (a *App) ExportEventsJSON(data string) (string, error) {
 	path, err := rt.SaveFileDialog(a.ctx, rt.SaveDialogOptions{
-		Title:           "Export current selection",
+		Title:           "Export loaded events",
 		DefaultFilename: "cloudtrail-selection.json",
 		Filters: []rt.FileFilter{
 			{DisplayName: "JSON (*.json)", Pattern: "*.json"},

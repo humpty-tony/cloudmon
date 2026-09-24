@@ -42,6 +42,7 @@ Nothing leaves the host. It is for the people who do this work without a Splunk 
 
 **Investigate**
 - Query language: field operators (`=`, `!=`, `~` regex, `:` contains, `*` `?` wildcards), boolean `and` / `or` / `not`, and parentheses.
+- Consistent search snapshots, stable paging during capture, and [complete filtered export](docs/query-snapshots.md) beyond the loaded-row limit.
 - Facet sidebar, a brushable time histogram, and a live stats bar (errors, principals, sources, regions, span).
 - Assumed-role lineage: trace an AssumeRole session back to the identity that started the chain, or open the full lineage graph.
 - Sigma testbench: paste a Sigma rule and see whether it parses and translates, the SQL it compiles to, and the events it matches.

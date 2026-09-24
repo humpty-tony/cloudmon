@@ -38,7 +38,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
    const recovering=location.search.includes('recovery');
    const state=window.captureTest={delayIdentity:false,delayTrail:false,failTrail:false,startCalls:0,resumeCalls:0,removeCalls:0,cleanupFails:false,exportFails:false,exported:null,raw,
      aggCalls:0,aggActive:0,aggMax:0,newerCalls:0,newerActive:0,newerMax:0,delayAgg:false,delayNewer:false,searchMode:false,failSearch:false,
-     searchCalls:[],searchActive:0,searchMax:0,delaySearch:false,cancelledQueries:0,exportedFilter:null,rawBySeq:{},rawCalls:0,copied:null,failRaw:false,failLineage:false,delayRawSeq:0,inspectorLoads:0,
+     searchCalls:[],searchActive:0,searchMax:0,delaySearch:false,delayExport:false,cancelledQueries:0,exportedFilter:null,rawBySeq:{},rawCalls:0,copied:null,failRaw:false,failLineage:false,delayRawSeq:0,inspectorLoads:0,
      rows:[{seq:1,eventID:"saved-1",eventName:"RunInstances",eventSource:"ec2.amazonaws.com",eventTime:"2026-09-24T00:00:00Z",awsRegion:"us-east-1",identityType:"IAMUser",userName:"analyst",readOnly:false,managementEvent:true}],
      recovery:{evidence:{events:recovering?1:0,observations:recovering?3:0,variantEvents:recovering?1:0,lossy:recovering?1:0},capture:recovering?{version:1,phase:'ready',config,infra}:null,captureError:'',active:false}};
    const handlers=new Map();
@@ -76,7 +76,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     },
     CancelQuery:async(id)=>{const job=searchJobs.get(id);if(job){state.cancelledQueries++;job.reject(Error('Query cancelled'))}},
     QuerySnapshotPage:async(filter,snap,before,limit)=>queryRows(filter).filter(row=>row.seq<=snap.maxSeq && (!before || row.seq<before)).slice(0,limit),
-    ExportFiltered:async(filter,snap)=>{state.exportedFilter={filter,snapshot:snap};return {path:'cloudtrail-matches.json',count:queryRows(filter).filter(row=>row.seq<=snap.maxSeq).length}},
+    ExportFiltered:async(filter,snap,id)=>{try{if(state.delayExport)await new Promise((resolve,reject)=>{searchJobs.set(id,{resolve,reject})});state.exportedFilter={filter,snapshot:snap};return {path:'cloudtrail-matches.json',count:queryRows(filter).filter(row=>row.seq<=snap.maxSeq).length}}finally{searchJobs.delete(id)}},
     QueryNewer:async(_filter,since)=>{state.newerCalls++;state.newerActive++;state.newerMax=Math.max(state.newerMax,state.newerActive);const rows=state.rows.filter(r=>r.seq>since);try{if(state.delayNewer)await new Promise(resolve=>{state.resolveNewer=resolve});return rows}finally{state.newerActive--}},
     GetEventRaw:async(seq)=>{state.rawCalls++;if(state.failRaw)throw Error('Storage unavailable');const value=state.rawBySeq[seq] || state.raw;if(state.delayRawSeq===seq)return new Promise(resolve=>{state.resolveRaw=()=>resolve(value)});return value},
     QueryLineage:async()=>{if(state.failLineage)throw Error('Lineage unavailable');return {applicable:true,sourceIdentity:'',complete:false,nodes:[]}},
@@ -334,6 +334,39 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.evaluate(()=>{window.captureTest.failRaw=false});
   await page.getByRole('button',{name:'Retry event',exact:true}).click();
   await fields.getByText('second-event',{exact:true}).waitFor();
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  // Superseded searches cancel at the bridge and do not build an engine backlog.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.evaluate(()=>{window.captureTest.emit(3);window.captureTest.searchMode=true});
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.locator('.row').getByText('LiveEvent3',{exact:true}).waitFor();
+  await page.evaluate(()=>{window.captureTest.delaySearch=true});
+  await query.fill('eventID="saved-1"');await query.press('Enter');
+  await page.clock.runFor(100);
+  assert.ok(await page.evaluate(()=>window.captureTest.pendingSearch),'slow search did not start');
+  await page.evaluate(()=>{window.captureTest.delaySearch=false});
+  await query.fill('eventID="live-2"');await query.press('Enter');
+  await page.locator('.row').getByText('LiveEvent2',{exact:true}).waitFor();
+  assert.equal(await page.locator('.row').getByText('RunInstances',{exact:true}).count(),0);
+  assert.deepEqual(await page.evaluate(()=>[window.captureTest.cancelledQueries,window.captureTest.searchMax]),[1,1]);
+  // Export all matches is independent of the first 2,000 loaded events.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.evaluate(()=>window.captureTest.emit(2505));
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.locator('.row').getByText('LiveEvent2505',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'File',exact:true}).click();
+  await page.getByRole('button',{name:'Export all matching events…',exact:true}).click();
+  await page.getByText('Exported 2,505 matching events to cloudtrail-matches.json',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.exportedFilter.snapshot.maxSeq),2505);
+  await page.getByRole('button',{name:'File',exact:true}).click();
+  await page.screenshot({path:path.join(output,'search-valid.png'),fullPage:true});
+  await page.getByRole('button',{name:'File',exact:true}).click();
+  await page.evaluate(()=>{window.captureTest.delayExport=true;window.captureTest.exportedFilter=null});
+  await page.getByRole('button',{name:'File',exact:true}).click();
+  await page.getByRole('button',{name:'Export all matching events…',exact:true}).click();
+  await page.getByRole('button',{name:'Cancel export',exact:true}).click();
+  await page.getByText('Export cancelled; no incomplete file was saved.',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.exportedFilter),null);
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture','invalid search stays unapplied','failed search shows stale results and retries','clear resets unapplied draft'],errors}));

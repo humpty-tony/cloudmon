@@ -44,7 +44,7 @@ func (s *Store) readSnapshot(parent context.Context, fn func(context.Context, *s
 func snapshotOn(ctx context.Context, tx *sql.Tx) (Snapshot, error) {
 	var snapshot Snapshot
 	err := tx.QueryRowContext(ctx, `SELECT coalesce((SELECT value FROM app_state WHERE key='datasetImportedAt'),''),coalesce(max(seq),0) FROM events`).Scan(&snapshot.Generation, &snapshot.MaxSeq)
-	snapshot.CapturedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	snapshot.CapturedAt = time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	return snapshot, err
 }
 func validateSnapshot(ctx context.Context, tx *sql.Tx, snapshot Snapshot) error {
@@ -165,7 +165,10 @@ func (s *Store) ExportSnapshot(ctx context.Context, f Filter, snapshot Snapshot,
 		if _, err := io.WriteString(writer, "\n]}\n"); err != nil {
 			return err
 		}
-		return writer.Flush()
+		if err := writer.Flush(); err != nil {
+			return err
+		}
+		return ctx.Err()
 	})
 	return count, err
 }
