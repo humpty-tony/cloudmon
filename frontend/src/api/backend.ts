@@ -324,7 +324,7 @@ class MockBackend implements Backend {
     };
   }
   async checkTrail(): Promise<TrailStatus> {
-    return { hasLoggingTrail: true, trailCount: 1, globalCovered: true, summary: "1 trail logging management events (e.g. org-trail) - good." };
+    return { hasLoggingTrail: true, trailCount: 1, globalCovered: true, readManagement: true, writeManagement: true, coverageKnown: true, coverageComplete: true, summary: "Demo: management read/write selectors enabled. EventBridge delivery is regional and best-effort." };
   }
   async checkQueue() {}
   async runLoginCommand() {}

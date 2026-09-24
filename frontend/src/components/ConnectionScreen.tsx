@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AwsIdentity, AwsProfile, ConnectionConfig, ConnectionMode, RequiredPermission, TrailStatus } from "../api/types";
 import { backend } from "../api/backend";
 import { parseDump } from "../api/dumpParser";
@@ -27,8 +27,8 @@ const MODES: ModeDef[] = [
     mode: "existing-sqs",
     title: "Connect to existing SQS",
     blurb:
-      "Point CloudMon at an SQS queue that already receives your CloudTrail events. It only polls the queue - it provisions nothing and never deletes anything.",
-    note: "CloudMon reads from the queue; the queue and its feeding rule stay yours.",
+      "Point CloudMon at an SQS queue that receives CloudTrail events. Messages are deleted only after local storage succeeds. Use a dedicated queue; other consumers compete for the same messages.",
+    note: "Supported payloads: CloudTrail records, EventBridge detail, and SNS wrappers. S3 object notifications need an importer.",
   },
   {
     mode: "import-dump",
@@ -44,6 +44,7 @@ const MODES: ModeDef[] = [
 const DEFAULT_PATTERN = `{
   "detail-type": ["AWS API Call via CloudTrail"],
   "detail": {
+    "eventCategory": ["Management"],
     "eventSource": ["s3.amazonaws.com", "iam.amazonaws.com"]
   }
 }`;
@@ -90,6 +91,9 @@ export function ConnectionScreen({ onConnect }: Props) {
   const [dumpInfo, setDumpInfo] = useState<{ count: number } | null>(null);
   const [connectError, setConnectError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const verificationGeneration = useRef(0);
+
+  useEffect(() => () => { verificationGeneration.current++; }, []);
 
   useEffect(() => {
     let alive = true;
@@ -124,6 +128,8 @@ export function ConnectionScreen({ onConnect }: Props) {
 
   // Any change to profile/region invalidates a prior identity confirmation.
   const pickProfile = (name: string) => {
+    verificationGeneration.current++;
+    setVerifying(false);
     setProfile(name);
     setIdentity(null);
     setVerifyErr(null);
@@ -132,6 +138,8 @@ export function ConnectionScreen({ onConnect }: Props) {
     if (p?.region) setRegion(p.region);
   };
   const pickRegion = (r: string) => {
+    verificationGeneration.current++;
+    setVerifying(false);
     setRegion(r);
     setIdentity(null);
     setVerifyErr(null);
@@ -139,33 +147,40 @@ export function ConnectionScreen({ onConnect }: Props) {
   };
 
   const verify = async () => {
+    const generation = ++verificationGeneration.current;
     setVerifying(true);
     setVerifyErr(null);
     setIdentity(null);
     setTrailStatus(null);
     try {
       const id = await backend.verifyIdentity(profile, region);
+      if (generation !== verificationGeneration.current) return;
       setIdentity(id);
       // Pre-flight: is a CloudTrail trail actually feeding this region? Without one the
       // pipeline would be created but receive nothing. Non-blocking, best-effort.
-      backend.checkTrail(profile, region).then(setTrailStatus).catch(() => setTrailStatus(null));
+      backend.checkTrail(profile, region).then((status) => {
+        if (generation === verificationGeneration.current) setTrailStatus(status);
+      }).catch(() => {
+        if (generation === verificationGeneration.current) setTrailStatus({ hasLoggingTrail: false, trailCount: 0, globalCovered: false, coverageKnown: false, summary: "Coverage unknown: trail status or selectors could not be read. Check CloudTrail read permissions." });
+      });
     } catch (e) {
-      setVerifyErr((e as Error)?.message || String(e));
+      if (generation === verificationGeneration.current) setVerifyErr((e as Error)?.message || String(e));
     } finally {
-      setVerifying(false);
+      if (generation === verificationGeneration.current) setVerifying(false);
     }
   };
 
   // Run the login command the credential helper suggested (opens the browser), then
   // re-verify once the session is refreshed.
   const runLogin = async (command: string) => {
+    const generation = verificationGeneration.current;
     setLoginBusy(true);
     setVerifyErr(null);
     try {
       await backend.runLoginCommand(command);
-      await verify();
+      if (generation === verificationGeneration.current) await verify();
     } catch (e) {
-      setVerifyErr((e as Error)?.message || String(e));
+      if (generation === verificationGeneration.current) setVerifyErr((e as Error)?.message || String(e));
     } finally {
       setLoginBusy(false);
     }
@@ -428,7 +443,7 @@ export function ConnectionScreen({ onConnect }: Props) {
         {selected === "create-infra" &&
           trailStatus &&
           (() => {
-            const ok = trailStatus.hasLoggingTrail && trailStatus.globalCovered;
+            const ok = trailStatus.hasLoggingTrail && trailStatus.coverageComplete;
             return (
               <div
                 style={{
