@@ -28,7 +28,7 @@ func sigmaStore(t *testing.T) *Store {
 	if err := os.WriteFile(f, []byte(rec), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := New(bin(t), filepath.Join(dir, "app.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "app.duckdb"))
 	if _, err := s.Ingest(f); err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
@@ -182,7 +182,7 @@ func advStore(t *testing.T) *Store {
 	if err := os.WriteFile(f, []byte(rec), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := New(bin(t), filepath.Join(dir, "app.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "app.duckdb"))
 	if _, err := s.Ingest(f); err != nil {
 		t.Fatalf("ingest: %v", err)
 	}

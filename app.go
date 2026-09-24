@@ -14,7 +14,6 @@ import (
 	"cloudmon/internal/awsflow"
 	"cloudmon/internal/capture"
 	"cloudmon/internal/config"
-	"cloudmon/internal/duckdbbin"
 	"cloudmon/internal/ingest"
 	"cloudmon/internal/model"
 	"cloudmon/internal/store"
@@ -33,9 +32,9 @@ type App struct {
 	cfg    config.ConnectionConfig
 
 	db       *store.Store // DuckDB-backed engine for large dumps
-	dbErr    error        // set if the embedded duckdb could not be extracted
+	dbErr    error        // set if the evidence database could not be opened
 	dataLock *os.File     // OS lock retained for this process lifetime
-	dbOnce   sync.Once    // guards one-time async extraction of the engine (see ensureDB)
+	dbOnce   sync.Once    // guards one-time async initialization of the engine
 
 	logMu sync.Mutex // guards the on-disk troubleshooting log
 	logW  *os.File   // cloudmon.log next to the exe (a blank WebView2 leaves no console)
@@ -57,22 +56,14 @@ func NewApp() *App { return &App{} }
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.openLog()
-	// Warm the query engine OFF the startup critical path (extracting the ~35MB DuckDB CLI
-	// on first run takes a beat) so the window paints immediately. The first query blocks
-	// in ensureDB only if it beats the warm-up.
+	// Open the saved database off the startup path so the window paints first.
 	go a.ensureDB()
 }
 
-// ensureDB extracts the embedded DuckDB engine and opens the saved evidence database exactly
-// once, then returns it (nil if extraction failed - see dbErr). sync.Once makes the lazy
-// init race-free: startup kicks it off in a goroutine and every query routes through here.
+// ensureDB opens the persistent embedded engine exactly once. Startup warms it
+// asynchronously; the first query waits for initialization if it arrives sooner.
 func (a *App) ensureDB() *store.Store {
 	a.dbOnce.Do(func() {
-		bin, err := duckdbbin.Path()
-		if err != nil {
-			a.dbErr = err
-			return
-		}
 		root, err := os.UserConfigDir()
 		if err != nil {
 			a.dbErr = err
@@ -92,8 +83,9 @@ func (a *App) ensureDB() *store.Store {
 			a.dbErr = err
 			return
 		}
-		db := store.New(bin, filepath.Join(dir, "events.duckdb"))
+		db := store.New(filepath.Join(dir, "events.duckdb"))
 		if err = db.Open(); err != nil {
+			db.Close()
 			lock.Close()
 			a.dbErr = err
 			return
@@ -473,7 +465,7 @@ func (a *App) onLiveBatch(ctx context.Context, evs []model.CloudTrailEvent) erro
 	a.capMu.Lock()
 	source := a.capInfra.QueueURL
 	a.capMu.Unlock()
-	total, err := a.db.AppendFrom(evs, source)
+	total, err := a.db.AppendFromContext(ctx, evs, source)
 	if err != nil {
 		return err
 	}
@@ -528,7 +520,14 @@ func (a *App) RunLoginCommand(command string) error {
 // onShutdown joins the poller. Evidence and the capture journal remain available
 // after restart; infrastructure is removed only by an explicit cleanup action.
 func (a *App) onShutdown(_ context.Context) {
-	a.StopCapture()
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
+	a.stopCapture()
+	if db := a.ensureDB(); db != nil {
+		if err := db.Close(); err != nil {
+			a.Log("error", "close evidence: "+err.Error())
+		}
+	}
 	a.Log("info", "app closed; saved evidence and capture resources retained")
 }
 

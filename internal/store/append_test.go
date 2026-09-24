@@ -78,7 +78,7 @@ func TestNewer(t *testing.T) {
 // import).
 func TestAppendEventsCreatesTable(t *testing.T) {
 	dir := t.TempDir()
-	s := New(bin(t), filepath.Join(dir, "live.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "live.duckdb"))
 	ev := liveEvent(t, `{"eventID":"a","eventName":"ConsoleLogin","eventSource":"signin.amazonaws.com","eventTime":"2025-02-02T00:00:00Z"}`)
 	total, err := s.AppendEvents([]model.CloudTrailEvent{ev})
 	if err != nil {
@@ -101,7 +101,7 @@ func TestAppendEventsCreatesTable(t *testing.T) {
 // duplicate rows.
 func TestAppendEventsDedupesByEventID(t *testing.T) {
 	dir := t.TempDir()
-	s := New(bin(t), filepath.Join(dir, "dedup.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "dedup.duckdb"))
 	e1 := liveEvent(t, `{"eventID":"dup1","eventName":"AssumeRole","eventSource":"sts.amazonaws.com","eventTime":"2025-03-01T00:00:00Z"}`)
 	if _, err := s.AppendEvents([]model.CloudTrailEvent{e1}); err != nil {
 		t.Fatalf("AppendEvents first: %v", err)

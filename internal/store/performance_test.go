@@ -18,7 +18,7 @@ func TestStorePerformance(t *testing.T) {
 	if os.Getenv("CLOUDMON_PERF") != "1" {
 		t.Skip("set CLOUDMON_PERF=1 to measure database latency")
 	}
-	s := New(bin(t), filepath.Join(t.TempDir(), "performance.duckdb"))
+	s := openTestStore(t, filepath.Join(t.TempDir(), "performance.duckdb"))
 	const initial = 10000
 	const samples = 25
 	record := func(i int) string {

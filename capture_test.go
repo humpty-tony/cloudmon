@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,11 +14,12 @@ import (
 
 func recoveryApp(t *testing.T, path string) *App {
 	t.Helper()
-	bin := os.Getenv("DUCKDB_BIN")
-	if bin == "" {
-		t.Skip("DUCKDB_BIN required")
-	}
-	db := store.New(bin, path)
+	db := store.New(path)
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Error(err)
+		}
+	})
 	if err := db.Open(); err != nil {
 		t.Fatal(err)
 	}
