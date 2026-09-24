@@ -428,7 +428,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   const query=page.getByRole('textbox',{name:'Search query',exact:true});
   await query.fill('eventID="saved-1"');
   await query.press('Enter');
-  await page.getByText('LiveEvent2',{exact:true}).waitFor({state:'hidden'});
+  await page.locator('.row').getByText('LiveEvent2',{exact:true}).waitFor({state:'hidden'});
   await page.getByText('RunInstances',{exact:true}).first().waitFor();
   assert.equal(await page.locator('.row--selected').count(),0,'A successful search left its excluded event selected');
   await workbenchInspector.getByText('Select an event',{exact:true}).waitFor();
