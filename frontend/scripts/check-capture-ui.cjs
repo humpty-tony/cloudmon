@@ -114,6 +114,26 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
       return {snapshot:snapshot(),scanned:900,total:options.mode==='sequence'?1:600,limit:500,invalidTimes:2,missingPrincipal:3,indicators:options.indicators.map(indicator=>({...indicator,matches:600})),matches:options.mode==='indicators'?Array.from({length:500},(_,i)=>({event:{...first,seq:first.seq+i,eventID:i===0?first.eventID:`indicator-${i}`,identityArn:'arn:aws:sts::111122223333:assumed-role/Investigator/session'},indicators:[0,1]})):[],pairs:options.mode==='sequence'?[{first,second,deltaMs:60000,tiedFirst:2}]:[],notes:['Counts can overlap across indicators.','Pairs show temporal proximity for recorded identifiers, not causation.']};
      }finally{searchJobs.delete(id)}
     },
+    SigmaRunRequest:async(yaml,id)=>{
+     state.sigmaCalls=(state.sigmaCalls||[]).concat([yaml]);
+     try{
+      if(state.delaySigma)await new Promise((resolve,reject)=>searchJobs.set(id,{resolve,reject}));
+      if(state.failSigma)throw Error('Sigma storage unavailable');
+      return {parsed:true,supported:true,title:'Root account activity',diagnostics:[],sql:'SELECT events within snapshot',matches:1,scanned:state.rows.length,rows:state.rows.slice(0,1),snapshot:snapshot(),explanations:{[state.rows[0].seq]:[{name:'selection',matched:true},{name:'filter_service',matched:false}]}};
+     }finally{searchJobs.delete(id)}
+    },
+    SigmaSuite:async(rules,id)=>{
+     state.sigmaSuiteRules=rules;
+     try{
+      if(state.delaySuite)await new Promise((resolve,reject)=>searchJobs.set(id,{resolve,reject}));
+      if(state.failSuite)throw Error('Suite storage unavailable');
+      const snap=snapshot();return {snapshot:snap,results:rules.map((rule,i)=>({name:rule.name,result:{parsed:true,supported:i!==1,title:rule.yaml.match(/^title: (.*)/m)[1],diagnostics:i===1?[{severity:'error',message:'This fixture rule uses an unsupported modifier'}]:[],sql:'SELECT snapshot',matches:i===1?0:1,scanned:state.rows.length,rows:i===1?[]:state.rows.slice(0,1),snapshot:snap,explanations:{[state.rows[0].seq]:[{name:'selection',matched:true}]}}}))};
+     }finally{searchJobs.delete(id)}
+    },
+    QueryLineageSnapshot:async(seq,snap)=>{state.lineageSnapshot=snap;return window.go.main.App.QueryLineage(seq)},
+    QueryLineageGraphSnapshot:async(seq,snap)=>{state.graphSnapshot=snap;return window.go.main.App.QueryLineageGraph(seq)},
+    GetEventEvidenceSnapshot:async(seq,offset,snap)=>{state.evidenceSnapshot=snap;return window.go.main.App.GetEventEvidence(seq,offset)},
+    GetObservationSnapshot:async(id,snap)=>{state.observationSnapshot=snap;return window.go.main.App.GetObservation(id)},
     RawBySeqs:async()=>{if(state.exportFails)throw Error('Storage unavailable');return [raw]},
     ExportEventsJSON:async(data)=>{state.exported=data;return 'selection.json'},
     GetEventEvidence:async()=>({total:3,variants:3,observations:[1,2,3].map(id=>({id,source:id===3?'/evidence/history.csv':'/evidence/CloudTrail/2026/09/24/events.json.gz',ordinal:id,format:id===3?'event-history-csv':'cloudtrail-json',lossy:id===3,sha256:String(id).repeat(64),observedAt:'2026-09-24T00:01:00Z',displayed:id===1}))}),
@@ -531,6 +551,63 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.ok(await comparison.locator('.comparison-change').count()<30,'comparison rendered every change');
   await comparison.getByRole('button',{name:'Close comparison',exact:true}).click();
   await page.getByRole('button',{name:'Clear pins',exact:true}).click();
+  // Sigma does not reuse validity after edits; requests cancel and suites share a snapshot.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.getByRole('button',{name:'⬡ Sigma',exact:true}).click();
+  await page.getByRole('button',{name:'▶ Run',exact:true}).click();
+  await page.locator('.sg-pill.valid').getByText('✓ Ran · 1 matches',{exact:true}).waitFor();
+  await page.locator('.sigma .row').getByText('RunInstances',{exact:true}).click();
+  await page.getByRole('region',{name:'Selection explanations',exact:true}).getByText('− filter_service: did not match',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'{ } Raw JSON',exact:true}).click();
+  await page.getByRole('dialog',{name:'Raw JSON',exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.rawSnapshot.generation),'fixture');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Sources & hashes',exact:true}).click();
+  await page.getByRole('button',{name:'View source #1',exact:true}).click();
+  await page.getByRole('region',{name:'Original source record'}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.evidenceSnapshot.generation),'fixture');
+  assert.equal(await page.evaluate(()=>window.captureTest.observationSnapshot.generation),'fixture');
+  await page.getByRole('button',{name:'Close source evidence',exact:true}).click();
+  await page.getByRole('button',{name:'Investigate',exact:true}).click();
+  await page.getByRole('dialog',{name:'Event investigation',exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.investigationCalls.at(-1).snapshot.generation),'fixture');
+  await page.getByRole('button',{name:'Close investigation',exact:true}).click();
+  await page.setViewportSize({width:1440,height:1000});
+  await page.screenshot({path:path.join(output,'sigma-rule.png'),fullPage:true});
+  await page.setViewportSize({width:960,height:720});
+  assert.ok(await page.locator('.sigma-workbench').evaluate(el=>el.scrollWidth<=el.clientWidth),'Sigma spills at minimum width');
+  const editor=page.locator('.sg-editor .cm-content');
+  await editor.click();await page.keyboard.press('Control+End');await page.keyboard.press('Enter');await page.keyboard.type('# changed');
+  await page.locator('.sg-pill.idle').getByText('Not run',{exact:true}).waitFor();
+  assert.equal(await page.locator('.sigma .row').count(),0,'editing left stale matches');
+  await page.evaluate(()=>window.captureTest.delaySigma=true);
+  await editor.press('Control+Enter');
+  await page.getByRole('button',{name:'Cancel rule',exact:true}).waitFor();
+  await editor.press('Control+Enter');
+  assert.equal(await page.evaluate(()=>window.captureTest.sigmaCalls.length),2,'keyboard queued another rule run');
+  await page.getByRole('button',{name:'Cancel rule',exact:true}).click();
+  await page.evaluate(()=>{window.captureTest.delaySigma=false;window.captureTest.failSigma=true});
+  await page.getByRole('button',{name:'▶ Run',exact:true}).click();
+  await page.getByRole('alert').getByText('Error: Sigma storage unavailable',{exact:true}).waitFor();
+  await page.evaluate(()=>window.captureTest.failSigma=false);
+  await page.getByRole('button',{name:'Rule suite',exact:true}).click();
+  await page.getByRole('button',{name:'Run selected rules',exact:true}).click();
+  await page.getByText('5 / 6 rules ran',{exact:true}).waitFor();
+  assert.equal((await page.evaluate(()=>window.captureTest.sigmaSuiteRules)).length,6);
+  await page.getByText('This fixture rule uses an unsupported modifier',{exact:true}).waitFor();
+  await page.screenshot({path:path.join(output,'sigma-suite.png'),fullPage:true});
+  assert.ok(await page.locator('.sigma-suite').evaluate(el=>el.scrollWidth<=el.clientWidth),'suite spills at minimum width');
+  await page.getByRole('button',{name:'Inspect results',exact:true}).first().click();
+  await page.locator('.sg-pill.valid').waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.sigmaCalls.length),3,'opening suite results reran the rule');
+  await page.getByRole('button',{name:'Rule suite',exact:true}).click();
+  await page.evaluate(()=>window.captureTest.delaySuite=true);
+  await page.getByRole('button',{name:'Run selected rules',exact:true}).click();
+  await page.getByRole('button',{name:'Cancel suite',exact:true}).click();
+  await page.evaluate(()=>{window.captureTest.delaySuite=false;window.captureTest.failSuite=true});
+  await page.getByRole('button',{name:'Run selected rules',exact:true}).click();
+  await page.getByRole('alert').getByText('Error: Suite storage unavailable',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
   // Manual analysis, snapshot drilldown, stale settings, raw evidence and cancellation.
   await page.getByRole('button',{name:'Analysis',exact:true}).click();

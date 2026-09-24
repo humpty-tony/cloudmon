@@ -679,3 +679,22 @@ func (a *App) Hunt(options store.HuntOptions, requestID string) (store.HuntResul
 	defer done()
 	return a.db.Hunt(ctx, options)
 }
+
+func (a *App) QueryLineageGraphSnapshot(seq int64, snapshot store.Snapshot) (store.LineageTree, error) {
+	if a.ensureDB() == nil {
+		return store.LineageTree{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.LineageGraph(seq, snapshot)
+}
+func (a *App) GetEventEvidenceSnapshot(seq int64, offset int, snapshot store.Snapshot) (store.EvidencePage, error) {
+	if a.ensureDB() == nil {
+		return store.EvidencePage{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.EvidenceSnapshot(seq, offset, snapshot)
+}
+func (a *App) GetObservationSnapshot(id int64, snapshot store.Snapshot) (string, error) {
+	if a.ensureDB() == nil {
+		return "", fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.ObservationSnapshot(id, snapshot)
+}

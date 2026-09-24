@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { backend } from "../api/backend";
-import type { EvidencePage, SourceEvidence } from "../api/types";
+import type { EvidencePage, EvidenceSnapshot, SourceEvidence } from "../api/types";
 import { SourceText } from "./SourceText";
 
-export function EvidenceModal({ seq, onClose }: { seq: number; onClose: () => void }) {
+export function EvidenceModal({ seq, snapshot, onClose }: { seq: number; snapshot?:EvidenceSnapshot; onClose: () => void }) {
   const [page, setPage] = useState<EvidencePage | null>(null);
   const [offset, setOffset] = useState(0);
   const [error, setError] = useState("");
@@ -17,9 +17,9 @@ export function EvidenceModal({ seq, onClose }: { seq: number; onClose: () => vo
   useEffect(() => {
     let alive = true;
     setError(""); setPage(null); setSource(null); setLoadingSource(false); request.current++;
-    backend.getEventEvidence(seq, offset).then(result=>{if(alive)setPage(result)}).catch(e=>{if(alive)setError(String(e))});
+    backend.getEventEvidence(seq, offset,snapshot).then(result=>{if(alive)setPage(result)}).catch(e=>{if(alive)setError(String(e))});
     return ()=>{alive=false;request.current++};
-  }, [seq, offset, retry]);
+  }, [seq, offset, retry,snapshot]);
   useEffect(()=>{
     const onKey=(event: KeyboardEvent)=>{if(event.key === "Escape"){event.stopImmediatePropagation();onClose()}};
     window.addEventListener("keydown",onKey,true);
@@ -27,7 +27,7 @@ export function EvidenceModal({ seq, onClose }: { seq: number; onClose: () => vo
   },[onClose]);
   const view = async(meta: SourceEvidence)=>{
     const token=++request.current;setLoadingSource(true);setSource(null);setError("");
-    try {const text=await backend.getObservation(meta.id);if(token===request.current)setSource({meta,text})}
+    try {const text=await backend.getObservation(meta.id,snapshot);if(token===request.current)setSource({meta,text})}
     catch(e){if(token===request.current)setError(String(e))}
     finally{if(token===request.current)setLoadingSource(false)}
   };

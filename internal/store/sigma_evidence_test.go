@@ -155,4 +155,39 @@ detection:
 	if _, err = s.SigmaRunContext(cancelled, source, 500); err == nil {
 		t.Fatal("cancelled single rule ran")
 	}
+	page, err := s.EvidenceSnapshot(r.Rows[0].Seq, 0, snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.ObservationSnapshot(page.Observations[0].ID, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.IngestReader(strings.NewReader(`{"eventID":"replacement","eventName":"Other"}`), "replacement"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.LineageRaw(r.Rows[0].Seq, snapshot); err == nil {
+		t.Fatal("raw opened replacement dataset")
+	}
+	if _, err = s.Lineage(r.Rows[0].Seq, snapshot); err == nil {
+		t.Fatal("lineage opened replacement dataset")
+	}
+	if _, err = s.LineageGraph(r.Rows[0].Seq, snapshot); err == nil {
+		t.Fatal("graph opened replacement dataset")
+	}
+	if _, err = s.EvidenceSnapshot(r.Rows[0].Seq, 0, snapshot); err == nil {
+		t.Fatal("sources opened replacement dataset")
+	}
+	if _, err = s.ObservationSnapshot(page.Observations[0].ID, snapshot); err == nil {
+		t.Fatal("observation ID opened replacement dataset")
+	}
+}
+
+func TestSigmaNumericLimitsFailTheRun(t *testing.T) {
+	event := contextEvent("oversized", 0)
+	event["requestParameters"] = evidenceObject{"value": strings.Repeat("9", 4097)}
+	s := evidenceStore(t, event)
+	r, err := s.SigmaRun(sigmaSelection("requestParameters.value|gt: 1"), 500)
+	if err == nil || !strings.Contains(err.Error(), "4096") || r.Supported {
+		t.Fatalf("oversized numeric evidence silently evaluated: %+v %v", r, err)
+	}
 }
