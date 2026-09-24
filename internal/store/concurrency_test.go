@@ -108,6 +108,39 @@ func TestCancelledTransactionRollsBackAndNextWriteWorks(t *testing.T) {
 	}
 }
 
+func TestCloseCancelsActiveQueriesAndJoinsThem(t *testing.T) {
+	s := newStore(t)
+	started := make(chan struct{})
+	queryDone := make(chan error, 1)
+	go func() {
+		queryDone <- s.operation(context.Background(), func(ctx context.Context) error {
+			conn, err := s.db.Conn(ctx)
+			if err != nil {
+				close(started)
+				return err
+			}
+			defer conn.Close()
+			close(started)
+			var sum string
+			return conn.QueryRowContext(ctx, "SELECT sum(i)::VARCHAR FROM range(1000000000000) AS t(i)").Scan(&sum)
+		})
+	}()
+	<-started
+	closed := make(chan error, 1)
+	go func() { closed <- s.Close() }()
+	select {
+	case err := <-closed:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("close did not interrupt active query")
+	}
+	if err := <-queryDone; err == nil {
+		t.Fatal("cancelled query reported success")
+	}
+}
+
 // A successful sink call must survive exit before normal shutdown/checkpoint.
 // The subprocess deliberately skips Close; reopening replays committed WAL.
 func TestCommittedEvidenceSurvivesProcessExit(t *testing.T) {

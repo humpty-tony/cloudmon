@@ -384,12 +384,14 @@ export default function App() {
   // the facet/histogram/stats panel holds still (no stray refresh from a final
   // drain) and catches up all at once on resume via repin → refreshTick.
   useEffect(() => {
-    if (!connected || config?.mode === "import-dump") return;
+    // Saved evidence is initially opened in import mode, but its retained
+    // capture can resume later. The live state controls refresh eligibility.
+    if (!connected) return;
     const h = window.setInterval(() => {
       if (followRef.current && capturingRef.current) void refreshAggregates();
     }, AGG_REFRESH_MS);
     return () => window.clearInterval(h);
-  }, [connected, config, refreshAggregates]);
+  }, [connected, refreshAggregates]);
 
   // Clear any pending append timer on unmount so it can't fire after teardown.
   useEffect(

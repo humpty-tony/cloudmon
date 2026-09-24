@@ -368,7 +368,9 @@ func (s *Store) Aggregates(f Filter) (Aggregates, error) {
 	err := s.operation(context.Background(), func(ctx context.Context) error {
 		// All panels in this response describe one committed state even if a
 		// capture batch lands between the stats, facets, and histogram queries.
-		tx, err := s.db.BeginTx(ctx, nil)
+		// Statement contexts cancel work; the deferred rollback must finish
+		// synchronously before operation releases its database lifetime lock.
+		tx, err := s.db.BeginTx(context.WithoutCancel(ctx), nil)
 		if err != nil {
 			return err
 		}

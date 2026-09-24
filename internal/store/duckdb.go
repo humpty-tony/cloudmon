@@ -79,7 +79,6 @@ func (s *Store) engine() error {
 		s.writer = sql.OpenDB(shared)
 		s.writer.SetMaxOpenConns(1)
 		s.writer.SetMaxIdleConns(1)
-
 	})
 	return s.initErr
 }
@@ -133,12 +132,18 @@ func (s *Store) write(parent context.Context, fn func(context.Context, *sql.Tx) 
 			return ctx.Err()
 		}
 		defer func() { <-s.writeSlot }()
-		tx, err := s.writer.BeginTx(ctx, nil)
+		// Cancel individual SQL statements, then roll back synchronously here.
+		// database/sql otherwise rolls back in a background goroutine, which can
+		// outlive operation() and race the native connector's Close on shutdown.
+		tx, err := s.writer.BeginTx(context.WithoutCancel(ctx), nil)
 		if err != nil {
 			return err
 		}
 		defer tx.Rollback()
 		err = fn(ctx, tx)
+		if err == nil {
+			err = ctx.Err()
+		}
 		if err == nil {
 			err = tx.Commit()
 		}

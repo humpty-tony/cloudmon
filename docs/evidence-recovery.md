@@ -42,4 +42,4 @@ Focused tests exercise record-byte preservation, long NDJSON streams, lossy CSV 
 
 CI builds the frontend before application tests (the desktop embeds those assets), runs real DuckDB tests on Linux, Windows, and macOS, then builds all three desktop targets and verifies both macOS executable architectures. The browser check covers the saved-session screen, explicit resume, retryable cleanup, source inspection, exact-number export, and export failure. It also saves screenshots for visual review.
 
-Embedded-engine performance, responsive inspectors, query snapshots, and expanded correlation remain separate PR groups. Investigation workspaces and case management are excluded.
+The persistent engine and ingestion changes are documented in [database performance](database-performance.md). Responsive inspectors, query snapshots across UI requests, and expanded correlation remain separate PR groups. Investigation workspaces and case management are excluded.
