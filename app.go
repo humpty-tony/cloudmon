@@ -16,6 +16,7 @@ import (
 	"cloudmon/internal/config"
 	"cloudmon/internal/ingest"
 	"cloudmon/internal/model"
+	"cloudmon/internal/queryjob"
 	"cloudmon/internal/store"
 
 	"github.com/wailsapp/wails/v2/pkg/menu"
@@ -35,6 +36,7 @@ type App struct {
 	dbErr    error        // set if the evidence database could not be opened
 	dataLock *os.File     // OS lock retained for this process lifetime
 	dbOnce   sync.Once    // guards one-time async initialization of the engine
+	queries  queryjob.Registry
 
 	logMu sync.Mutex // guards the on-disk troubleshooting log
 	logW  *os.File   // cloudmon.log next to the exe (a blank WebView2 leaves no console)
@@ -193,6 +195,64 @@ func (a *App) QueryAggregates(f store.Filter) (store.Aggregates, error) {
 	return a.db.Aggregates(f)
 }
 
+func (a *App) QuerySearch(f store.Filter, requestID string, limit int) (store.SearchResult, error) {
+	if a.ensureDB() == nil {
+		return store.SearchResult{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.SearchResult{}, err
+	}
+	defer done()
+	return a.db.Search(ctx, f, limit)
+}
+
+func (a *App) QueryAggregatesRequest(f store.Filter, requestID string) (store.Aggregates, error) {
+	if a.ensureDB() == nil {
+		return store.Aggregates{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.Aggregates{}, err
+	}
+	defer done()
+	return a.db.AggregatesContext(ctx, f)
+}
+
+func (a *App) CancelQuery(requestID string) { a.queries.Cancel(requestID) }
+
+func (a *App) QuerySnapshotPage(f store.Filter, snapshot store.Snapshot, before int64, limit int) ([]store.Row, error) {
+	if a.ensureDB() == nil {
+		return nil, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.PageSnapshot(a.ctx, f, snapshot, before, limit)
+}
+
+type FilteredExport struct {
+	Path  string `json:"path"`
+	Count int    `json:"count"`
+}
+
+func (a *App) ExportFiltered(f store.Filter, snapshot store.Snapshot, requestID string) (FilteredExport, error) {
+	if a.ensureDB() == nil {
+		return FilteredExport{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return FilteredExport{}, err
+	}
+	defer done()
+	path, err := rt.SaveFileDialog(a.ctx, rt.SaveDialogOptions{Title: "Export all matching events", DefaultFilename: "cloudtrail-matches.json", Filters: []rt.FileFilter{{DisplayName: "JSON (*.json)", Pattern: "*.json"}}})
+	if err != nil || path == "" {
+		return FilteredExport{}, err
+	}
+	count, err := a.db.ExportFile(ctx, f, snapshot, path)
+	if err != nil {
+		return FilteredExport{}, fmt.Errorf("export was not saved: %w", err)
+	}
+	return FilteredExport{Path: path, Count: count}, nil
+}
+
 func (a *App) GetEventRaw(seq int64) (string, error) {
 	if a.ensureDB() == nil {
 		return "", fmt.Errorf("query engine unavailable: %v", a.dbErr)
@@ -317,11 +377,11 @@ func (a *App) SelectDumpFile() (string, error) {
 }
 
 // ExportEventsJSON opens a native save dialog and writes the supplied JSON
-// (the frontend serializes the currently-filtered events). Returns the path
+// for the loaded UI rows. ExportFiltered handles the complete search. Returns the path
 // written, or "" if the user cancelled.
 func (a *App) ExportEventsJSON(data string) (string, error) {
 	path, err := rt.SaveFileDialog(a.ctx, rt.SaveDialogOptions{
-		Title:           "Export current selection",
+		Title:           "Export loaded events",
 		DefaultFilename: "cloudtrail-selection.json",
 		Filters: []rt.FileFilter{
 			{DisplayName: "JSON (*.json)", Pattern: "*.json"},

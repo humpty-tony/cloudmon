@@ -197,6 +197,7 @@ kbd { font: var(--fs-cap) var(--mono); border: 1px solid var(--kbd-line); border
 .search-notice { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 12px; font-size: 12px; border-bottom: 1px solid var(--line-struct); }
 .search-notice--error { color: var(--sev-err); }
 .search-notice > div { min-width: 0; }
+.search-notice > span { min-width: 0; overflow-wrap: anywhere; }
 .search-notice button { flex: none; white-space: nowrap; }
 .search-notice details { margin-top: 4px; }
 .search-notice pre { max-height: 90px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
