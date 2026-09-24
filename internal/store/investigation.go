@@ -102,6 +102,28 @@ func (s *Store) Investigate(parent context.Context, options InvestigationOptions
 			return fmt.Errorf("the selected event is no longer in this dataset; reopen the investigation")
 		}
 		seed := seeds[0]
+		switch options.Relation {
+		case "credential":
+			if seed.AccessKeyID == "" || seed.IdentityArn == "" {
+				result.Notes = append(result.Notes, "Credential correlation requires both a recorded access key ID and principal ARN.")
+			}
+		case "ip":
+			if net.ParseIP(seed.SourceIPAddress) == nil {
+				result.Notes = append(result.Notes, "The selected event has no literal source IP. Service names and AWS Internal values are not grouped.")
+			}
+		case "principal":
+			if seed.IdentityArn == "" {
+				result.Notes = append(result.Notes, "The selected event has no principal ARN to match.")
+			}
+		case "shared":
+			if seed.SharedID == "" {
+				result.Notes = append(result.Notes, "The selected event has no sharedEventID to match.")
+			}
+		case "request":
+			if seed.RequestID == "" || seed.RecipientAccountID == "" || seed.AWSRegion == "" {
+				result.Notes = append(result.Notes, "Request correlation requires a recorded request ID, recipient account, region, service, and operation.")
+			}
+		}
 		result.Anchor = seed.Row
 		anchorTime, err := time.Parse(time.RFC3339Nano, seed.EventTime)
 		if err != nil {
@@ -199,6 +221,7 @@ func (s *Store) Investigate(parent context.Context, options InvestigationOptions
 		if result.Total > investigationLimit {
 			result.Notes = append(result.Notes, fmt.Sprintf("Showing the %d closest events of %d matches. Narrow the window or relationship to inspect the rest.", investigationLimit, result.Total))
 		}
+		result.Notes = append(result.Notes, "Only ingested events with usable timestamps appear in this window. Capture gaps and omitted resource fields can hide relationships.")
 		result.Notes = append(result.Notes, "Shared identifiers show relationships in the loaded evidence, not causation. A principal or IP can be used by multiple operators.")
 		return nil
 	})

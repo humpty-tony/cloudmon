@@ -22,6 +22,7 @@ CloudMon removes that gate. It reads CloudTrail directly (a downloaded dump, or 
 
 - a query language over supported event and identity fields ([semantics and limits](docs/search-correctness.md)),
 - facets, a time histogram, and live stats to pivot through millions of events,
+- [event investigation](docs/investigation-context.md) with surrounding-event timelines, resource correlations, and explicit relationship evidence,
 - [credential lineage](docs/credential-lineage.md) with qualified STS links, explicit gaps/conflicts, and snapshot-consistent expansion,
 - a Sigma testbench to write and validate detections against real data.
 

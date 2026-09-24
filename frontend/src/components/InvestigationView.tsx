@@ -67,7 +67,13 @@ export function InvestigationView({event,onClose}:{event:CloudTrailEvent;onClose
   };
   const choose=(item:Match)=>{rawRequest.current++;setRawBusy(false);setRawError("");setSelected(item)};
   return createPortal(<><div className="investigation-scrim" onClick={onClose}>
-    <section className="investigation" role="dialog" aria-modal="true" aria-label="Event investigation" onClick={e=>e.stopPropagation()}>
+    <section className="investigation" role="dialog" aria-modal="true" aria-label="Event investigation" onClick={e=>e.stopPropagation()} onKeyDown={e=>{
+      if(e.key!=="Tab")return;
+      const focusable=Array.from(e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),select:not(:disabled),summary,[tabindex="0"]'));
+      const first=focusable[0],last=focusable[focusable.length-1];
+      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus()}
+      else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus()}
+    }}>
       <header className="investigation-head">
         <div><h2>Event investigation</h2><div className="investigation-sub">{anchor.eventName} · {anchor.eventID}</div></div>
         {history.length>0&&<button onClick={()=>{setAnchor(history[history.length-1]);setHistory(h=>h.slice(0,-1))}}>← Back</button>}
