@@ -60,9 +60,10 @@ func main() {
 				})
 			},
 		},
-		OnStartup:  app.startup,
-		OnShutdown: app.onShutdown, // tear down any live capture so nothing is orphaned
-		Bind:       []interface{}{app},
+		OnStartup:          app.startup,
+		OnShutdown:         app.onShutdown, // join capture; retained resources are recovered on next launch
+		SingleInstanceLock: &options.SingleInstanceLock{UniqueId: "cloudmon-evidence-v1"},
+		Bind:               []interface{}{app},
 		Windows: &windows.Options{
 			Theme: windows.Dark,
 			CustomTheme: &windows.ThemeSettings{

@@ -61,7 +61,7 @@ jobs:
           chmod +x "$RUNNER_TEMP/${{ matrix.engine }}"
           echo "DUCKDB_BIN=$RUNNER_TEMP/${{ matrix.engine }}" >> "$GITHUB_ENV"
       - name: Backend checks with real DuckDB
-        run: go test ./internal/...
+        run: go test -tags "${{ matrix.tags }}" ./...
       - name: Install frontend
         working-directory: frontend
         run: npm ci
