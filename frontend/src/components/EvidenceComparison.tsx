@@ -52,12 +52,12 @@ function ComparisonView({left,right,onClose,onSwap}:{left:Pinned;right:Pinned;on
   useEffect(()=>{
     setResult(null);setError("");
     let active=true,worker:Worker|undefined;
-    const finish=(message:string)=>{if(active)setError(message);worker?.terminate();clearTimeout(timer)};
+    const finish=(message:string)=>{if(!active)return;active=false;setError(message);worker?.terminate();clearTimeout(timer)};
     const timer=setTimeout(()=>finish("Comparison took too long. Retry or inspect the original records."),15000);
     try{
       if(left.json.length>COMPARE_MAX_CHARS||right.json.length>COMPARE_MAX_CHARS)throw Error(COMPARE_SIZE_ERROR);
       worker=new Worker(new URL("../api/compare.worker.ts",import.meta.url),{type:"module"});
-      worker.onmessage=({data}:MessageEvent<{result?:ComparisonResult;error?:string}>)=>{if(!active)return;clearTimeout(timer);worker?.terminate();if(data.result)setResult(data.result);else setError(data.error||"Could not compare these records.")};
+      worker.onmessage=({data}:MessageEvent<{result?:ComparisonResult;error?:string}>)=>{if(!active)return;active=false;clearTimeout(timer);worker?.terminate();if(data.result)setResult(data.result);else setError(data.error||"Could not compare these records.")};
       worker.onerror=e=>{e.preventDefault();finish("Could not compare these records. Retry or inspect the originals.")};
       worker.onmessageerror=()=>finish("Could not read the comparison result.");
       worker.postMessage({left:left.json,right:right.json});
