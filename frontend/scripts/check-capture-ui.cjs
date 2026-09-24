@@ -6,11 +6,16 @@ const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'test-results', 'capture');
 fs.mkdirSync(output, {recursive:true});
 async function checkStatusBar(page) {
- const bounds=await page.locator('.newpill').evaluate(button=>{
+ await page.locator('.statusbar .newpill').waitFor({state:'visible'});
+ // Resolve both live elements in one browser task: resizing can replace nodes
+ // between a locator resolving its handle and an evaluation using that handle.
+ const bounds=await page.evaluate(()=>{
+  const footer=document.querySelector('.statusbar');
+  const button=footer.querySelector('.newpill');
   const pill=button.getBoundingClientRect();
-  const bar=button.closest('.statusbar').getBoundingClientRect();
+  const bar=footer.getBoundingClientRect();
   return {inside:pill.top>=bar.top && pill.bottom<=bar.bottom && pill.left>=bar.left && pill.right<=bar.right,
-   visible:bar.bottom<=innerHeight && bar.right<=innerWidth,
+   visible:pill.width>0 && pill.height>0 && bar.bottom<=innerHeight && bar.right<=innerWidth,
    pill:{width:pill.width,height:pill.height},bar:{width:bar.width,height:bar.height}};
  });
  assert.ok(bounds.inside && bounds.visible,`New-event badge spills out of the footer: ${JSON.stringify(bounds)}`);
