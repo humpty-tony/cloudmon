@@ -46,7 +46,9 @@ fs.mkdirSync(output, { recursive: true });
     }));
     const unselectedRows = await rowGeometry();
     for (let cycle = 0; cycle < 4; cycle++) {
-      await page.locator('.row').nth(cycle).click();
+      // A row's geometric center can land on its hover pivot controls when the
+      // inspector narrows the viewport. Select through the non-pivot time cell.
+      await page.locator('.row').nth(cycle).locator('.c-time').click();
       await page.getByRole('region', { name: 'Event fields', exact: true }).waitFor();
       await page.locator('.ft-row[data-field-path]').first().waitFor();
       await page.waitForTimeout(200);
@@ -58,7 +60,7 @@ fs.mkdirSync(output, { recursive: true });
       assert.equal(after.inspectorLoads, before.inspectorLoads, 'Idle inspector reparsed its event');
       assert.deepEqual(await rowGeometry(), unselectedRows, 'Selection changed table row positions or heights');
       if (cycle === 0) await page.screenshot({ path: path.join(output, 'small-inspector.png') });
-      await page.locator('.row--selected').click();
+      await page.locator('.row--selected .c-time').click();
       await page.waitForTimeout(100);
       assert.equal(await page.locator('.row--selected').count(), 1, 'Repeated click closed the inspector');
       assert.equal((await page.evaluate(() => window.perfFixture.snapshot())).inspectorLoads, after.inspectorLoads, 'Repeated selection reparsed its event');

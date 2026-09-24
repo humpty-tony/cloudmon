@@ -106,7 +106,7 @@ function Fixture() {
     <div style={{ display: "flex", flexDirection: "column", height: "100vh", minHeight: 0 }}>
       <div style={{ padding: 8 }}>Synthetic fixture · {count.toLocaleString()} rows · counter <span data-testid="counter">{counter}</span></div>
       <div style={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
-        <div style={{ display: "flex", flex: 1, minHeight: 0, minWidth: 0 }}>
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, minWidth: 0, overflow: "hidden" }}>
           <EventTable key={count} events={events} columns={columns} colWidths={widths} rowHeight={32} detailMode="external"
             selected={selected} cursorSeq={cursor} follow={false} onSelect={select} onCursor={setCursor}
             onPivot={noop} onDisengageFollow={noop} onReachTop={noop} onResizeColumn={noop}
