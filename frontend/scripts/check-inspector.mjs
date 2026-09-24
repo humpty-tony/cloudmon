@@ -15,6 +15,8 @@ try {
   const second=document.page(['items'],FIELD_PAGE_SIZE);
   assert.equal(second.total,20000);assert.equal(second.fields.length,50);assert.equal(second.fields[0].value,'50');assert.equal(second.fields[49].value,'99');
   assert.throws(()=>new InspectorDocument('{"a":1,"a":2}'),/Duplicate/);
+  assert.throws(()=>new InspectorDocument('{"__proto__":{"lost":true}}'),/Raw JSON/);
+  assert.throws(()=>new InspectorDocument('{"\\u005f_proto__":42}'),/Raw JSON/);
   assert.throws(()=>document.page(['__proto__'],0));
   const unicode='x'.repeat(TEXT_PAGE_SIZE-1)+'😀'+source;
   const pages=Array.from({length:Math.ceil(unicode.length/TEXT_PAGE_SIZE)},(_,i)=>textPage(unicode,i));

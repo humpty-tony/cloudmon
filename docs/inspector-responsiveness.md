@@ -2,7 +2,7 @@
 
 Expanded events no longer parse raw JSON during React rendering or mount every nested field at once. One worker owns the parsed document for the open event. It returns at most 50 short field summaries per request. The field view renders only visible rows, and nested sections open on demand. Progress updates retain the open tree without reparsing its source.
 
-Numbers retain their original JSON text through the worker, including integers beyond JavaScript's safe range and high-precision decimals. Duplicate keys cause an explicit field-view error rather than silently choosing a value; the original source remains available. Field lookup uses own properties, and dotted literal keys cannot impersonate a nested pivot field.
+Numbers retain their original JSON text through the worker, including integers beyond JavaScript's safe range and high-precision decimals. Conflicting duplicate keys cause an explicit field-view error rather than silently choosing a value. Records with `__proto__` keys also require Raw JSON because the parser cannot preserve those keys safely. The original source remains available in both cases. Field lookup uses own properties, and dotted literal keys cannot impersonate a nested pivot field.
 
 The field view shortens long values to 512 code points and limits nesting to 64 levels. Previous/Next fields navigate large objects or arrays. Raw JSON and source observations render in 32 KiB text segments with surrogate-safe boundaries. Segments preserve source text exactly; Raw JSON Copy and exports still use the complete source. Syntax highlighting applies only to a single small source segment.
 

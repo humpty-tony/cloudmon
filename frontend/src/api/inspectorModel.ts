@@ -18,7 +18,18 @@ export interface InspectorResponse { id: number; page?: FieldPage; error?: strin
 export class InspectorDocument {
   private readonly root: unknown;
   private readonly keys = new WeakMap<object, string[]>();
-  constructor(json: string) { this.root = parse(json); }
+  constructor(json: string) {
+    // The library assigns object keys with ordinary property assignment. Reject
+    // prototype-setter keys before it can discard them; Raw JSON remains exact.
+    for (const token of json.matchAll(/"(?:[^"\\]|\\[\s\S])*"/g)) {
+      let next=token.index+token[0].length;
+      while (/\s/.test(json[next] ?? "") && next<json.length) next++;
+      if (json[next] === ":" && JSON.parse(token[0]) === "__proto__") {
+        throw new Error("This record contains a __proto__ key. Use Raw JSON to inspect the complete source safely.");
+      }
+    }
+    this.root = parse(json);
+  }
 
   private childKeys(value: unknown): string[] {
     if (value === null || typeof value !== "object" || value instanceof LosslessNumber) return [];
