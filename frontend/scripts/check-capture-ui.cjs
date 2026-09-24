@@ -360,7 +360,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.equal(await page.evaluate(()=>window.captureTest.exportedFilter.snapshot.maxSeq),2505);
   await page.getByRole('button',{name:'File',exact:true}).click();
   await page.screenshot({path:path.join(output,'search-valid.png'),fullPage:true});
-  await page.getByRole('button',{name:'File',exact:true}).click();
+  await page.locator('.tbar-backdrop').click({position:{x:8,y:200}});
   await page.evaluate(()=>{window.captureTest.delayExport=true;window.captureTest.exportedFilter=null});
   await page.getByRole('button',{name:'File',exact:true}).click();
   await page.getByRole('button',{name:'Export all matching events…',exact:true}).click();
