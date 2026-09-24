@@ -193,6 +193,12 @@ export default function App() {
   datasetTotalRef.current = datasetTotal;
   const scheduleAppendRef = useRef<() => void>(() => {});
   const appendTimer = useRef<number | null>(null);
+  const appendInFlight = useRef(false);
+  const appendPending = useRef(false);
+  const streamVersion = useRef(0);
+  const aggregateVersion = useRef(-1);
+  const aggregateInFlight = useRef(false);
+  const initialQuery = useRef<number | null>(null);
 
   // Persist uncaught errors/rejections to cloudmon.log (mount-once, before anything else).
   useEffect(() => installCrashLogging(), []);
@@ -236,6 +242,7 @@ export default function App() {
   useEffect(() => {
     if (!connected) return;
     return backend.onEvent(() => {
+      streamVersion.current++;
       if (!followRef.current) {
         setNewCount((n) => n + 1);
         return;
@@ -246,10 +253,14 @@ export default function App() {
 
   useEffect(() => {
     if (!connected) return;
-    return backend.onCaptureProgress(({ added, total }) => {
+    return backend.onCaptureProgress(({ total }) => {
+      const newEvents = Math.max(0, total - datasetTotalRef.current);
+      datasetTotalRef.current = total;
       setDatasetTotal(total); // total climbs even while paused (counter only)
+      if (newEvents === 0) return; // source redelivery did not change searchable rows
+      streamVersion.current++;
       if (!followRef.current) {
-        if (added > 0) setNewCount((n) => n + added);
+        setNewCount((n) => n + newEvents);
         return;
       }
       scheduleAppendRef.current();
@@ -257,6 +268,8 @@ export default function App() {
   }, [connected]);
 
   const enterDataset = (cfg: ConnectionConfig, total: number, capture: SavedCapture | null, active: boolean) => {
+    datasetTotalRef.current = total;
+    streamVersion.current++;
     setConfig(cfg);setDatasetTotal(total);setSavedCapture(capture);setCapturing(active);
     setEvents([]);setTerms([]);setQueryText("");setSelected(null);setCursorSeq(-1);setFollow(active);
     setRefreshTick(n=>n+1);setConnected(true);maximizeWindow();
@@ -309,6 +322,7 @@ export default function App() {
   // landing mid-flight.
   const appendNewRows = useCallback(async () => {
     if (!followRef.current) return;
+    appendInFlight.current = true;
     const cur = eventsRef.current;
     const maxSeq = cur.length ? cur[0].seq : 0; // events are newest-first → [0] is newest
     const id = reqId.current;
@@ -328,27 +342,38 @@ export default function App() {
       // waiting for the next arrival (Store.Newer returns oldest-unseen, so no gap).
       if (fresh.length >= PAGE) scheduleAppendRef.current();
     } catch {
-      // transient DuckDB lock - the next tick retries; never blank the view
+      // Keep the visible rows; a later arrival retries the tail query.
+    } finally {
+      appendInFlight.current = false;
+      if (appendPending.current && followRef.current) scheduleAppendRef.current();
     }
   }, []);
 
   // Facets/histogram/stats are a full scan - refresh them (window untouched) on a
   // slower cadence than the row append.
   const refreshAggregates = useCallback(async () => {
+    if (aggregateInFlight.current || initialQuery.current !== null || aggregateVersion.current === streamVersion.current) return;
+    aggregateInFlight.current = true;
     const id = reqId.current;
+    const version = streamVersion.current;
     try {
       const a = await backend.queryAggregates(filterRef.current);
-      if (id !== reqId.current) return;
-      setAgg((prev) => ({ ...a, stats: { ...a.stats, total: datasetTotalRef.current || prev.stats.total } }));
+      if (id !== reqId.current || !followRef.current || !capturingRef.current) return;
+      aggregateVersion.current = version;
+      setAgg({ ...a, stats: { ...a.stats, total: datasetTotalRef.current } });
     } catch {
-      // ignore transient lock contention
+      // Leave this version dirty so the next cadence retries it.
+    } finally {
+      aggregateInFlight.current = false;
     }
   }, []);
 
   const scheduleAppend = useCallback(() => {
-    if (appendTimer.current != null) return;
+    appendPending.current = true;
+    if (appendTimer.current != null || appendInFlight.current) return;
     appendTimer.current = window.setTimeout(() => {
       appendTimer.current = null;
+      appendPending.current = false;
       void appendNewRows();
     }, STREAM_APPEND_MS);
   }, [appendNewRows]);
@@ -359,12 +384,14 @@ export default function App() {
   // the facet/histogram/stats panel holds still (no stray refresh from a final
   // drain) and catches up all at once on resume via repin → refreshTick.
   useEffect(() => {
-    if (!connected || config?.mode === "import-dump") return;
+    // Saved evidence is initially opened in import mode, but its retained
+    // capture can resume later. The live state controls refresh eligibility.
+    if (!connected) return;
     const h = window.setInterval(() => {
       if (followRef.current && capturingRef.current) void refreshAggregates();
     }, AGG_REFRESH_MS);
     return () => window.clearInterval(h);
-  }, [connected, config, refreshAggregates]);
+  }, [connected, refreshAggregates]);
 
   // Clear any pending append timer on unmount so it can't fire after teardown.
   useEffect(
@@ -382,19 +409,24 @@ export default function App() {
   useEffect(() => {
     if (!connected) return;
     const id = ++reqId.current;
+    const version = streamVersion.current;
+    initialQuery.current = id;
     setQuerying(true);
     Promise.all([backend.queryAggregates(filter), backend.queryPage(filter, 0, PAGE)])
       .then(([a, page]) => {
         if (id !== reqId.current) return;
-        setAgg({ ...a, stats: { ...a.stats, total: datasetTotal } });
+        aggregateVersion.current = version;
+        setAgg({ ...a, stats: { ...a.stats, total: datasetTotalRef.current } });
         setEvents(page); // newest-first
         setQuerying(false);
       })
       .catch(() => {
         if (id !== reqId.current) return;
-        // A transient DuckDB lock conflict (the live writer holds the file) must NOT
-        // blank the view - keep the last results; the next tick re-queries cleanly.
+        // Keep the last results if this request failed.
         setQuerying(false);
+      })
+      .finally(() => {
+        if (initialQuery.current === id) initialQuery.current = null;
       });
   }, [connected, filter, refreshTick]);
 

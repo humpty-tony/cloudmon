@@ -78,7 +78,7 @@ func TestNewer(t *testing.T) {
 // import).
 func TestAppendEventsCreatesTable(t *testing.T) {
 	dir := t.TempDir()
-	s := New(bin(t), filepath.Join(dir, "live.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "live.duckdb"))
 	ev := liveEvent(t, `{"eventID":"a","eventName":"ConsoleLogin","eventSource":"signin.amazonaws.com","eventTime":"2025-02-02T00:00:00Z"}`)
 	total, err := s.AppendEvents([]model.CloudTrailEvent{ev})
 	if err != nil {
@@ -101,7 +101,7 @@ func TestAppendEventsCreatesTable(t *testing.T) {
 // duplicate rows.
 func TestAppendEventsDedupesByEventID(t *testing.T) {
 	dir := t.TempDir()
-	s := New(bin(t), filepath.Join(dir, "dedup.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "dedup.duckdb"))
 	e1 := liveEvent(t, `{"eventID":"dup1","eventName":"AssumeRole","eventSource":"sts.amazonaws.com","eventTime":"2025-03-01T00:00:00Z"}`)
 	if _, err := s.AppendEvents([]model.CloudTrailEvent{e1}); err != nil {
 		t.Fatalf("AppendEvents first: %v", err)
@@ -124,6 +124,35 @@ func TestAppendEventsDedupesByEventID(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0].N != 1 {
 		t.Fatalf("rows for dup1 = %+v, want exactly 1", rows)
+	}
+	// A skipped duplicate may leave a sequence gap. Advancing by the inserted
+	// count instead of the actual highest ID would reuse that ID next time.
+	e3 := liveEvent(t, `{"eventID":"new3","eventName":"Third","eventTime":"2025-03-01T00:02:00Z"}`)
+	if n, err := s.AppendEvents([]model.CloudTrailEvent{e1, e2, e3}); err != nil || n != 3 {
+		t.Fatalf("mixed redelivery: %d %v", n, err)
+	}
+	before, err := s.Page(Filter{}, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s = openTestStore(t, s.dbPath)
+	e4 := liveEvent(t, `{"eventID":"new4","eventName":"Fourth","eventTime":"2025-03-01T00:03:00Z"}`)
+	if n, err := s.AppendEvents([]model.CloudTrailEvent{e2, e4}); err != nil || n != 4 {
+		t.Fatalf("mixed redelivery after reopen: %d %v", n, err)
+	}
+	page, err := s.Page(Filter{}, 0, 10)
+	if err != nil || len(page) != 4 || page[0].Seq <= before[0].Seq {
+		t.Fatalf("IDs after reopen: %+v %v", page, err)
+	}
+	seen := map[int64]bool{}
+	for _, row := range page {
+		if seen[row.Seq] {
+			t.Fatalf("reused event ID %d", row.Seq)
+		}
+		seen[row.Seq] = true
 	}
 }
 

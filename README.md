@@ -29,7 +29,7 @@ Nothing leaves the host. It is for the people who do this work without a Splunk 
 
 ## How it works
 
-- The backend is Go (via Wails). It embeds the DuckDB command-line engine, gzipped and per-OS, with no CGO in the data path. On first run it extracts DuckDB to a per-user cache directory, so CloudMon ships as a single binary with no database to install.
+- The backend is Go (via Wails), with DuckDB linked into the application. One persistent engine shares the saved evidence database between a serialized writer and a bounded pool of readers. No separate database installation or extracted executable is needed.
 - Ingested CloudTrail lands in an on-disk DuckDB table. DuckDB streams and queries from disk, so multi-gigabyte dumps stay memory-bounded.
 - The React front end never holds the whole dataset. It requests a window of rows plus aggregates (facets, histogram, stats) over the Wails bridge, so it stays responsive at any dataset size.
 - Live capture provisions one EventBridge rule and one SQS queue against a trail you already own, then polls the queue. It never modifies your trail, and it removes the rule and queue when you stop.
@@ -58,40 +58,36 @@ Prebuilt binaries for Windows, Linux, and macOS are on the [releases page](https
 
 ### Build from source
 
-CloudMon is built with Wails. Supported targets are **windows/amd64**, **linux/amd64**, and **macOS (universal: Intel and Apple Silicon)**. Other architectures compile but report an unsupported-platform error at startup.
+CloudMon is built with Wails. Supported targets are **windows/amd64**, **linux/amd64**, and **macOS (universal: Intel and Apple Silicon)**. The native build matrix tests each supported operating system and verifies both architectures in the macOS executable.
 
 ### Prerequisites
 - Go 1.25+ (see `go.mod`)
 - Node.js 18+ and npm
 - Wails CLI v2: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
 - Linux only: GTK and WebKit2GTK dev packages, via `make deps` (or `sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev`)
-- `curl` and `unzip` (for the DuckDB fetch step)
+- A C/C++ compiler for the embedded DuckDB library: GCC on Linux, Xcode command-line tools on macOS, or MinGW-w64 GCC on Windows. CGO must be enabled.
 
 `wails doctor` verifies the toolchain.
 
-### 1. Fetch the embedded DuckDB binaries
-These are not committed to the repo (they are large). Download them once:
+### Build
 
-```
-./scripts/fetch-duckdb.sh
-```
+The Go module pins the DuckDB Go driver and its prebuilt static libraries. Go
+fetches them during the build; the old CLI download step is no longer needed.
+Build on the target OS (cross-compiling now requires a compatible C cross-compiler).
 
-This fills `internal/duckdbbin/bin/` so `go:embed` can bundle the right binary at build time.
-
-### 2. Build
-Each platform's webview differs, so Windows can be built anywhere, while Linux and macOS must be built on their own OS:
-
-- **Windows** (no CGO, cross-compiles from any OS):
-  ```
+- **Windows**: install a compatible [MinGW-w64 GCC toolchain](https://duckdb.org/docs/current/clients/go/troubleshoot), add `C:\msys64\ucrt64\bin` to `PATH`, and set `CGO_ENABLED=1`:
+  ```powershell
+  $env:CGO_ENABLED = '1'
+  $env:PATH = "C:\msys64\ucrt64\bin;$env:PATH"
   wails build -platform windows/amd64
   ```
-- **macOS** (build on a Mac; needs the Xcode command-line tools):
+- **macOS** (on a Mac with Xcode command-line tools):
   ```
-  wails build
+  wails build -platform darwin/universal
   ```
-- **Linux** (build on Linux; needs the GTK/WebKit packages above):
+- **Linux** (with GCC and the GTK/WebKit packages above):
   ```
-  make build      # wraps: wails build -tags webkit2_41
+  make build
   ```
 
 The binary is written to `build/bin/`. Run it directly, or use `wails dev` (`make dev` on Linux) for hot reload.
@@ -126,7 +122,6 @@ Only live capture touches AWS; importing a dump is fully offline.
 - `internal/store` - DuckDB-backed query engine (ingest, windows, aggregates, lineage, Sigma)
 - `internal/awsflow` - live capture (profiles, STS, EventBridge/SQS provisioning, polling)
 - `internal/ingest` - dump parsing (JSON/CSV/folders/gzip)
-- `internal/duckdbbin` - embedded DuckDB extraction
 - `frontend/src` - React/TypeScript UI
 
 ## License

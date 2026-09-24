@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strconv"
@@ -363,6 +364,24 @@ type Aggregates struct {
 // Aggregates computes total count, per-field facet counts, and the time histogram
 // for the current filter - all in DuckDB, so the bridge carries only summaries.
 func (s *Store) Aggregates(f Filter) (Aggregates, error) {
+	var agg Aggregates
+	err := s.operation(context.Background(), func(ctx context.Context) error {
+		// All panels in this response describe one committed state even if a
+		// capture batch lands between the stats, facets, and histogram queries.
+		// Statement contexts cancel work; the deferred rollback must finish
+		// synchronously before operation releases its database lifetime lock.
+		tx, err := s.db.BeginTx(context.WithoutCancel(ctx), nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		agg, err = aggregates(f, func(query string, dst any) error { return queryJSONOn(ctx, tx, query, dst) })
+		return err
+	})
+	return agg, err
+}
+
+func aggregates(f Filter, query func(string, any) error) (Aggregates, error) {
 	agg := Aggregates{Facets: map[string][]FacetValue{}}
 	where, err := f.where()
 	if err != nil {
@@ -386,7 +405,7 @@ func (s *Store) Aggregates(f Filter) (Aggregates, error) {
 		"count(DISTINCT nullif(awsRegion,'')) AS regions, " +
 		"coalesce(epoch_ms(min(ts))::BIGINT, 0) AS minMs, coalesce(epoch_ms(max(ts))::BIGINT, 0) AS maxMs " +
 		"FROM events" + where + ";"
-	if err := s.queryJSON(statSQL, &st); err != nil {
+	if err := query(statSQL, &st); err != nil {
 		return agg, err
 	}
 	if len(st) > 0 {
@@ -394,27 +413,23 @@ func (s *Store) Aggregates(f Filter) (Aggregates, error) {
 		agg.Stats = Stats{Errors: st[0].Errors, Principals: st[0].Principals, Sources: st[0].Sources, Regions: st[0].Regions, MinMs: st[0].MinMs, MaxMs: st[0].MaxMs}
 	}
 
-	// all facets in ONE union query (was one subprocess per field)
+	// GROUPING SETS applies the filter once for all seven facets, instead of
+	// rescanning events (and possibly parsing raw JSON) for each UNION branch.
+	groups := make([]string, 0, len(facetFields))
+	labels := make([]string, 0, len(facetFields))
 	for _, col := range facetFields {
 		agg.Facets[col] = []FacetValue{}
+		groups = append(groups, "("+col+")")
+		labels = append(labels, "WHEN GROUPING("+col+")=0 THEN '"+col+"'")
 	}
-	parts := make([]string, 0, len(facetFields))
-	for _, col := range facetFields {
-		cond := col + " IS NOT NULL AND " + col + " <> ''"
-		w := where
-		if w == "" {
-			w = " WHERE " + cond
-		} else {
-			w += " AND " + cond
-		}
-		parts = append(parts, fmt.Sprintf("SELECT * FROM (SELECT '%s' AS f, %s AS value, count(*) AS count FROM events%s GROUP BY value ORDER BY count DESC LIMIT 25)", col, col, w))
-	}
+	facetSQL := "SELECT f,value,count FROM (SELECT CASE " + strings.Join(labels, " ") + " END AS f, coalesce(" + strings.Join(facetFields, ",") + ") AS value, count(*) AS count FROM events" + where +
+		" GROUP BY GROUPING SETS (" + strings.Join(groups, ",") + ")) WHERE value IS NOT NULL AND value <> '' QUALIFY row_number() OVER (PARTITION BY f ORDER BY count DESC,value)<=25 ORDER BY f,count DESC,value"
 	var frows []struct {
 		F     string `json:"f"`
 		Value string `json:"value"`
 		Count int    `json:"count"`
 	}
-	if err := s.queryJSON(strings.Join(parts, " UNION ALL ")+";", &frows); err != nil {
+	if err := query(facetSQL, &frows); err != nil {
 		return agg, err
 	}
 	for _, r := range frows {
@@ -432,23 +447,15 @@ func (s *Store) Aggregates(f Filter) (Aggregates, error) {
 	} else {
 		tsWhere += " AND ts IS NOT NULL"
 	}
-	var span []struct {
-		Lo int64 `json:"lo"`
-		Hi int64 `json:"hi"`
-	}
-	if err := s.queryJSON("SELECT epoch_ms(min(ts))::BIGINT AS lo, epoch_ms(max(ts))::BIGINT AS hi FROM events"+tsWhere+";", &span); err != nil {
-		return agg, err
-	}
+	// The headline query already measured the filtered span; no extra scan.
 	sec := int64(60)
-	if len(span) > 0 && span[0].Hi > span[0].Lo {
-		if s := (span[0].Hi - span[0].Lo) / 1000 / 120; s > sec {
-			sec = s
-		}
+	if span := (agg.Stats.MaxMs - agg.Stats.MinMs) / 1000 / 120; span > sec {
+		sec = span
 	}
 	hsql := fmt.Sprintf(
 		"SELECT epoch_ms(time_bucket(INTERVAL '%d seconds', ts))::BIGINT AS t, count(*) AS n, count(*) FILTER (WHERE errorCode IS NOT NULL AND errorCode <> '') AS e FROM events%s GROUP BY t ORDER BY t;",
 		sec, tsWhere)
-	if err := s.queryJSON(hsql, &agg.Histogram); err != nil {
+	if err := query(hsql, &agg.Histogram); err != nil {
 		return agg, err
 	}
 	agg.HistStep = sec * 1000

@@ -12,7 +12,7 @@ import (
 )
 
 func TestEvidenceIdentityAndRestart(t *testing.T) {
-	s := New(bin(t), filepath.Join(t.TempDir(), "evidence.duckdb"))
+	s := openTestStore(t, filepath.Join(t.TempDir(), "evidence.duckdb"))
 	if err := s.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -27,7 +27,10 @@ func TestEvidenceIdentityAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A new Store must reopen exactly the same evidence and resource journal.
-	s = New(bin(t), s.dbPath)
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s = openTestStore(t, s.dbPath)
 	if err := s.Open(); err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +112,7 @@ func TestImportIsAtomicAcrossFilesAndFormats(t *testing.T) {
 }
 
 func TestMissingIdentityUsesContentAndVersionGuard(t *testing.T) {
-	s := New(bin(t), filepath.Join(t.TempDir(), "evidence.duckdb"))
+	s := openTestStore(t, filepath.Join(t.TempDir(), "evidence.duckdb"))
 	raw := `{"eventID":"same-id-no-recipient","eventName":"One"}`
 	other := strings.Replace(raw, "One", "Two", 1)
 	if n, err := s.AppendEvents([]model.CloudTrailEvent{liveEvent(t, raw), liveEvent(t, raw), liveEvent(t, other)}); err != nil || n != 2 {

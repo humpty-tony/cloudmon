@@ -5,7 +5,7 @@ import (
 	"os"
 )
 
-// LockSession owns the database across CLI invocations. Desktop single-instance
+// LockSession owns the saved evidence session for the application lifetime. Desktop single-instance
 // messaging can fail (for example without D-Bus), so it is not a data-store lock.
 // The OS releases this file lock on process exit, including crashes; the file's
 // continued existence does not prevent the next launch from recovering evidence.

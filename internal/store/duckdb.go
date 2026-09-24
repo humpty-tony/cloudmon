@@ -1,30 +1,213 @@
-// Package store is CloudMon's scalable query engine. It drives the DuckDB CLI as
-// a subprocess (NOT via CGO) so the Go app stays pure-Go and cross-compilable for
-// Windows, macOS, and Linux. Imports stream into a private staging file and commit
-// searchable events plus source observations atomically. The UI
-// then asks for windows + aggregates via SQL instead of holding the dataset in JS.
+// Package store keeps one embedded DuckDB instance open for local evidence.
+// A reserved writer connection commits batches; a bounded pool lets UI reads
+// use DuckDB snapshots without queuing behind that writer.
 package store
 
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	"database/sql/driver"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"os/exec"
-	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/duckdb/duckdb-go/v2"
 )
 
-// Store is a handle to an on-disk DuckDB database backing one loaded dataset.
+const operationTimeout = 2 * time.Minute
+
+// Store owns its database and connections until Close. Open validates the saved
+// schema before callers can import, append, or query evidence.
 type Store struct {
-	mu     sync.Mutex // one CLI process owns this database at a time
-	bin    string     // path to the duckdb CLI binary
-	dbPath string     // on-disk database file
+	dbPath    string
+	life      sync.RWMutex // Close joins operations after cancelling their contexts
+	once      sync.Once
+	db        *sql.DB
+	writer    *sql.DB // separate one-connection pool, reserved for the capture sink
+	connector *duckdb.Connector
+	initErr   error
+	writeSlot chan struct{}
+	ctx       context.Context
+	cancel    context.CancelFunc
+	closeOnce sync.Once
+	closeErr  error
+	counts    evidenceCounters // guarded by writeSlot; reconstructed from disk on open
 }
 
-func New(bin, dbPath string) *Store { return &Store{bin: bin, dbPath: dbPath} }
+type evidenceCounters struct {
+	valid       bool
+	events      int64
+	seq         int64
+	observation int64
+}
+
+func New(dbPath string) *Store {
+	ctx, cancel := context.WithCancel(context.Background())
+	return &Store{dbPath: dbPath, writeSlot: make(chan struct{}, 1), ctx: ctx, cancel: cancel}
+}
+
+// Expose only driver.Connector, deliberately excluding the native Close method.
+type poolConnector struct{ driver.Connector }
+
+// engine is called with life held. The driver bundles DuckDB 1.5.5, the same
+// storage version as the former CLI, and links the native library at build time.
+func (s *Store) engine() error {
+	s.once.Do(func() {
+		// The driver's DSN splits on '?'. Reject it rather than opening a
+		// different file if the application's configuration directory contains it.
+		if strings.Contains(s.dbPath, "?") {
+			s.initErr = fmt.Errorf("database path cannot contain '?'")
+			return
+		}
+		connector, err := duckdb.NewConnector(fmt.Sprintf("%s?threads=%d", s.dbPath, min(4, runtime.GOMAXPROCS(0))), nil)
+		if err != nil {
+			s.initErr = err
+			return
+		}
+		s.connector = connector
+		// Both pools share the same native database. Store owns the connector;
+		// closing either pool must not close it while the other is still in use.
+		shared := poolConnector{connector}
+		s.db = sql.OpenDB(shared)
+		s.db.SetMaxOpenConns(4)
+		s.db.SetMaxIdleConns(4)
+		s.writer = sql.OpenDB(shared)
+		s.writer.SetMaxOpenConns(1)
+		s.writer.SetMaxIdleConns(1)
+	})
+	return s.initErr
+}
+
+// Close cancels running/waiting work, joins it, then releases all native handles.
+// A closed Store never reopens implicitly.
+func (s *Store) Close() error {
+	s.closeOnce.Do(func() {
+		s.cancel()
+		s.life.Lock()
+		defer s.life.Unlock()
+		if s.writer != nil {
+			s.closeErr = s.writer.Close()
+		}
+		if s.db != nil {
+			s.closeErr = errors.Join(s.closeErr, s.db.Close())
+		}
+		if s.connector != nil {
+			s.closeErr = errors.Join(s.closeErr, s.connector.Close())
+		}
+	})
+	return s.closeErr
+}
+
+func (s *Store) operation(parent context.Context, fn func(context.Context) error) error {
+	s.life.RLock()
+	defer s.life.RUnlock()
+	if s.ctx.Err() != nil {
+		return fmt.Errorf("evidence database is closed")
+	}
+	ctx, cancel := context.WithTimeout(parent, operationTimeout)
+	stop := context.AfterFunc(s.ctx, cancel)
+	defer stop()
+	defer cancel()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := s.engine(); err != nil {
+		return err
+	}
+	return fn(ctx)
+}
+
+// write is the only write path. Errors (including cancellation) roll back before
+// another batch can use the connection. Counters are discarded on any failure.
+func (s *Store) write(parent context.Context, fn func(context.Context, *sql.Tx) error) error {
+	return s.operation(parent, func(ctx context.Context) error {
+		select {
+		case s.writeSlot <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		defer func() { <-s.writeSlot }()
+		// Cancel individual SQL statements, then roll back synchronously here.
+		// database/sql otherwise rolls back in a background goroutine, which can
+		// outlive operation() and race the native connector's Close on shutdown.
+		tx, err := s.writer.BeginTx(context.WithoutCancel(ctx), nil)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+		err = fn(ctx, tx)
+		if err == nil {
+			err = ctx.Err()
+		}
+		if err == nil {
+			err = tx.Commit()
+		}
+		if err != nil {
+			s.counts.valid = false
+		}
+		return err
+	})
+}
+
+type queryer interface {
+	QueryContext(context.Context, string, ...any) (*sql.Rows, error)
+}
+
+// Keep the existing typed JSON contract using DuckDB's own JSON serialization.
+// Raw event/source fields are VARCHAR, so their exact bytes stay strings; no
+// conversion through Go float64 or inferred field types can change the evidence.
+func queryJSONOn(ctx context.Context, db queryer, query string, dst any) error {
+	query = strings.TrimSuffix(strings.TrimSpace(query), ";")
+	rows, err := db.QueryContext(ctx, "SELECT to_json(result)::VARCHAR FROM ("+query+") AS result")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var out bytes.Buffer
+	out.WriteByte('[')
+	for rows.Next() {
+		var row string
+		if err := rows.Scan(&row); err != nil {
+			return err
+		}
+		if out.Len() > 1 {
+			out.WriteByte(',')
+		}
+		out.WriteString(row)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	out.WriteByte(']')
+	return json.Unmarshal(out.Bytes(), dst)
+}
+
+func (s *Store) queryJSON(query string, dst any) error {
+	return s.operation(context.Background(), func(ctx context.Context) error {
+		return queryJSONOn(ctx, s.db, query, dst)
+	})
+}
+
+// Count returns the number of committed searchable events.
+func (s *Store) Count() (int, error) {
+	var rows []struct {
+		N int `json:"n"`
+	}
+	if err := s.queryJSON("SELECT count(*) AS n FROM events", &rows); err != nil {
+		return 0, err
+	}
+	if len(rows) == 0 {
+		return 0, nil
+	}
+	return rows[0].N, nil
+}
+
+func sqlStr(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 
 // eventCols projects searchable fields; raw retains the source JSON object bytes.
 const eventCols = `
@@ -54,117 +237,3 @@ const eventCols = `
   COALESCE(try_cast(json_extract(r,'$.readOnly') AS BOOLEAN), false)       AS readOnly,
   COALESCE(try_cast(json_extract(r,'$.managementEvent') AS BOOLEAN), true) AS managementEvent,
   r::VARCHAR AS raw`
-
-// run serializes CLI processes so readers and writers cannot contend for this
-// Store's database lock. Brief retries still tolerate locks from other processes.
-// Each subprocess has a deadline; hideWindow avoids console popups on Windows.
-func (s *Store) run(jsonOut, readonly bool, sql string) ([]byte, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	const maxTries = 12
-	var lastErr error
-	for try := 0; try < maxTries; try++ {
-		out, err := s.runOnce(jsonOut, readonly, sql)
-		if err == nil {
-			if jsonOut {
-				out = trimToJSON(out) // strip any ANSI/warning noise DuckDB prints before the JSON
-			}
-			return out, nil
-		}
-		lastErr = err
-		if !isLockErr(err) {
-			return nil, err
-		}
-		time.Sleep(time.Duration(20+try*15) * time.Millisecond)
-	}
-	return nil, lastErr
-}
-
-// isLockErr reports whether err is DuckDB failing to acquire the database file lock
-// (another process holds a conflicting read-only/read-write open).
-func isLockErr(err error) bool {
-	if err == nil {
-		return false
-	}
-	m := strings.ToLower(err.Error())
-	return strings.Contains(m, "conflicting lock") ||
-		strings.Contains(m, "set lock") ||
-		strings.Contains(m, "could not set lock") ||
-		strings.Contains(m, "being used by another")
-}
-
-func (s *Store) runOnce(jsonOut, readonly bool, sql string) ([]byte, error) {
-	args := []string{"-bail"}
-	if readonly {
-		args = append(args, "-readonly")
-	}
-	args = append(args, s.dbPath)
-	if jsonOut {
-		args = append(args, "-json")
-	}
-	// Feed SQL on stdin, NOT via -c. A large filter - "Sensitive only" compiles to
-	// eventName IN (~270 values), and the facets query repeats the WHERE clause once
-	// per field - can exceed the Windows ~32 KB command-line limit, making
-	// CreateProcess fail (the query silently returns nothing). stdin has no such cap.
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, s.bin, args...)
-	hideWindow(cmd)
-	cmd.Stdin = strings.NewReader(sql)
-	var out, errb bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &errb
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("duckdb: %v: %s", err, strings.TrimSpace(errb.String()))
-	}
-	return out.Bytes(), nil
-}
-
-func (s *Store) queryJSON(sql string, dst any) error {
-	b, err := s.run(true, true, sql) // reads are always read-only
-	if err != nil {
-		return err
-	}
-	b = bytes.TrimSpace(b)
-	if len(b) == 0 {
-		return nil // empty result set → leave dst as-is
-	}
-	return json.Unmarshal(b, dst)
-}
-
-// Count returns the number of events currently in the table (0 if none loaded yet).
-func (s *Store) Count() (int, error) {
-	var res []struct {
-		N int `json:"n"`
-	}
-	if err := s.queryJSON("SELECT count(*) AS n FROM events;", &res); err != nil {
-		return 0, err
-	}
-	if len(res) == 0 {
-		return 0, nil
-	}
-	return res[0].N, nil
-}
-
-func sqlStr(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
-
-// ansiCSI matches ANSI control sequences (colors, cursor moves).
-var ansiCSI = regexp.MustCompile("\x1b\\[[0-9;?]*[ -/]*[@-~]")
-
-// trimToJSON makes DuckDB's -json output parseable even when the CLI prepends noise
-// to stdout - e.g. v1.5.5 prints a colored "Deprecated lambda arrow (->)" warning
-// there, and a progress bar can leak escape codes. It strips ANSI sequences; if the
-// result still isn't valid JSON it finds the earliest '[' / '{' from which the rest
-// parses cleanly, so a bracket inside warning text (a type name like INTEGER[]) can't
-// cause a bad slice.
-func trimToJSON(b []byte) []byte {
-	b = ansiCSI.ReplaceAll(b, nil)
-	if json.Valid(bytes.TrimSpace(b)) {
-		return b
-	}
-	for i := 0; i < len(b); i++ {
-		if (b[i] == '[' || b[i] == '{') && json.Valid(bytes.TrimSpace(b[i:])) {
-			return b[i:]
-		}
-	}
-	return b
-}

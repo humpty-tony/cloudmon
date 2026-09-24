@@ -32,7 +32,7 @@ func TestRoleRollupAndResource(t *testing.T) {
 	if err := os.WriteFile(f, []byte(rec), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := New(bin(t), filepath.Join(dir, "app.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "app.duckdb"))
 	if _, err := s.Ingest(f); err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
@@ -85,7 +85,7 @@ func TestServiceOriginChildCount(t *testing.T) {
 	if err := os.WriteFile(f, []byte(rec), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := New(bin(t), filepath.Join(dir, "app.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "app.duckdb"))
 	if _, err := s.Ingest(f); err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestSSOSession(t *testing.T) {
 	if err := os.WriteFile(f, []byte(rec), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := New(bin(t), filepath.Join(dir, "app.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "app.duckdb"))
 	if _, err := s.Ingest(f); err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestServiceLinkedRole(t *testing.T) {
 	if err := os.WriteFile(f, []byte(rec), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := New(bin(t), filepath.Join(dir, "app.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "app.duckdb"))
 	if _, err := s.Ingest(f); err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestLineageSelfLoopGuard(t *testing.T) {
 	if err := os.WriteFile(f, []byte(rec), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := New(bin(t), filepath.Join(dir, "app.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "app.duckdb"))
 	if _, err := s.Ingest(f); err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
@@ -251,7 +251,7 @@ func TestCrossAccountEdge(t *testing.T) {
 	if err := os.WriteFile(f, []byte(rec), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := New(bin(t), filepath.Join(dir, "app.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "app.duckdb"))
 	if _, err := s.Ingest(f); err != nil {
 		t.Fatalf("ingest: %v", err)
 	}

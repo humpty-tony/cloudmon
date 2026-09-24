@@ -7,15 +7,19 @@ import (
 	"testing"
 )
 
-// These tests drive the real duckdb CLI. Point DUCKDB_BIN at it, e.g.:
-//
-//	DUCKDB_BIN=/path/to/duckdb go test ./internal/store/
-func bin(t *testing.T) string {
-	b := os.Getenv("DUCKDB_BIN")
-	if b == "" {
-		t.Skip("set DUCKDB_BIN to the duckdb CLI to run store tests")
+// Every test uses the bundled engine, with no external CLI or skipped coverage.
+func openTestStore(t *testing.T, path string) *Store {
+	t.Helper()
+	s := New(path)
+	t.Cleanup(func() {
+		if err := s.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := s.Open(); err != nil {
+		t.Fatal(err)
 	}
-	return b
+	return s
 }
 
 const sample = `{"Records":[
@@ -30,7 +34,7 @@ func newStore(t *testing.T) *Store {
 	if err := os.WriteFile(f, []byte(sample), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := New(bin(t), filepath.Join(dir, "app.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "app.duckdb"))
 	n, err := s.Ingest(f)
 	if err != nil {
 		t.Fatalf("ingest: %v", err)
@@ -137,7 +141,7 @@ func TestIdentityFields(t *testing.T) {
 	if err := os.WriteFile(f, []byte(rec), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := New(bin(t), filepath.Join(dir, "app.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "app.duckdb"))
 	if _, err := s.Ingest(f); err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
@@ -211,7 +215,7 @@ func TestLineage(t *testing.T) {
 	if err := os.WriteFile(f, []byte(rec), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := New(bin(t), filepath.Join(dir, "app.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "app.duckdb"))
 	if _, err := s.Ingest(f); err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
@@ -268,7 +272,7 @@ func TestLineageGraph(t *testing.T) {
 	if err := os.WriteFile(f, []byte(rec), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	s := New(bin(t), filepath.Join(dir, "app.duckdb"))
+	s := openTestStore(t, filepath.Join(dir, "app.duckdb"))
 	if _, err := s.Ingest(f); err != nil {
 		t.Fatalf("ingest: %v", err)
 	}
