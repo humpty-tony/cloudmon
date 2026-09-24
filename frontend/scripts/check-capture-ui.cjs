@@ -95,6 +95,16 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     QueryLineageChildren:async(key,snap)=>{state.expansionSnapshot=snap;if(state.failExpansion)throw Error('The dataset changed; reload lineage.');return {nodes:[],edges:[],notes:['No further unambiguous child links are present.']}},
     QueryLineageEvents:async(key,snap)=>{state.expansionSnapshot=snap;return {nodes:[],edges:[],notes:[]}},
     QueryLineageRaw:async(seq,snap)=>{state.rawSnapshot=snap;return state.rawBySeq[seq] || state.raw},
+    Analyze:async(options,id)=>{
+     state.analysisCalls=(state.analysisCalls||[]).concat([options]);
+     try{
+      if(state.delayAnalysis)await new Promise((resolve,reject)=>searchJobs.set(id,{resolve,reject}));
+      if(state.failAnalysis)throw Error('The dataset changed; run analysis again');
+      const stats={events:120,errors:3,writes:40,unknownReadOnly:10,credentialIDs:2,invalidTimes:0,firstMs:Date.parse('2026-09-23T12:00:00Z'),lastMs:Date.parse('2026-09-24T00:00:00Z')};
+      const groups=[{value:'arn:aws:sts::111122223333:assumed-role/ProductionInvestigationReader/audit-session-with-a-long-identifier',current:90,previous:30,errors:2,writes:32,totalGroups:2},{value:'arn:aws:iam::111122223333:user/automation',current:30,previous:0,errors:1,writes:8,totalGroups:2}];
+      return {snapshot:options.snapshot||snapshot(),scope:{...stats,events:150,invalidTimes:2},current:stats,previous:{...stats,events:30},groups:options.entity?groups.filter(g=>g.value===options.entity.value):groups,totalGroups:options.entity?1:2,limit:50,fromMs:Date.parse('2026-09-23T00:00:00.001Z'),toMs:Date.parse('2026-09-24T00:00:00.001Z'),previousFromMs:Date.parse('2026-09-22T00:00:00.001Z'),hasWindow:true,breakdowns:{eventSource:[{value:'iam.amazonaws.com',current:90,previous:30,totalGroups:1}],eventName:[{value:'PutRolePolicy',current:90,previous:30,totalGroups:1}],sourceIPAddress:[{value:'192.0.2.1',current:90,previous:30,totalGroups:1}]},events:options.entity?state.rows.slice(0,2):[],notes:['Counts describe stored events, not unique AWS actions.','Missing evidence can explain differences; this is not a statistical anomaly detector.']};
+     }finally{searchJobs.delete(id)}
+    },
     RawBySeqs:async()=>{if(state.exportFails)throw Error('Storage unavailable');return [raw]},
     ExportEventsJSON:async(data)=>{state.exported=data;return 'selection.json'},
     GetEventEvidence:async()=>({total:3,variants:3,observations:[1,2,3].map(id=>({id,source:id===3?'/evidence/history.csv':'/evidence/CloudTrail/2026/09/24/events.json.gz',ordinal:id,format:id===3?'event-history-csv':'cloudtrail-json',lossy:id===3,sha256:String(id).repeat(64),observedAt:'2026-09-24T00:01:00Z',displayed:id===1}))}),
@@ -512,6 +522,38 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.ok(await comparison.locator('.comparison-change').count()<30,'comparison rendered every change');
   await comparison.getByRole('button',{name:'Close comparison',exact:true}).click();
   await page.getByRole('button',{name:'Clear pins',exact:true}).click();
+  assert.deepEqual(errors,[]);
+  // Manual analysis, snapshot drilldown, stale settings, raw evidence and cancellation.
+  await page.getByRole('button',{name:'Analysis',exact:true}).click();
+  await page.getByLabel('Compare previous window',{exact:true}).check();
+  await page.getByRole('button',{name:'Run analysis',exact:true}).click();
+  await page.getByText('New in compared window',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.analysisCalls.length),1,'analysis ran without a request');
+  const entity='arn:aws:sts::111122223333:assumed-role/ProductionInvestigationReader/audit-session-with-a-long-identifier';
+  await page.getByRole('button',{name:entity,exact:true}).click();
+  await page.getByRole('heading',{name:'Recent original records',exact:true}).waitFor();
+  assert.ok(await page.evaluate(()=>window.captureTest.analysisCalls.at(-1).snapshot?.generation==='fixture'));
+  await page.getByRole('button',{name:'Original record',exact:true}).first().click();
+  await page.getByRole('dialog',{name:'Raw JSON',exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.rawSnapshot.generation),'fixture');
+  await page.keyboard.press('Escape');
+  await page.getByRole('button',{name:'Back to overview',exact:true}).click();
+  await page.getByText('New in compared window',{exact:true}).waitFor();
+  await page.setViewportSize({width:960,height:720});
+  await page.screenshot({path:path.join(output,'analysis-hunts.png'),fullPage:true});
+  assert.ok(await page.locator('.analysis-view').evaluate(el=>el.scrollWidth<=el.clientWidth),'analysis content overflows');
+  await page.getByLabel('Analysis dimension',{exact:true}).selectOption('eventSource');
+  await page.getByText('Settings changed. Run analysis to apply them; the results below use the previous settings.',{exact:true}).waitFor();
+  await page.evaluate(()=>{window.captureTest.delayAnalysis=true});
+  await page.getByRole('button',{name:'Run analysis',exact:true}).click();
+  await page.getByRole('button',{name:'Cancel analysis',exact:true}).click();
+  await page.getByText('Analysis cancelled. Run again when ready.',{exact:true}).waitFor();
+  await page.evaluate(()=>{window.captureTest.delayAnalysis=false;window.captureTest.failAnalysis=true});
+  await page.getByRole('button',{name:'Run analysis',exact:true}).click();
+  await page.getByRole('alert').getByText('Error: The dataset changed; run analysis again',{exact:true}).waitFor();
+  await page.evaluate(()=>{window.captureTest.failAnalysis=false});
+  await page.getByRole('button',{name:'Run analysis',exact:true}).click();
+  await page.getByText('Service overview',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture','invalid search stays unapplied','failed search shows stale results and retries','clear resets unapplied draft'],errors}));
  } finally {await browser.close();await server.close()}

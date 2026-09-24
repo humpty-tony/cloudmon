@@ -36,6 +36,7 @@ import { DEFAULT_THEME } from "./api/themes";
 import { TitleBar } from "./components/TitleBar";
 import { LineageView } from "./components/LineageView";
 import { SigmaView } from "./components/SigmaView";
+import { AnalysisView } from "./components/AnalysisView";
 import { SettingsModal } from "./components/SettingsModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { installCrashLogging } from "./api/log";
@@ -140,7 +141,7 @@ export default function App() {
   const [help, setHelp] = useState<{ open: boolean; tab: string }>({ open: false, tab: "getting-started" });
   const [narrow, setNarrow] = useState(false);
   const [theme, setTheme] = useState<string>(() => load("theme", DEFAULT_THEME));
-  const [uiView, setUiView] = useState<"console" | "sigma">("console"); // top-level workspace
+  const [uiView, setUiView] = useState<"console" | "sigma" | "analysis">("console");
   // ---- user settings (config menu) ----
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sensitiveOverride, setSensitiveOverride] = useState<SensitiveOverride>(() => {
@@ -774,7 +775,7 @@ export default function App() {
       </div>}
       {!connected ? (
         <ConnectionScreen onConnect={connect} onRestore={restoreDataset} />
-      ) : uiView === "sigma" ? (
+      ) : uiView === "analysis" ? <AnalysisView filter={filter}/> : uiView === "sigma" ? (
         <SigmaView
           columns={columns}
           visibleCols={visibleCols}
