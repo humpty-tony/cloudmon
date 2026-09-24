@@ -93,7 +93,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
    const recovering=location.search.includes('recovery');
    const state=window.captureTest={delayIdentity:false,delayTrail:false,failTrail:false,startCalls:0,resumeCalls:0,removeCalls:0,cleanupFails:false,exportFails:false,exported:null,raw,
      aggCalls:0,aggActive:0,aggMax:0,newerCalls:0,newerActive:0,newerMax:0,delayAgg:false,delayNewer:false,searchMode:false,failSearch:false,
-     searchCalls:[],searchActive:0,searchMax:0,delaySearch:false,delayExport:false,cancelledQueries:0,exportedFilter:null,rawBySeq:{},rawCalls:0,copied:null,failRaw:false,failLineage:false,delayRawSeq:0,inspectorLoads:0,
+     searchCalls:[],searchActive:0,searchMax:0,delaySearch:false,delayExport:false,cancelledQueries:0,exportedFilter:null,rawBySeq:{},rawCalls:0,copied:null,failRaw:false,failLineage:false,delayRawSeq:0,inspectorLoads:0,snapshotCalls:[],
      rows:[{seq:1,eventID:"saved-1",eventName:"RunInstances",eventSource:"ec2.amazonaws.com",eventTime:"2026-09-24T00:00:00Z",awsRegion:"us-east-1",identityType:"IAMUser",userName:"analyst",readOnly:false,managementEvent:true}],
      recovery:{evidence:{events:recovering?1:0,observations:recovering?3:0,variantEvents:recovering?1:0,lossy:recovering?1:0},capture:recovering?{version:1,phase:'ready',config,infra}:null,captureError:'',active:false}};
    const handlers=new Map();
@@ -115,6 +115,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
    window.go={main:{App:{
     Log:async()=>{},MaximizeWindow:async()=>{},
     GetRecoveryState:async()=>structuredClone(state.recovery),
+    GetEvidenceSnapshot:async()=>{const snap=snapshot();state.snapshotCalls.push(snap);if(state.failSnapshot)throw Error('Snapshot unavailable');if(state.delaySnapshot)return new Promise(resolve=>{state.resolveSnapshot=()=>resolve(snap)});return snap},
     StartCapture:async()=>{state.startCalls++;throw Error('Unexpected provisioning')},
     ResumeCapture:async()=>{state.resumeCalls++;state.recovery.active=true;return infra},
     StopCapture:async()=>{state.recovery.active=false},
@@ -149,7 +150,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     QueryLineageGraph:async()=>{if(state.failGraph)throw Error('Graph query unavailable');return {...state.graph,snapshot:snapshot()}},
     QueryLineageChildren:async(key,snap)=>{state.expansionSnapshot=snap;if(state.failExpansion)throw Error('The dataset changed; reload lineage.');return {nodes:[],edges:[],notes:['No further unambiguous child links are present.']}},
     QueryLineageEvents:async(key,snap)=>{state.expansionSnapshot=snap;return {nodes:[],edges:[],notes:[]}},
-    QueryLineageRaw:async(seq,snap)=>{state.rawSnapshot=snap;state.rawSeq=seq;return state.rawBySeq[seq] || state.raw},
+    QueryLineageRaw:async(seq,snap)=>{state.rawSnapshot=snap;state.rawSeq=seq;return window.go.main.App.GetEventRaw(seq)},
     Analyze:async(options,id)=>{
      state.analysisCalls=(state.analysisCalls||[]).concat([options]);
      try{
@@ -189,7 +190,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
      }finally{searchJobs.delete(id)}
     },
     QueryLineageSnapshot:async(seq,snap)=>{state.lineageSnapshot=snap;return window.go.main.App.QueryLineage(seq)},
-    QueryLineageGraphSnapshot:async(seq,snap)=>{state.graphSnapshot=snap;return window.go.main.App.QueryLineageGraph(seq)},
+    QueryLineageGraphSnapshot:async(seq,snap)=>{state.graphSnapshot=snap;return {...await window.go.main.App.QueryLineageGraph(seq),snapshot:snap}},
     GetEventEvidenceSnapshot:async(seq,offset,snap)=>{state.evidenceSnapshot=snap;return window.go.main.App.GetEventEvidence(seq,offset)},
     GetObservationSnapshot:async(id,snap)=>{state.observationSnapshot=snap;return window.go.main.App.GetObservation(id)},
     RawBySeqs:async()=>{if(state.exportFails)throw Error('Storage unavailable');return [raw]},
@@ -356,9 +357,11 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await workbenchInspector.getByRole('region',{name:'Event fields',exact:true}).getByText('live-120',{exact:true}).waitFor();
   await page.clock.runFor(100);
   assert.deepEqual(await workbenchLayout(page),unselectedLayout,'Selecting an event moved the event table');
+  const selectedSnapshotCount=await page.evaluate(()=>window.captureTest.snapshotCalls.length);
   await page.locator('.row--selected').click();
   await workbenchInspector.getByRole('button',{name:'Close inspector',exact:true}).waitFor();
   assert.equal(await page.locator('.row--selected').count(),1,'Clicking the selected row closed its inspector');
+  assert.equal(await page.evaluate(()=>window.captureTest.snapshotCalls.length),selectedSnapshotCount,'Repeated selection widened the evidence snapshot');
   const workbenchParses=await page.evaluate(()=>window.captureTest.inspectorLoads);
   await workbenchTable.focus();
   await page.keyboard.press('ArrowDown');
@@ -408,18 +411,27 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.equal(await page.locator('.row--selected').count(),0,'Close inspector left a selected event');
   assert.deepEqual(await workbenchLayout(page),beforeClose,'Closing the inspector changed event-row geometry');
   await checkWorkbenchFits(page);
+  await page.locator('.row').getByText('LiveEvent120',{exact:true}).click();
+  await workbenchInspector.getByRole('tab',{name:'Fields',exact:true}).focus();
+  await page.keyboard.press('Escape');
+  await workbenchInspector.getByRole('button',{name:'Close inspector',exact:true}).waitFor({state:'hidden'});
+  assert.equal(await page.locator('.row--selected').count(),0,'Escape inside the inspector failed to clear its selection');
   await page.setViewportSize({width:1440,height:1000});
   // Invalid draft syntax must never replace an applied search. A failed engine
   // request must keep older evidence explicitly labelled until a successful retry.
   await page.goto('http://127.0.0.1:5181/?recovery');
-  await page.evaluate(()=>{window.captureTest.searchMode=true;window.captureTest.emit(2)});
+  await page.evaluate(()=>{window.captureTest.searchMode=true;window.captureTest.emit(2);window.captureTest.rawBySeq[2]='{"eventID":"live-2","eventName":"LiveEvent2"}'});
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.getByText('LiveEvent2',{exact:true}).first().waitFor();
+  await page.locator('.row').getByText('LiveEvent2',{exact:true}).click();
+  await workbenchInspector.getByRole('region',{name:'Event fields',exact:true}).getByText('live-2',{exact:true}).waitFor();
   const query=page.getByRole('textbox',{name:'Search query',exact:true});
   await query.fill('eventID="saved-1"');
   await query.press('Enter');
   await page.getByText('LiveEvent2',{exact:true}).waitFor({state:'hidden'});
   await page.getByText('RunInstances',{exact:true}).first().waitFor();
+  assert.equal(await page.locator('.row--selected').count(),0,'A successful search left its excluded event selected');
+  await workbenchInspector.getByText('Select an event',{exact:true}).waitFor();
   await page.screenshot({path:path.join(output,'search-valid.png'),fullPage:true});
   const appliedCalls=await page.evaluate(()=>window.captureTest.aggCalls);
   await query.fill('eventName~"(?=Run)"');
@@ -499,6 +511,28 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.clock.runFor(100);
   await fields.getByText('51–100 of 20,000',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.captureTest.inspectorLoads),parsedOnce,'Switching inspector tabs reparsed the original event');
+  // Scope-dependent actions cannot race ahead of a pending/failed snapshot.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.evaluate(()=>{window.captureTest.delaySnapshot=true});
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.locator('.row').getByText('RunInstances',{exact:true}).click();
+  await page.waitForFunction(()=>typeof window.captureTest.resolveSnapshot==='function');
+  for(const name of ['Sources & hashes','Investigate'])assert.ok(await workbenchInspector.getByRole('button',{name,exact:true}).isDisabled(),`${name} ran before its evidence scope was ready`);
+  assert.equal(await page.evaluate(()=>window.captureTest.rawCalls),0,'Original record loaded before its evidence cutoff');
+  await page.evaluate(()=>{window.captureTest.emit(2);window.captureTest.delaySnapshot=false;window.captureTest.resolveSnapshot()});
+  await fields.getByText('saved-1',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.rawSnapshot.maxSeq),1,'Delayed snapshot widened to later arrivals');
+  for(const name of ['Sources & hashes','Investigate'])assert.ok(await workbenchInspector.getByRole('button',{name,exact:true}).isEnabled());
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.evaluate(()=>{window.captureTest.failSnapshot=true});
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.locator('.row').getByText('RunInstances',{exact:true}).click();
+  await workbenchInspector.getByRole('button',{name:'Retry event',exact:true}).waitFor();
+  for(const name of ['Sources & hashes','Investigate'])assert.ok(await workbenchInspector.getByRole('button',{name,exact:true}).isDisabled(),`${name} escaped a failed evidence cutoff`);
+  await page.evaluate(()=>{window.captureTest.failSnapshot=false});
+  await workbenchInspector.getByRole('button',{name:'Retry event',exact:true}).click();
+  await fields.getByText('saved-1',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.snapshotCalls.length),2,'Retry did not acquire the missing evidence cutoff');
   // Late details must not replace a different event; failures have an explicit retry.
   await page.goto('http://127.0.0.1:5181/?recovery');
   await page.evaluate(()=>{
@@ -519,12 +553,15 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.equal(await fields.getByText('saved-1',{exact:true}).count(),0,'late response replaced selected evidence');
   await page.getByRole('tab',{name:'Lineage',exact:true}).click();
   await page.getByRole('button',{name:'Retry lineage',exact:true}).waitFor();
-  await page.evaluate(()=>{window.captureTest.failLineage=false});
+  const retrySnapshot=await page.evaluate(()=>({snapshot:window.captureTest.rawSnapshot,calls:window.captureTest.snapshotCalls.length}));
+  await page.evaluate(()=>{window.captureTest.failLineage=false;window.captureTest.emit(3)});
   await page.getByRole('button',{name:'Retry lineage',exact:true}).click();
   await page.getByRole('button',{name:'Retry lineage',exact:true}).waitFor({state:'hidden'});
   await page.getByRole('tab',{name:'Fields',exact:true}).click();
   await fields.getByText('second-event',{exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'Retry lineage',exact:true}).count(),0);
+  assert.deepEqual(await page.evaluate(()=>({snapshot:window.captureTest.rawSnapshot,calls:window.captureTest.snapshotCalls.length})),retrySnapshot,'Retry replaced the selected evidence snapshot after new arrivals');
+  assert.deepEqual(await page.evaluate(()=>window.captureTest.lineageSnapshot),retrySnapshot.snapshot,'Retry lineage used a different snapshot from the event');
   await page.getByRole('button',{name:'Close inspector',exact:true}).click();
   await page.evaluate(()=>{window.captureTest.failRaw=true});
   await page.locator('.row').getByText('LiveEvent2',{exact:true}).click();
@@ -570,7 +607,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   // Credential lineage supports temporary users and keeps uncertainty visible.
   await page.goto('http://127.0.0.1:5181/?recovery');
   await page.evaluate(()=>{
-    const state=window.captureTest;
+    const state=window.captureTest;state.emit(11);
     state.lineage={applicable:true,sourceIdentity:'recorded-operator',complete:true,status:'observed',reason:'Chain reaches a recorded principal; this does not verify the human operator.',nodes:[{identityType:'IAMUser',arn:'arn:aws:iam::111:user/alice',userName:'alice',accountId:'111',roleArn:'',sessionName:'',invokedBy:'',viaSeq:10,viaEvent:'GetSessionToken',viaTime:'2026-09-24T00:00:00Z',viaSourceIP:'192.0.2.1',evidence:'Exact access-key match to successful STS issuance; expiration not recorded',evidenceSeqs:[10,11]}]};
     const common={roleArn:'',roleName:'',sessionName:'',invokedBy:'',childCount:1,events:1};
     state.graph={applicable:true,rootId:'AKIAALICE',currentId:'ASIACHILD',notes:['Recorded sourceIdentity is a session attribute; identity assurance depends on the issuing policy.'],nodes:[{...common,id:'AKIAALICE',kind:'origin',identityType:'IAMUser',arn:'arn:aws:iam::111:user/alice',accountId:'111',userName:'alice',accessKeyId:'AKIAALICE'},{...common,id:'ASIACHILD',kind:'current',identityType:'IAMUser',arn:'arn:aws:iam::111:user/alice',accountId:'111',userName:'alice',accessKeyId:'ASIACHILD'}],edges:[{parent:'AKIAALICE',child:'ASIACHILD',viaSeq:10,viaEvent:'GetSessionToken',viaTime:'2026-09-24T00:00:00Z',viaIP:'192.0.2.1',evidence:'Exact access-key match; issuance precedes use; expiration not recorded',evidenceSeqs:[10,11]}]};
@@ -578,6 +615,22 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   });
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.locator('.row').getByText('RunInstances',{exact:true}).click();
+  await page.getByRole('region',{name:'Event fields',exact:true}).getByText('saved-1',{exact:true}).waitFor();
+  const investigationSnapshot=await page.evaluate(()=>window.captureTest.rawSnapshot);
+  assert.equal(investigationSnapshot.maxSeq,11);
+  assert.deepEqual(await page.evaluate(()=>window.captureTest.lineageSnapshot),investigationSnapshot,'Inline lineage used a different cutoff from the event');
+  await page.evaluate(()=>window.captureTest.emit(12));
+  await page.getByRole('button',{name:'Sources & hashes',exact:true}).click();
+  await page.getByRole('button',{name:'View source #1',exact:true}).click();
+  await page.getByRole('region',{name:'Original source record'}).getByText('9007199254740993',{exact:false}).waitFor();
+  assert.deepEqual(await page.evaluate(()=>window.captureTest.evidenceSnapshot),investigationSnapshot,'Sources widened the selected event snapshot');
+  assert.deepEqual(await page.evaluate(()=>window.captureTest.observationSnapshot),investigationSnapshot,'Original source used a different snapshot');
+  await page.getByRole('button',{name:'Close source evidence',exact:true}).click();
+  await page.getByRole('button',{name:'Investigate',exact:true}).click();
+  const selectedInvestigation=page.getByRole('dialog',{name:'Event investigation',exact:true});
+  await selectedInvestigation.getByText('11 events',{exact:true}).waitFor();
+  assert.deepEqual(await page.evaluate(()=>window.captureTest.investigationCalls.at(-1).snapshot),investigationSnapshot,'Investigate included arrivals after selection');
+  await selectedInvestigation.getByRole('button',{name:'Close investigation',exact:true}).click();
   await page.getByRole('tab',{name:'Lineage',exact:true}).click();
   await page.getByText('principal observed',{exact:true}).waitFor();
   await page.getByRole('button',{name:'⤢ View full lineage',exact:true}).click();
@@ -586,6 +639,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('button',{name:'Reload lineage',exact:true}).click();
   await page.locator('.lgv-canvas .lgv-g').first().waitFor();
   assert.equal(await page.locator('.lgv-canvas .lgv-g').count(),2);
+  assert.deepEqual(await page.evaluate(()=>window.captureTest.graphSnapshot),investigationSnapshot,'Full lineage widened the selected event snapshot');
   await page.clock.runFor(100);
   const graphViewport=page.locator('.lgv-canvas > g');
   const centeredTransform=await graphViewport.getAttribute('transform');
@@ -626,7 +680,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.equal(await lineageOriginal.locator('pre').textContent(),await page.evaluate(()=>window.captureTest.rawBySeq[10]),'lineage original changed source bytes');
   await lineageOriginal.getByRole('button',{name:'⧉ Copy',exact:true}).click();
   assert.equal(await page.evaluate(()=>window.captureTest.copied),await page.evaluate(()=>window.captureTest.rawBySeq[10]),'lineage copy changed the exact number or original source');
-  assert.equal(await page.evaluate(()=>window.captureTest.rawSnapshot.generation),'fixture');
+  assert.deepEqual(await page.evaluate(()=>window.captureTest.rawSnapshot),investigationSnapshot,'Lineage source viewing widened the selected snapshot');
   await page.keyboard.press('Escape');
   await lineageOriginal.waitFor({state:'hidden'});
   await lineageEvent.waitFor({state:'visible'});
@@ -638,7 +692,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.evaluate(()=>{window.captureTest.failExpansion=true});
   await page.getByRole('button',{name:'Expand 1 issued key',exact:true}).click();
   await page.locator('.lgv-error').getByText('The dataset changed; reload lineage.',{exact:false}).waitFor();
-  assert.equal(await page.evaluate(()=>window.captureTest.expansionSnapshot.generation),'fixture');
+  assert.deepEqual(await page.evaluate(()=>window.captureTest.expansionSnapshot),investigationSnapshot,'Lineage expansion widened the selected snapshot');
   await page.evaluate(()=>{window.captureTest.failExpansion=false});
   await page.getByRole('button',{name:'Expand 1 issued key',exact:true}).click();
   await page.getByText('No further unambiguous child links are present.',{exact:true}).waitFor();
