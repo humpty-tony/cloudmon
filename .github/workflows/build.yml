@@ -53,18 +53,17 @@ jobs:
       - name: Windows C compiler for embedded DuckDB
         if: runner.os == 'Windows'
         shell: pwsh
+        # Use the runner's coherent MinGW-w64 toolchain, as duckdb-go's own CI does.
+        # Installing only current UCRT64 packages pulled in a linker that crashed.
         run: |
-          $compiler = 'C:\msys64\ucrt64\bin\gcc.exe'
-          if (-not (Test-Path $compiler)) {
-            & C:\msys64\usr\bin\bash.exe -lc 'pacman -S --noconfirm --needed mingw-w64-ucrt-x86_64-gcc'
-            if ($LASTEXITCODE -ne 0) { throw 'UCRT64 compiler installation failed' }
-          }
-          'C:\msys64\ucrt64\bin' >> $env:GITHUB_PATH
+          $compiler = (Get-Command gcc -ErrorAction Stop).Source
           'CGO_ENABLED=1' >> $env:GITHUB_ENV
           'CC=gcc' >> $env:GITHUB_ENV
           'CXX=g++' >> $env:GITHUB_ENV
+          Write-Output $compiler
           & $compiler --version
-          & C:\msys64\ucrt64\bin\ld.exe --version
+          $linker = & $compiler '-print-prog-name=ld'
+          & $linker --version
       - name: Install frontend
         working-directory: frontend
         run: npm ci

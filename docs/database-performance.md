@@ -92,7 +92,7 @@ this PR. The durability boundary established in PR #2 remains in place. See
 ## Build and operational limits
 
 Building now requires CGO and a compatible native C/C++ toolchain on each target
-OS. Windows uses MSYS2 UCRT64 GCC. The application includes DuckDB's static library;
+OS. Windows CI uses the runner's MinGW-w64 GCC toolchain, matching the driver's CI. The application includes DuckDB's static library;
 end users do not need to install a database engine. See the README for build steps.
 
 A native engine failure now shares the application's process. Transactional

@@ -65,7 +65,7 @@ CloudMon is built with Wails. Supported targets are **windows/amd64**, **linux/a
 - Node.js 18+ and npm
 - Wails CLI v2: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
 - Linux only: GTK and WebKit2GTK dev packages, via `make deps` (or `sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev`)
-- A C/C++ compiler for the embedded DuckDB library: GCC on Linux, Xcode command-line tools on macOS, or MSYS2 UCRT64 GCC on Windows. CGO must be enabled.
+- A C/C++ compiler for the embedded DuckDB library: GCC on Linux, Xcode command-line tools on macOS, or MinGW-w64 GCC on Windows. CGO must be enabled.
 
 `wails doctor` verifies the toolchain.
 
@@ -75,7 +75,7 @@ The Go module pins the DuckDB Go driver and its prebuilt static libraries. Go
 fetches them during the build; the old CLI download step is no longer needed.
 Build on the target OS (cross-compiling now requires a compatible C cross-compiler).
 
-- **Windows**: install [MSYS2 UCRT64 GCC](https://duckdb.org/docs/current/clients/go/troubleshoot), add `C:\msys64\ucrt64\bin` to `PATH`, and set `CGO_ENABLED=1`:
+- **Windows**: install a compatible [MinGW-w64 GCC toolchain](https://duckdb.org/docs/current/clients/go/troubleshoot), add `C:\msys64\ucrt64\bin` to `PATH`, and set `CGO_ENABLED=1`:
   ```powershell
   $env:CGO_ENABLED = '1'
   $env:PATH = "C:\msys64\ucrt64\bin;$env:PATH"
