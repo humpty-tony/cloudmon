@@ -126,3 +126,14 @@ func TestAppendEventsDedupesByEventID(t *testing.T) {
 		t.Fatalf("rows for dup1 = %+v, want exactly 1", rows)
 	}
 }
+
+func TestAppendRejectsInvalidBatchWithoutPartialInsert(t *testing.T) {
+	s := newStore(t)
+	good := liveEvent(t, `{"eventID":"pending","eventName":"AssumeRole","eventTime":"2026-09-24T00:00:00Z"}`)
+	if _, err := s.AppendEvents([]model.CloudTrailEvent{good, {EventID: "broken", RawJSON: `{"invalid"`}}); err == nil {
+		t.Fatal("invalid batch reported a successful commit")
+	}
+	if n, err := s.Count(); err != nil || n != 3 {
+		t.Fatalf("partial insert: count=%d err=%v", n, err)
+	}
+}

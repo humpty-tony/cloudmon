@@ -79,3 +79,20 @@ func TestCheckTrailUsesHomeRegionAndReportsUnknownSelectors(t *testing.T) {
 		}
 	}
 }
+
+func TestTeardownSurfacesPartialTargetFailure(t *testing.T) {
+	cfg := aws.Config{Region: "us-east-1", Credentials: aws.CredentialsProviderFunc(func(context.Context) (aws.Credentials, error) {
+		return aws.Credentials{AccessKeyID: "test", SecretAccessKey: "test"}, nil
+	})}
+	cfg.HTTPClient = trailHTTP(func(req *http.Request) (*http.Response, error) {
+		body := "{}"
+		if strings.HasSuffix(req.Header.Get("X-Amz-Target"), "RemoveTargets") {
+			body = `{"FailedEntryCount":1,"FailedEntries":[{"TargetId":"cloudmon-queue","ErrorCode":"ConcurrentModificationException","ErrorMessage":"retry"}]}`
+		}
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": []string{"application/x-amz-json-1.1"}}, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})
+	err := Teardown(context.Background(), cfg, Infra{Owned: true, RuleName: "owned-rule"})
+	if err == nil || !strings.Contains(err.Error(), "events:RemoveTargets") {
+		t.Fatalf("partial failure was swallowed: %v", err)
+	}
+}

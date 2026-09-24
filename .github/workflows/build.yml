@@ -68,6 +68,20 @@ jobs:
       - name: Frontend production build
         working-directory: frontend
         run: npm run build
+      - name: Capture setup browser check
+        if: runner.os == 'Linux'
+        working-directory: frontend
+        run: |
+          npx playwright install --with-deps chromium --only-shell
+          npm run check:capture-ui
+      - name: Upload capture UI screenshots
+        if: runner.os == 'Linux' && !cancelled()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: capture-ui
+          path: frontend/test-results/capture/*.png
+          if-no-files-found: warn
+          retention-days: 7
       - name: Install Wails
         run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0
       - name: Build desktop application

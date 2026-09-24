@@ -73,14 +73,9 @@ const selectCols = "\n  " + seqExpr + " AS seq," + eventCols
 
 const maxObj = "1073741824" // 1 GiB max single JSON object (a whole Records file counts as one object)
 
-// run executes SQL against the on-disk DB. readonly opens the DB read-only, which
-// DuckDB allows many processes to do concurrently (write opens take an exclusive
-// lock - so all queries MUST be read-only or they collide). hideWindow suppresses
-// the console window each subprocess would otherwise pop up on Windows.
-// run executes SQL, retrying briefly on a DuckDB file-lock conflict. Because each
-// call is its own subprocess, the live-capture writer (a brief exclusive-lock write)
-// and the read-only query subprocesses can momentarily collide; a bounded backoff
-// lets whichever lost the race succeed on a retry instead of surfacing an error.
+// run serializes CLI processes so readers and writers cannot contend for this
+// Store's database lock. Brief retries still tolerate locks from other processes.
+// Each subprocess has a deadline; hideWindow avoids console popups on Windows.
 func (s *Store) run(jsonOut, readonly bool, sql string) ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

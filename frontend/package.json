@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "check:capture-ui": "node scripts/check-capture-ui.cjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",
@@ -27,6 +28,7 @@
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^5.0.0",
+    "playwright": "1.63.0",
     "typescript": "^5.6.3",
     "vite": "^7.0.0"
   }
