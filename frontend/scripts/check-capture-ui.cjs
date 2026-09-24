@@ -94,7 +94,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     QueryLineageGraph:async()=>{if(state.failGraph)throw Error('Graph query unavailable');return {...state.graph,snapshot:snapshot()}},
     QueryLineageChildren:async(key,snap)=>{state.expansionSnapshot=snap;if(state.failExpansion)throw Error('The dataset changed; reload lineage.');return {nodes:[],edges:[],notes:['No further unambiguous child links are present.']}},
     QueryLineageEvents:async(key,snap)=>{state.expansionSnapshot=snap;return {nodes:[],edges:[],notes:[]}},
-    QueryLineageRaw:async(seq,snap)=>{state.rawSnapshot=snap;return state.rawBySeq[seq] || state.raw},
+    QueryLineageRaw:async(seq,snap)=>{state.rawSnapshot=snap;state.rawSeq=seq;return state.rawBySeq[seq] || state.raw},
     Analyze:async(options,id)=>{
      state.analysisCalls=(state.analysisCalls||[]).concat([options]);
      try{
@@ -110,8 +110,11 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
      try{
       if(state.delayHunt)await new Promise((resolve,reject)=>searchJobs.set(id,{resolve,reject}));
       if(state.failHunt)throw Error('Indicator 2 has an invalid IP address');
-      const first=state.rows[0],second={...state.rows[1],eventTime:'2026-09-24T00:01:00Z'};
-      return {snapshot:snapshot(),scanned:900,total:options.mode==='sequence'?1:600,limit:500,invalidTimes:2,missingPrincipal:3,indicators:options.indicators.map(indicator=>({...indicator,matches:600})),matches:options.mode==='indicators'?Array.from({length:500},(_,i)=>({event:{...first,seq:first.seq+i,eventID:i===0?first.eventID:`indicator-${i}`,identityArn:'arn:aws:sts::111122223333:assumed-role/Investigator/session'},indicators:[0,1]})):[],pairs:options.mode==='sequence'?[{first,second,deltaMs:60000,tiedFirst:2}]:[],notes:['Counts can overlap across indicators.','Pairs show temporal proximity for recorded identifiers, not causation.']};
+      const first=state.rows[0],stepCount=options.steps?.length||2;
+      const sequenceEvents=Array.from({length:stepCount},(_,i)=>({...((state.rows[i])||first),eventTime:new Date(Date.parse(first.eventTime)+i*60000).toISOString()}));
+      const tiedCandidates=sequenceEvents.map((_,i)=>i===0?2:i===2&&i<stepCount-1?3:1);
+      const snap=snapshot();state.lastHuntSnapshot=snap;
+      return {snapshot:snap,scanned:900,total:options.mode==='sequence'?1:600,limit:500,invalidTimes:2,missingPrincipal:3,missingCredential:4,indicators:options.indicators.map(indicator=>({...indicator,matches:600})),matches:options.mode==='indicators'?Array.from({length:500},(_,i)=>({event:{...first,seq:first.seq+i,eventID:i===0?first.eventID:`indicator-${i}`,identityArn:'arn:aws:sts::111122223333:assumed-role/Investigator/session'},indicators:[0,1]})):[],sequences:options.mode==='sequence'?[{events:sequenceEvents,deltaMs:(stepCount-1)*60000,tiedCandidates}]:[],pairs:options.mode==='sequence'&&stepCount===2?[{first:sequenceEvents[0],second:sequenceEvents[1],deltaMs:60000,tiedFirst:2}]:[],notes:['Counts can overlap across indicators.','Sequences show temporal proximity for recorded identifiers, not causation.']};
      }finally{searchJobs.delete(id)}
     },
     SigmaRunRequest:async(yaml,id)=>{
@@ -660,8 +663,8 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByLabel('Step B search',{exact:true}).fill('eventName="PutRolePolicy"');
   await page.getByText('Inputs changed. Results below use the previous hunt; run again to apply changes.',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Run hunt',exact:true}).click();
-  await page.getByText('1 event pairs · 900 events in scope',{exact:true}).waitFor();
-  await page.getByText('2 A candidates share this timestamp; a representative is shown.',{exact:true}).waitFor();
+  await page.getByText('1 sequence · 900 events in scope',{exact:true}).waitFor();
+  await page.getByText('2 candidates for step A share the selected timestamp; a representative is shown.',{exact:true}).waitFor();
   await page.getByRole('button',{name:'Original B',exact:true}).click();
   await page.getByRole('dialog',{name:'Raw JSON',exact:true}).waitFor();await page.keyboard.press('Escape');
   await page.locator('.hunt-view').evaluate(el=>{el.scrollTop=0});
@@ -853,6 +856,95 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.waitForFunction(()=>JSON.parse(localStorage.getItem('cloudmon.savedHunts')).items.length===0);
   assert.equal(await page.getByLabel('Saved hunt',{exact:true}).locator('option',{hasText:'Production network review'}).count(),0);
   assert.equal(await page.evaluate(()=>window.captureTest.huntCalls.length),4,'saved-hunt management triggered an extra run');
+  // Ordered hunts retain every step, including saved five-step configurations.
+  // Real matching/order semantics are covered by store tests; this exercises the UI contract.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  const orderedNames=['CreateAccessKey','AttachUserPolicy','ListBuckets','GetObject','DeleteAccessKey'];
+  const orderedQueries=orderedNames.map(name=>`eventName="${name}"`);
+  const seedOrderedEvents=()=>page.evaluate(names=>{
+    const state=window.captureTest,template=state.rows[0];
+    state.rows=names.map((eventName,i)=>({...template,seq:i+1,eventID:`sequence-${i+1}`,eventName,eventTime:new Date(Date.parse('2026-09-24T00:00:00Z')+i*60000).toISOString(),identityArn:'arn:aws:iam::111122223333:user/investigator',accessKeyId:'AKIASEQUENCEFIXTURE'}));
+    for(const row of state.rows)state.rawBySeq[row.seq]=JSON.stringify({eventID:row.eventID,eventName:row.eventName,eventTime:row.eventTime});
+    state.recovery.evidence.events=state.rows.length;
+  },orderedNames);
+  await seedOrderedEvents();
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.getByRole('button',{name:'Hunts',exact:true}).click();
+  await page.getByLabel('Hunt type',{exact:true}).selectOption('sequence');
+  for(const label of ['A','B'])assert.ok(await page.getByRole('button',{name:`Remove step ${label}`,exact:true}).isDisabled(),'the minimum sequence can lose a step');
+  await page.getByLabel('Step A search',{exact:true}).fill(orderedQueries[0]);
+  await page.getByLabel('Step B search',{exact:true}).fill(orderedQueries[1]);
+  await page.getByRole('button',{name:'Add step',exact:true}).click();
+  await page.getByLabel('Step C search',{exact:true}).fill(orderedQueries[2]);
+  await page.getByLabel('Sequence interval',{exact:true}).selectOption('5');
+  assert.ok((await page.getByLabel('Sequence interval',{exact:true}).locator('..').textContent()).startsWith('Complete sequence within'),'interval does not explain that it spans the complete sequence');
+  await page.getByRole('button',{name:'Run hunt',exact:true}).click();
+  await page.getByText('1 sequence · 900 events in scope',{exact:true}).waitFor();
+  let orderedRequest=await page.evaluate(()=>window.captureTest.huntCalls.at(-1));
+  assert.deepEqual(orderedRequest.steps.map(step=>step.value),orderedNames.slice(0,3),'request changed the order of sequence steps');
+  assert.equal(orderedRequest.first,null);assert.equal(orderedRequest.second,null);
+  assert.equal(orderedRequest.minutes,5);assert.equal(orderedRequest.group,'credential');
+  assert.equal(await page.locator('.hunt-detail section').count(),3,'three-step result lost a detail record');
+  for(let i=3;i<5;i++){
+    await page.getByRole('button',{name:'Add step',exact:true}).click();
+    await page.getByLabel(`Step ${String.fromCharCode(65+i)} search`,{exact:true}).fill(orderedQueries[i]);
+  }
+  assert.ok(await page.getByRole('button',{name:'Add step',exact:true}).isDisabled(),'sequence exceeded the five-step bound');
+  await page.getByText('Inputs changed. Results below use the previous hunt; run again to apply changes.',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Remove step C',exact:true}).click();
+  assert.equal(await page.getByLabel('Step C search',{exact:true}).inputValue(),orderedQueries[3],'removing a step reordered the remaining steps');
+  assert.equal(await page.getByLabel('Step D search',{exact:true}).inputValue(),orderedQueries[4]);
+  assert.equal(await page.getByLabel('Step E search',{exact:true}).count(),0);
+  await page.getByRole('button',{name:'Add step',exact:true}).click();
+  for(let i=2;i<5;i++)await page.getByLabel(`Step ${String.fromCharCode(65+i)} search`,{exact:true}).fill(orderedQueries[i]);
+  await page.locator('summary').filter({hasText:/^Saved hunts \(0\)$/}).click();
+  await page.getByLabel('Hunt name',{exact:true}).fill('Five-step credential review');
+  await page.getByRole('button',{name:'Save new hunt',exact:true}).click();
+  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('cloudmon.savedHunts')).items.length===1);
+  const orderedSaved=await page.evaluate(()=>JSON.parse(localStorage.getItem('cloudmon.savedHunts')).items[0]);
+  assert.deepEqual(orderedSaved.config.steps,orderedQueries,'saving truncated a longer sequence');
+  await page.reload();
+  await seedOrderedEvents();
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.getByRole('button',{name:'Hunts',exact:true}).click();
+  await page.locator('summary').filter({hasText:/^Saved hunts \(1\)$/}).click();
+  await page.getByLabel('Saved hunt',{exact:true}).selectOption(orderedSaved.id);
+  await page.getByRole('button',{name:'Load hunt',exact:true}).click();
+  for(let i=0;i<5;i++)assert.equal(await page.getByLabel(`Step ${String.fromCharCode(65+i)} search`,{exact:true}).inputValue(),orderedQueries[i],'loading changed a saved sequence step');
+  assert.equal(await page.getByLabel('Sequence interval',{exact:true}).inputValue(),'5');
+  assert.equal(await page.evaluate(()=>window.captureTest.huntCalls?.length||0),0,'loading a longer sequence ran it');
+  await page.locator('summary').filter({hasText:/^Saved hunts \(1\)$/}).click();
+  await page.getByRole('button',{name:'Run hunt',exact:true}).click();
+  await page.getByText('1 sequence · 900 events in scope',{exact:true}).waitFor();
+  assert.equal(await page.locator('.hunt-detail section').count(),5,'five-step result lost intermediate detail records');
+  await page.getByText('3 candidates for step C share the selected timestamp; a representative is shown.',{exact:true}).waitFor();
+  orderedRequest=await page.evaluate(()=>window.captureTest.huntCalls.at(-1));
+  assert.deepEqual(orderedRequest.steps.map(step=>step.value),orderedNames,'saved sequence request lost or reordered steps');
+  const orderedSnapshot=await page.evaluate(()=>window.captureTest.lastHuntSnapshot);
+  assert.equal(orderedSnapshot.maxSeq,5);
+  await page.evaluate(()=>window.captureTest.emit(6));
+  // Each original and investigation stays on the returned snapshot after new evidence arrives.
+  for(let i=0;i<5;i++){
+    const letter=String.fromCharCode(65+i);
+    await page.getByRole('button',{name:`Original ${letter}`,exact:true}).click();
+    await page.getByRole('dialog',{name:'Raw JSON',exact:true}).waitFor();
+    assert.equal(await page.evaluate(()=>window.captureTest.rawSeq),i+1);
+    assert.deepEqual(await page.evaluate(()=>window.captureTest.rawSnapshot),orderedSnapshot,`original ${letter} used live evidence`);
+    await page.keyboard.press('Escape');
+    await page.getByRole('button',{name:`Investigate ${letter}`,exact:true}).click();
+    await page.getByRole('dialog',{name:'Event investigation',exact:true}).waitFor();
+    await page.waitForFunction(seq=>window.captureTest.investigationCalls?.at(-1)?.seq===seq,i+1);
+    const investigationRequest=await page.evaluate(()=>window.captureTest.investigationCalls.at(-1));
+    assert.deepEqual(investigationRequest.snapshot,orderedSnapshot,`investigation ${letter} used live evidence`);
+    await page.getByRole('button',{name:'Close investigation',exact:true}).click();
+  }
+  await page.setViewportSize({width:960,height:1200});
+  await page.locator('.hunt-view').evaluate(el=>el.scrollTop=0);
+  await page.locator('.hunt-detail').evaluate(el=>el.scrollTop=0);
+  await page.screenshot({path:path.join(output,'ordered-sequences.png'),fullPage:true});
+  assert.ok(await page.locator('.hunt-view').evaluate(el=>el.scrollWidth<=el.clientWidth),'five-step hunt spills at minimum width');
+  assert.ok(await page.locator('.hunt-detail').evaluate(el=>el.scrollWidth<=el.clientWidth),'sequence details spill at minimum width');
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'sequence page has horizontal overflow');
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture','invalid search stays unapplied','failed search shows stale results and retries','clear resets unapplied draft'],errors}));
  } finally {await browser.close();await server.close()}

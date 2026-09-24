@@ -20,15 +20,19 @@ Key IDs and event IDs match the recorded string exactly; accepting an identifier
 
 ## Ordered events
 
-Write an ordinary CloudMon search expression for A and B. Both are required and use the console's field/operator validation. Choose a 1–1440 minute interval and group by either the same recorded principal ARN or the same access-key ID **and** principal ARN. Empty grouping identifiers cannot link unrelated events.
+Write two to five ordinary CloudMon search expressions, one for each step A–E. Use **Add step** or **Remove** to edit the sequence. Every active step must pass the console's field/operator validation. Choose a 1–1440 minute **Complete sequence within** interval and group by either the same recorded principal ARN or the same access-key ID **and** principal ARN. Empty grouping identifiers cannot link unrelated events.
 
-Each B returns at most one pair: its closest strictly earlier matching A inside the interval. This avoids a quadratic list of every possible pair. All counts describe that pairing rule, not arbitrary combinations. The query uses a native [ASOF join](https://duckdb.org/docs/current/sql/query_syntax/from#as-of-joins).
+Each final event returns at most one completed sequence. At each stage, choose the closest strictly earlier **completed prefix**, retaining its original start time. The interval applies to **last time minus first time**, inclusively; it does not reset at each step. A recent intermediate event without a valid earlier prefix cannot hide a valid completed prefix. This avoids enumerating every possible combination. Counts describe this representative-sequence rule, not arbitrary combinations. Native [ASOF joins](https://duckdb.org/docs/current/guides/sql_features/asof_join) carry compact sequence IDs; full event summaries are loaded after the 500-result cap.
 
-Sequence ordering uses event timestamps at millisecond resolution, never ingestion order. Equal A/B timestamps do not establish order and are excluded. If several A records share the chosen timestamp, the result reports the candidate count and displays the highest-sequence representative; that tie-break does not imply a causal order. Invalid timestamps and missing grouping identifiers are excluded. Relationships are investigative context, not proof of causation, a verified session or malicious intent.
+Sequence ordering uses event timestamps at millisecond resolution, never ingestion order. Equal adjacent timestamps do not establish order and are excluded, even if expressions overlap. If several initial or intermediate records share the selected timestamp, the result reports that step's candidate count and displays the highest-sequence representative. That tie-break does not imply a causal order. Final events remain separate results even when their timestamps tie. Invalid timestamps and missing grouping identifiers are excluded, with their scoped counts shown.
+
+AWS defines `eventTime` as request completion time from the service endpoint's clock, and CloudTrail delivery is not an ordered activity trace. A recorded access key can be absent or empty. These hunts use only observed grouping values: they do not infer credential issuance from an AssumeRole caller or prove causation, verified session membership or malicious intent.
+
+Inspect every step in the details pane using **Original A–E** or **Investigate A–E**. [Saved hunts](saved-hunts.md) retain all two to five expressions without a schema migration. See [ordered sequence examples and limits](ordered-sequences.md).
 
 ## Snapshot and display limits
 
-Counts, indicator summaries and returned events use one read snapshot. Results cap at 500 with full totals, and the list is virtualized. Original-record viewing and subsequent investigation carry the same snapshot; a replaced dataset is rejected. Notes identify extraction limits and gaps that can hide matches. This two-step search is not an implementation of Sigma correlation YAML.
+Counts, indicator summaries and returned events use one read snapshot. Results cap at 500 with full totals, and the list is virtualized. Original-record viewing and subsequent investigation carry the same snapshot; a replaced dataset is rejected. Notes identify extraction limits and gaps that can hide matches. Ordered sequences do not implement Sigma correlation YAML or per-step gap constraints.
 
 AWS references: [CloudTrail event ordering and coverage](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-events.html), [record fields and resource ARNs](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-event-reference-record-contents.html), and [recorded identity fields](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-event-reference-user-identity.html).
 
