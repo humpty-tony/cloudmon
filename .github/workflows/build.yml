@@ -74,13 +74,13 @@ jobs:
         run: wails build -platform "${{ matrix.platform }}" -tags "${{ matrix.tags }}"
       - name: Check macOS universal executable
         if: runner.os == 'macOS'
-        run: lipo -verify_arch x86_64 arm64 build/bin/cloudmon.app/Contents/MacOS/cloudmon
+        run: lipo build/bin/cloudmon.app/Contents/MacOS/cloudmon -verify_arch x86_64 arm64
       - name: Package desktop artifact
         # Preserve executable permissions and app-bundle symlinks inside the archive.
-        run: tar -czf "$RUNNER_TEMP/cloudmon-${{ runner.os }}.tar.gz" -C build/bin .
+        run: tar -czf "cloudmon-${{ runner.os }}.tar.gz" -C build/bin .
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: cloudmon-${{ runner.os }}
-          path: ${{ runner.temp }}/cloudmon-${{ runner.os }}.tar.gz
+          path: cloudmon-${{ runner.os }}.tar.gz
           if-no-files-found: error
           retention-days: 7
