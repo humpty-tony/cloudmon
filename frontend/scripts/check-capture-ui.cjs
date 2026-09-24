@@ -490,7 +490,12 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.clock.runFor(50);
   const draggedTransform=await graphViewport.getAttribute('transform');
   assert.notEqual(draggedTransform,centeredTransform,'background dragging did not move the graph');
+  // Playwright's mouse.wheel returns after dispatch, before the browser has
+  // necessarily delivered the event. Advance the test clock after delivery so
+  // the viewport's requestAnimationFrame is actually pending.
+  await page.evaluate(()=>{window.graphWheelDelivered=new Promise(resolve=>document.querySelector('.lgv-canvas').addEventListener('wheel',()=>resolve(),{once:true}))});
   await page.mouse.wheel(0,-200);
+  await page.evaluate(()=>window.graphWheelDelivered);
   await page.clock.runFor(100);
   assert.notEqual(await graphViewport.getAttribute('transform'),draggedTransform,'wheel zoom did not update the graph');
   await page.screenshot({path:path.join(output,'lineage-graph.png'),fullPage:true});
