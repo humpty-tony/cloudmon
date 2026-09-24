@@ -72,6 +72,10 @@ func (s *Store) Investigate(parent context.Context, options InvestigationOptions
 
 // investigateOn also lets exports read the context and its evidence in one transaction.
 func investigateOn(ctx context.Context, tx *sql.Tx, options InvestigationOptions) (Investigation, error) {
+	return investigateUsing(ctx, tx, options, func(q string, dst any) error { return queryJSONOn(ctx, tx, q, dst) })
+}
+
+func investigateUsing(ctx context.Context, tx *sql.Tx, options InvestigationOptions, query func(string, any) error) (Investigation, error) {
 	result := Investigation{Resources: []ResourceReference{}, Events: []InvestigationEvent{}, Notes: []string{}, Limit: investigationLimit}
 	if options.Minutes == 0 {
 		options.Minutes = 5
@@ -95,7 +99,6 @@ func investigateOn(ctx context.Context, tx *sql.Tx, options InvestigationOptions
 		if err != nil {
 			return err
 		}
-		query := func(q string, dst any) error { return queryJSONOn(ctx, tx, q, dst) }
 		var seeds []struct {
 			Row
 			AccessKeyID string `json:"accessKeyId"`

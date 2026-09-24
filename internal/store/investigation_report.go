@@ -2,6 +2,7 @@ package store
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -17,6 +18,7 @@ import (
 
 const investigationReportObservationLimit = 10_000
 const investigationReportByteLimit int64 = 128 << 20
+const investigationReportMetadataLimit int64 = 8 << 20
 
 //go:embed templates/investigation_report.html
 var investigationReportHTML string
@@ -84,7 +86,7 @@ func (s *Store) ExportInvestigation(parent context.Context, options Investigatio
 		options.Relation = "all"
 	}
 	err := s.readSnapshot(parent, func(ctx context.Context, tx *sql.Tx) error {
-		investigation, err := investigateOn(ctx, tx, options)
+		investigation, err := investigateUsing(ctx, tx, options, boundedReportQuery(ctx, tx))
 		if err != nil {
 			return err
 		}
@@ -96,6 +98,7 @@ func (s *Store) ExportInvestigation(parent context.Context, options Investigatio
 			Notes: []string{
 				"Event membership uses the displayed snapshot. Source observations were collected at export time in the same read transaction as this report.",
 				"Only the retained investigation events are included, up to 500 closest matches. This is not a complete dataset export.",
+				"Up to 100 anchor resource references and five matching resource ARNs per event are listed. Correlation considers all recorded resource ARNs in the context window.",
 				"Event summaries are derived projections; original JSON entries preserve exact numeric tokens and missing-field semantics. Correlations use each event's displayed record, not alternate source variants.",
 				"SHA-256 identifies the retained bytes. It does not verify CloudTrail signatures or authenticate their source.",
 				"JSON sources preserve the retained event object, not its surrounding delivery envelope. CSV sources preserve the retained header and row; their queryable event JSON is a lossy projection.",
@@ -116,15 +119,18 @@ func (s *Store) ExportInvestigation(parent context.Context, options Investigatio
 		where := "e.seq IN (" + strings.Join(seqs, ",") + ")"
 		observations := " FROM observations o JOIN events e ON e.eventKey=o.eventKey WHERE " + where + " AND o.id<=" + strconv.FormatInt(report.ObservationSnapshot.MaxID, 10)
 		var sourceCount int
-		var eventBytes, sourceBytes int64
+		var eventBytes, sourceBytes, sourceMetadataBytes int64
 		if err := tx.QueryRowContext(ctx, "SELECT coalesce(sum(octet_length(encode(e.raw))),0) FROM events e WHERE "+where).Scan(&eventBytes); err != nil {
 			return err
 		}
-		if err := tx.QueryRowContext(ctx, "SELECT count(*),coalesce(sum(octet_length(encode(o.original))+octet_length(encode(o.source))),0)"+observations).Scan(&sourceCount, &sourceBytes); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT count(*),coalesce(sum(octet_length(encode(o.original))),0),coalesce(sum(6*(octet_length(encode(o.source))+octet_length(encode(o.format))+octet_length(encode(o.observedAt))+octet_length(encode(o.sha256)))+512),0)"+observations).Scan(&sourceCount, &sourceBytes, &sourceMetadataBytes); err != nil {
 			return err
 		}
 		if sourceCount > investigationReportObservationLimit {
 			return fmt.Errorf("report exceeds %d source observations; narrow the investigation window or relationship", investigationReportObservationLimit)
+		}
+		if sourceMetadataBytes > investigationReportMetadataLimit {
+			return reportMetadataError()
 		}
 		if eventBytes > investigationReportByteLimit || sourceBytes > investigationReportByteLimit-eventBytes {
 			return reportSizeError()
@@ -163,7 +169,7 @@ func (s *Store) ExportInvestigation(parent context.Context, options Investigatio
 		if len(report.Evidence) != len(seqs) {
 			return fmt.Errorf("a retained event is unavailable; report cancelled")
 		}
-		rows, err = tx.QueryContext(ctx, "SELECT e.seq,o.id,o.sha256,o.source,o.ordinal,o.format,o.lossy,o.observedAt,o.sha256=e.evidenceHash,o.original"+observations+" ORDER BY e.seq,o.id")
+		rows, err = tx.QueryContext(ctx, "SELECT e.seq,o.id,o.sha256,o.source,o.ordinal,o.format,o.lossy,o.observedAt,o.sha256=e.evidenceHash,o.raw=e.raw,o.original"+observations+" ORDER BY e.seq,o.id")
 		if err != nil {
 			return err
 		}
@@ -172,9 +178,14 @@ func (s *Store) ExportInvestigation(parent context.Context, options Investigatio
 			var seq int64
 			var source reportSource
 			var original string
-			if err := rows.Scan(&seq, &source.ID, &source.SHA256, &source.Source, &source.Ordinal, &source.Format, &source.Lossy, &source.ObservedAt, &source.Displayed, &original); err != nil {
+			var sameDisplayedRaw bool
+			if err := rows.Scan(&seq, &source.ID, &source.SHA256, &source.Source, &source.Ordinal, &source.Format, &source.Lossy, &source.ObservedAt, &source.Displayed, &sameDisplayedRaw, &original); err != nil {
 				rows.Close()
 				return err
+			}
+			if source.Displayed && !sameDisplayedRaw {
+				rows.Close()
+				return fmt.Errorf("event %d differs from its displayed source projection; report cancelled", seq)
 			}
 			if fmt.Sprintf("%x", sha256.Sum256([]byte(original))) != source.SHA256 {
 				rows.Close()
@@ -212,9 +223,7 @@ func (s *Store) ExportInvestigation(parent context.Context, options Investigatio
 			report.Evidence[i].Variants = len(variants)
 		}
 		if err := archive.entry("manifest.json", func(w io.Writer) error {
-			encoder := json.NewEncoder(w)
-			encoder.SetIndent("", "  ")
-			return encoder.Encode(report)
+			return writeReportManifest(w, report)
 		}); err != nil {
 			return err
 		}
@@ -255,6 +264,125 @@ func closeReportRows(rows *sql.Rows) error {
 		err = closeErr
 	}
 	return err
+}
+
+func reportMetadataError() error {
+	return fmt.Errorf("report context or source metadata exceeds 8 MiB; narrow the investigation window or relationship")
+}
+
+// Keep query serialization bounded before it crosses into Go. A single large
+// projected row becomes NULL in SQL instead of first allocating that string in
+// the caller; the cumulative budget also bounds the decoded context. Ordinary
+// Investigate calls continue to use their existing query helper.
+func boundedReportQuery(ctx context.Context, tx *sql.Tx) func(string, any) error {
+	remaining := investigationReportMetadataLimit
+	return func(query string, dst any) error {
+		query = strings.TrimSuffix(strings.TrimSpace(query), ";")
+		rows, err := tx.QueryContext(ctx, fmt.Sprintf("WITH report_rows AS (SELECT to_json(result)::VARCHAR AS report_json FROM (%s) result) SELECT CASE WHEN octet_length(encode(report_json))<=%d THEN report_json ELSE NULL END FROM report_rows", query, remaining))
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		var data bytes.Buffer
+		data.WriteByte('[')
+		for rows.Next() {
+			var row sql.NullString
+			if err := rows.Scan(&row); err != nil {
+				return err
+			}
+			if !row.Valid || int64(len(row.String))+1 > remaining {
+				return reportMetadataError()
+			}
+			remaining -= int64(len(row.String)) + 1
+			if data.Len() > 1 {
+				data.WriteByte(',')
+			}
+			data.WriteString(row.String)
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		data.WriteByte(']')
+		return json.Unmarshal(data.Bytes(), dst)
+	}
+}
+
+type reportJSONField struct {
+	name  string
+	value any
+}
+type reportJSONObject []reportJSONField
+type reportJSONArray []any
+
+// Encode large arrays one element at a time. A long shared correlation value can
+// occur in many event reasons; encoding the whole manifest with json.Encoder
+// would allocate every repeated copy before the archive size guard could run.
+func writeReportManifest(dst io.Writer, report investigationReport) error {
+	events := make(reportJSONArray, len(report.Investigation.Events))
+	for i := range events {
+		events[i] = report.Investigation.Events[i]
+	}
+	evidence := make(reportJSONArray, len(report.Evidence))
+	for i := range evidence {
+		evidence[i] = report.Evidence[i]
+	}
+	result := report.Investigation
+	return streamReportJSON(dst, reportJSONObject{
+		{"schema", report.Schema}, {"version", report.Version}, {"generatedAt", report.GeneratedAt},
+		{"scope", report.Scope}, {"summary", report.Summary}, {"observationSnapshot", report.ObservationSnapshot},
+		{"investigation", reportJSONObject{
+			{"snapshot", result.Snapshot}, {"anchor", result.Anchor}, {"resources", result.Resources},
+			{"resourcesTruncated", result.ResourcesTruncated}, {"events", events}, {"total", result.Total},
+			{"limit", result.Limit}, {"fromMs", result.FromMs}, {"toMs", result.ToMs}, {"notes", result.Notes},
+		}},
+		{"evidence", evidence}, {"notes", report.Notes},
+	})
+}
+
+func streamReportJSON(dst io.Writer, value any) error {
+	write := func(text string) error { _, err := io.WriteString(dst, text); return err }
+	switch v := value.(type) {
+	case reportJSONObject:
+		if err := write("{\n"); err != nil {
+			return err
+		}
+		for i, field := range v {
+			if i > 0 {
+				if err := write(",\n"); err != nil {
+					return err
+				}
+			}
+			// All keys here are fixed format names, never source data.
+			if err := write(strconv.Quote(field.name) + ": "); err != nil {
+				return err
+			}
+			if err := streamReportJSON(dst, field.value); err != nil {
+				return err
+			}
+		}
+		return write("}\n")
+	case reportJSONArray:
+		if err := write("[\n"); err != nil {
+			return err
+		}
+		for i, item := range v {
+			if i > 0 {
+				if err := write(",\n"); err != nil {
+					return err
+				}
+			}
+			if err := streamReportJSON(dst, item); err != nil {
+				return err
+			}
+		}
+		return write("]\n")
+	default:
+		encoder := json.NewEncoder(dst)
+		// This is a standalone JSON entry, never embedded in an HTML/script
+		// context. Avoid multiplying harmless '<' characters into six bytes.
+		encoder.SetEscapeHTML(false)
+		return encoder.Encode(value)
+	}
 }
 
 func reportSizeError() error {

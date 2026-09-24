@@ -235,6 +235,52 @@ func TestInvestigationReportBoundedOutput(t *testing.T) {
 	}
 }
 
+func TestInvestigationReportRejectsInconsistentDisplayedProjection(t *testing.T) {
+	s := evidenceStore(t, contextEvent("anchor", 10))
+	options := investigationReportOptions(t, s, "anchor")
+	if err := s.write(context.Background(), func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, "UPDATE events SET raw=replace(raw,'GetObject','PutObject')")
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.ExportInvestigation(context.Background(), options, io.Discard); err == nil || !strings.Contains(err.Error(), "differs from its displayed source projection") {
+		t.Fatalf("mismatched displayed evidence accepted: %v", err)
+	}
+}
+
+func TestInvestigationReportBoundsMetadataBeforeMaterialization(t *testing.T) {
+	t.Run("projected field", func(t *testing.T) {
+		record := contextEvent("anchor", 10)
+		s := evidenceStore(t, record)
+		options := investigationReportOptions(t, s, "anchor")
+		if err := s.write(context.Background(), func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, "UPDATE events SET userAgent=repeat('x',?)", investigationReportMetadataLimit+1)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		var output bytes.Buffer
+		if _, err := s.ExportInvestigation(context.Background(), options, &output); err == nil || !strings.Contains(err.Error(), "metadata exceeds 8 MiB") || output.Len() != 0 {
+			t.Fatalf("oversized projected field was materialized/exported: %v", err)
+		}
+	})
+	t.Run("source metadata", func(t *testing.T) {
+		s := evidenceStore(t, contextEvent("anchor", 10))
+		options := investigationReportOptions(t, s, "anchor")
+		if err := s.write(context.Background(), func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, "UPDATE observations SET source=repeat('<',?)", investigationReportMetadataLimit/6+1)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		var output bytes.Buffer
+		if _, err := s.ExportInvestigation(context.Background(), options, &output); err == nil || !strings.Contains(err.Error(), "metadata exceeds 8 MiB") || output.Len() != 0 {
+			t.Fatalf("oversized source metadata was materialized/exported: %v", err)
+		}
+	})
+}
+
 // TestInvestigationReportFixture optionally produces real exported evidence for
 // browser/layout checks. The environment value is an absolute report.html path;
 // its directory receives the ZIP and every generated entry for working links.
