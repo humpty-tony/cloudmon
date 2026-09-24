@@ -327,16 +327,20 @@ kbd { font: var(--fs-cap) var(--mono); border: 1px solid var(--kbd-line); border
 .related-val { color: var(--tx-3); font-family: var(--mono); font-size: var(--fs-cap); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55%; }
 
 /* ============ Status bar ============ */
-.statusbar { height: var(--status-h); flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 0 12px; background: var(--bg-2); border-top: 1px solid var(--line-struct); font-size: var(--fs-label); color: var(--tx-3); font-family: var(--mono); }
+.statusbar { height: var(--status-h); flex-shrink: 0; display: flex; align-items: center; gap: 14px; padding: 0 12px; background: var(--bg-2); border-top: 1px solid var(--line-struct); font-size: var(--fs-label); color: var(--tx-3); font-family: var(--mono); white-space: nowrap; }
+.sb-mode, .sb-cell { flex-shrink: 0; }
 .sb-mode { font-weight: 600; letter-spacing: 0.5px; }
 .sb-mode.live { color: var(--sev-ok); }
 .sb-mode.paused { color: var(--sev-warn); }
 .sb-cell { color: var(--tx-3); }
-.sb-center { flex: 1; display: flex; justify-content: center; }
-.newpill { background: var(--acc-sel); border: 1px solid var(--acc); color: var(--acc); border-radius: var(--radius); padding: 1px 12px; cursor: pointer; font-family: var(--mono); font-size: var(--fs-cap); }
+.sb-source { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.sb-center { flex: 1 0 auto; display: flex; justify-content: center; }
+.newpill { background: var(--acc-sel); border: 1px solid var(--acc); color: var(--acc); border-radius: var(--radius); padding: 1px 12px; cursor: pointer; font-family: var(--mono); font-size: var(--fs-cap); white-space: nowrap; flex-shrink: 0; }
 .newpill:hover { background: var(--acc); color: #fff; }
-.sb-hint { color: var(--tx-3); display: flex; align-items: center; gap: 4px; }
+.sb-hint { color: var(--tx-3); }
+.sb-hint, .sb-hint-navigation { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
 .sb-hint kbd { font-size: 10px; padding: 0 3px; border-bottom-width: 1px; }
+@media (max-width: 1399px) { .sb-hint-navigation { display: none; } }
 
 /* ============ Command palette ============ */
 .cmdk-scrim { position: fixed; inset: 0; background: rgba(4,8,12,0.5); display: flex; justify-content: center; align-items: flex-start; padding-top: 14vh; z-index: 100; }

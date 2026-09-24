@@ -182,7 +182,9 @@ export function EventTable({
     if (onNeedMore && el.scrollHeight - el.scrollTop - el.clientHeight < 600) onNeedMore();
     if (follow) {
       if (el.scrollTop > 40) onDisengageFollow();
-    } else if (el.scrollTop <= 4) {
+    } else if (!selected && el.scrollTop <= 4) {
+      // Resizing/expanding a detail can scroll the table back to zero. Keep an
+      // open inspection paused until the user explicitly chooses Follow.
       onReachTop(); // scrolled back to the top → resume following
     }
   };
