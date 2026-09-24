@@ -266,6 +266,15 @@ func (a *App) GetEventRaw(seq int64) (string, error) {
 	return a.db.Raw(seq)
 }
 
+// GetEvidenceSnapshot freezes detail queries at the current event cutoff without
+// scanning facets or activity summaries for each inspected event.
+func (a *App) GetEvidenceSnapshot() (store.Snapshot, error) {
+	if a.ensureDB() == nil {
+		return store.Snapshot{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.SnapshotContext(a.ctx)
+}
+
 // RawBySeqs returns the raw CloudTrail JSON for the given event seqs (order preserved),
 // so an export can write faithful, re-importable records even though page rows omit raw.
 func (a *App) RawBySeqs(seqs []int64) ([]string, error) {

@@ -24,6 +24,19 @@ type SearchResult struct {
 	Events     []Row      `json:"events"`
 }
 
+// SnapshotContext captures the current dataset and event cutoff without building
+// search aggregates. Detail views can share this scope even for events that
+// arrived after the last full search.
+func (s *Store) SnapshotContext(ctx context.Context) (Snapshot, error) {
+	var snapshot Snapshot
+	err := s.readSnapshot(ctx, func(ctx context.Context, tx *sql.Tx) error {
+		var err error
+		snapshot, err = snapshotOn(ctx, tx)
+		return err
+	})
+	return snapshot, err
+}
+
 func (s *Store) readSnapshot(parent context.Context, fn func(context.Context, *sql.Tx) error) error {
 	return s.operation(parent, func(ctx context.Context) error {
 		// Acquire with the cancellable context before beginning a transaction whose
