@@ -233,13 +233,13 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('button',{name:'Retry search',exact:true}).click();
   await page.getByRole('alert').filter({hasText:'Search failed.'}).waitFor({state:'hidden'});
   await page.getByText('RunInstances',{exact:true}).waitFor({state:'hidden'});
-  await page.getByRole('button',{name:'Clear all filters',exact:true}).click();
+  await page.getByTitle('Clear all filters',{exact:true}).click();
   await page.getByText('LiveEvent2',{exact:true}).first().waitFor();
   await query.fill('(');
-  await page.getByRole('button',{name:'Clear all filters',exact:true}).click();
+  await page.getByTitle('Clear all filters',{exact:true}).click();
   assert.equal(await query.inputValue(),'','Clear did not discard an unapplied draft');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture'],errors}));
+  console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture','invalid search stays unapplied','failed search shows stale results and retries','clear resets unapplied draft'],errors}));
  } finally {await browser.close();await server.close()}
 })().catch(e=>{console.error(e);process.exit(1)});
