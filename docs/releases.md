@@ -35,10 +35,14 @@ On Linux, download the archives and checksum file into the same directory, then 
 Extract the archive before launching the executable or app. Tar archives retain executable permissions and macOS app-bundle symlinks. DuckDB is embedded, but system desktop dependencies still apply:
 
 - Windows requires the Microsoft WebView2 runtime.
-- Linux builds use Ubuntu 24.04 and require a compatible glibc, GTK 3 and WebKit2GTK 4.1 runtime. These are not a portable AppImage or a static Linux desktop executable.
+- Linux builds target updated Ubuntu 22.04 (glibc 2.35) and require GTK 3, WebKit2GTK 4.1 and a GCC 12-compatible C++ runtime (`GLIBCXX_3.4.30`, `CXXABI_1.3.13`). On Ubuntu 22.04, install the current `libgtk-3-0`, `libwebkit2gtk-4.1-0` and `libstdc++6` packages. Other glibc-based distributions need equivalent runtimes. These are not a portable AppImage or a static Linux desktop executable; older glibc and musl/Alpine are not supported.
 - macOS archives include both architectures; the workflow verifies the universal executable. These builds are not signed with a publisher certificate or notarized, and Windows builds are not Authenticode-signed. OS trust prompts may therefore apply.
 
 ## Checks and retries
+
+The Linux job builds on Ubuntu 22.04, extracts the actual release archive, and rejects executable imports newer than the glibc 2.35 / GCC 12 ABI baseline. It checks runtime library resolution and starts the packaged app under Xvfb, requiring a visible window, a mounted React UI calling the Go bridge, and an initialized DuckDB database. Native startup logs and a screenshot are retained as the `linux-startup` artifact. This complements the existing browser checks, which do not exercise the native loader or WebKit runtime.
+
+The v0.2.0 Linux binary was linked on Ubuntu 24.04 and imports `fmod`/`fmodf` from `GLIBC_2.38`. A `GLIBC_2.38 not found` error with that version is a binary compatibility failure, before CloudMon can start. Use a later release built against the baseline above or build from source on your distribution. Do not replace your system glibc manually to run the old download.
 
 PRs, `main` pushes and manual runs execute the same build, package and checksum steps and upload a **release-assets** preview artifact. They do not publish releases. The only publishing event is a version-tag push. Download preview artifacts from the Actions run; they are retained for seven days.
 
@@ -55,3 +59,4 @@ No public release is created by the PR checks. Publishing behavior is covered wi
 - [GitHub release API](https://docs.github.com/en/rest/releases/releases) and [asset digests](https://docs.github.com/en/rest/releases/assets)
 - [Draft-first publication and immutable releases](https://docs.github.com/en/code-security/concepts/supply-chain-security/immutable-releases)
 - [Wails project version metadata](https://v2.wails.io/docs/reference/project-config/) and [platform dependencies](https://v2.wails.io/docs/gettingstarted/installation/)
+- Ubuntu 22.04 runtime packages: [glibc](https://packages.ubuntu.com/jammy/libc6), [WebKit2GTK 4.1](https://packages.ubuntu.com/jammy/libwebkit2gtk-4.1-dev), [libstdc++6](https://packages.ubuntu.com/jammy/libstdc++6), and [GCC ABI versions](https://gcc.gnu.org/onlinedocs/gcc-13.4.0/libstdc++/manual/manual/abi.html)
