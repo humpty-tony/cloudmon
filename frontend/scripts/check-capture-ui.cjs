@@ -274,6 +274,8 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.ok(await fields.locator('.ft-row').count()<40);
   await page.setViewportSize({width:960,height:720});
   await page.clock.runFor(100);
+  await fields.scrollIntoViewIfNeeded();
+  await page.clock.runFor(100);
   await page.screenshot({path:path.join(output,'inspector-large.png'),fullPage:true});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   await page.getByRole('button',{name:'{ } Raw JSON',exact:true}).click();

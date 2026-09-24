@@ -111,6 +111,7 @@ export function EventTable({
   const dragKey = useRef<string | null>(null); // header being dragged (reorder)
   const [overKey, setOverKey] = useState<string | null>(null); // header under the drag
   const [viewportW, setViewportW] = useState(0); // visible width → the pinned panel's fixed width
+  const [viewportH, setViewportH] = useState(400);
 
   const widths = columns.map((c) => colWidths[c.key] ?? c.width);
   const minTotal = widths.reduce((a, b) => a + b, 0);
@@ -147,7 +148,7 @@ export function EventTable({
   useEffect(() => {
     const el = parentRef.current;
     if (!el) return;
-    const update = () => setViewportW(el.clientWidth);
+    const update = () => { setViewportW(el.clientWidth); setViewportH(el.clientHeight); };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
@@ -341,7 +342,7 @@ export function EventTable({
                   <div className="row-expand">
                     <div className="row-expand-pin" style={{ width: viewportW || undefined }}>
                       {selectedRaw ? (
-                        <InlineDetail key={e.seq} event={e} rawJSON={selectedRaw} lineage={selectedLineage} lineageError={selectedLineageError} onRetry={onRetryDetail} onPivot={onPivot} onOpenLineage={onOpenLineage} />
+                        <InlineDetail key={e.seq} event={e} rawJSON={selectedRaw} fieldHeight={Math.max(84,Math.min(392,viewportH-160))} lineage={selectedLineage} lineageError={selectedLineageError} onRetry={onRetryDetail} onPivot={onPivot} onOpenLineage={onOpenLineage} />
                       ) : selectedRawError ? (
                         <div className="xd-loading" role="alert">Could not load this event. <button className="btn-ghost" onClick={onRetryDetail}>Retry event</button></div>
                       ) : (

@@ -9,6 +9,7 @@ import { LineageGraph } from "./LineageGraph";
 interface Props {
   event: CloudTrailEvent;
   rawJSON: string;
+  fieldHeight: number;
   lineageError?: boolean;
   onRetry: () => void;
   lineage?: Lineage | null; // assumed-role ancestry (null = still loading, for AssumedRole events)
@@ -16,7 +17,7 @@ interface Props {
   onOpenLineage?: (seq: number) => void; // open the full lineage graph view
 }
 
-export const InlineDetail = memo(function InlineDetail({ event: e, rawJSON, lineage, lineageError, onRetry, onPivot, onOpenLineage }: Props) {
+export const InlineDetail = memo(function InlineDetail({ event: e, rawJSON, fieldHeight, lineage, lineageError, onRetry, onPivot, onOpenLineage }: Props) {
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [rawOpen, setRawOpen] = useState(false);
   const isRole = e.userIdentity.type === "AssumedRole";
@@ -45,14 +46,14 @@ export const InlineDetail = memo(function InlineDetail({ event: e, rawJSON, line
 
       {isRole ? (
         <div className="xd-cols">
-          <div className="xd-tree"><FieldTree json={rawJSON} onPivot={onPivot} /></div>
+          <div className="xd-tree"><FieldTree json={rawJSON} height={fieldHeight} onPivot={onPivot} /></div>
           {lineage ? <LineageGraph lineage={lineage} current={e} onPivot={onPivot} onFullView={onOpenLineage ? () => onOpenLineage(e.seq) : undefined} />
             : lineageError ? <div className="lg lg-loading" role="alert">Could not load role lineage. <button className="btn-ghost" onClick={onRetry}>Retry lineage</button></div>
             : <div className="lg lg-loading" role="status">Tracing role lineage…</div>}
         </div>
       ) : <>
         {idNote && <div className="xd-idnote"><span className="xd-idnote-glyph">◈</span><span>{idNote}</span></div>}
-        <FieldTree json={rawJSON} onPivot={onPivot} />
+        <FieldTree json={rawJSON} height={fieldHeight} onPivot={onPivot} />
       </>}
 
       {evidenceOpen && <EvidenceModal key={e.seq} seq={e.seq} onClose={()=>setEvidenceOpen(false)} />}

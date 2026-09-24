@@ -33,7 +33,7 @@ const pathKey = (path: string[]) => JSON.stringify(path);
 type DisplayRow = {kind:"field"; field:FieldSummary;depth:number} | {kind:"page";page:FieldPage;depth:number} | {kind:"status";path:string[];message:string;error:boolean;depth:number};
 
 /** A bounded worker supplies summaries; only visible tree rows mount in React. */
-export const FieldTree = memo(function FieldTree({ json, onPivot }: { json: string; onPivot: PivotFn }) {
+export const FieldTree = memo(function FieldTree({ json, height, onPivot }: { json: string; height: number; onPivot: PivotFn }) {
   const [pages,setPages] = useState<Map<string,FieldPage>>(new Map());
   const [open,setOpen] = useState<Set<string>>(new Set());
   const [errors,setErrors] = useState<Map<string,string>>(new Map());
@@ -88,7 +88,7 @@ export const FieldTree = memo(function FieldTree({ json, onPivot }: { json: stri
     getItemKey:index=>{const row=rows[index];return row.kind==='field'?pathKey(row.field.path):row.kind+pathKey(row.kind==='page'?row.page.path:row.path)}});
   return <div className="ft-view">
     <div className="ft-toolbar"><span>Event fields · expand a section to inspect it</span><button className="btn-ghost" onClick={()=>setOpen(new Set())}>Collapse all</button></div>
-    <div className="ft ft-viewport" ref={scroll} role="region" aria-label="Event fields" tabIndex={0} style={{height:Math.min(392,Math.max(56,rows.length*28))}}>
+    <div className="ft ft-viewport" ref={scroll} role="region" aria-label="Event fields" tabIndex={0} style={{height:Math.min(height,Math.max(56,rows.length*28))}}>
       <div style={{height:virtual.getTotalSize(),position:'relative'}}>
         {virtual.getVirtualItems().map(item=>{
           const row=rows[item.index];

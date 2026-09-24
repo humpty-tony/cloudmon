@@ -25,6 +25,6 @@ export function SourceText({text,json=false,className}:{text:string;json?:boolea
       <span>Segment {current+1} of {total.toLocaleString()} · complete source retained</span>
       <button className="btn-ghost" disabled={current+1>=total} onClick={()=>setPage(current+1)}>Next text segment</button>
     </div>}
-    {html!==null?<pre ref={body} className={className} dangerouslySetInnerHTML={{__html:html}}/>:<pre ref={body} className={className}>{content}</pre>}
+    {html!==null?<pre ref={body} className={`source-text ${className??''}`} dangerouslySetInnerHTML={{__html:html}}/>:<pre ref={body} className={`source-text ${className??''}`}>{content}</pre>}
   </>;
 }
