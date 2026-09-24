@@ -252,7 +252,7 @@ function GeneralTab({ onResetAll }: { onResetAll: () => void }) {
       <div className="set-field danger">
         <div className="set-field-head">
           <div className="set-field-name">Reset all preferences</div>
-          <div className="set-field-desc">Clears every saved setting (sensitive overrides, theme, columns, layout, filters, personal labels) and reloads. Your imported data is not touched.</div>
+          <div className="set-field-desc">Clears every saved setting (sensitive overrides, theme, columns, layout, filters, personal labels, saved hunts) and reloads. Your imported data is not touched.</div>
         </div>
         <button
           className="set-danger-btn"

@@ -10,7 +10,8 @@
     "check:capture-ui": "node scripts/check-capture-ui.cjs",
     "check:search": "node scripts/check-search.mjs",
     "check:inspector": "node scripts/check-inspector.mjs",
-    "check:labels": "node scripts/check-aliases.mjs"
+    "check:labels": "node scripts/check-aliases.mjs",
+    "check:saved-hunts": "node scripts/check-saved-hunts.mjs"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.4",

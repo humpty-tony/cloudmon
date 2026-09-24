@@ -112,6 +112,11 @@ jobs:
         working-directory: frontend
         run: npm run check:labels
 
+      - name: Saved hunt behavior checks
+        if: runner.os == 'Linux'
+        working-directory: frontend
+        run: npm run check:saved-hunts
+
       - name: Backend checks with real DuckDB
         # Native static links are large; serialize package builds on hosted runners.
         run: go test -p 1 -tags "${{ matrix.tags }}" ./...
