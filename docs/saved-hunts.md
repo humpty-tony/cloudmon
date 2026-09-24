@@ -20,7 +20,7 @@ Configurations use this app's local preferences storage and are not synced betwe
 
 Storage failures are displayed and do not publish a successful save. Unreadable data or unknown schemas remain untouched; editing is blocked until storage recovers or you explicitly choose **Reset saved hunts**. Other-window storage changes refresh the list. Settings → General → **Reset all preferences** also removes saved hunts, after confirmation.
 
-Saved hunts are configurations, not schedules: they run only when requested. This build executes two-step sequences. Configurations with additional steps are preserved and refused for sequence execution rather than silently truncated.
+Saved hunts are configurations, not schedules: they run only when requested. Two to five ordered step expressions are retained and executed without changing the saved collection schema.
 
 ## Validation
 
