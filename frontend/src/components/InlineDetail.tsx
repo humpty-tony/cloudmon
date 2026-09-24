@@ -1,3 +1,4 @@
+import { InvestigationView } from "./InvestigationView";
 import { memo, useState } from "react";
 import type { CloudTrailEvent, FilterField, Lineage, QueryOp } from "../api/types";
 import { eventResult, hasCredentialLineage } from "../api/types";
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export const InlineDetail = memo(function InlineDetail({ event: e, rawJSON, fieldHeight, lineage, lineageError, onRetry, onPivot, onOpenLineage }: Props) {
+  const [investigating, setInvestigating] = useState(false);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [rawOpen, setRawOpen] = useState(false);
   const isRole = hasCredentialLineage(e) && (lineage?.applicable ?? true);
@@ -32,6 +34,7 @@ export const InlineDetail = memo(function InlineDetail({ event: e, rawJSON, fiel
         <span className="xd-sub">{e.eventSource}</span>
         <span className={`xd-result ${e.errorCode ? "fail" : "ok"}`}>{eventResult(e)}</span>
         <span className="xd-time">{new Date(e.eventTime).toLocaleString()}</span>
+        <button className="xd-raw-btn" onClick={() => setInvestigating(true)}>Investigate</button>
         <button className="xd-raw-btn" onClick={() => setEvidenceOpen(true)}>Sources & hashes</button>
         <button className="xd-raw-btn" onClick={() => setRawOpen(true)}>
           {"{ }"} Raw JSON
@@ -56,6 +59,7 @@ export const InlineDetail = memo(function InlineDetail({ event: e, rawJSON, fiel
         <FieldTree json={rawJSON} height={fieldHeight} onPivot={onPivot} />
       </>}
 
+      {investigating && <InvestigationView event={e} onClose={()=>setInvestigating(false)} />}
       {evidenceOpen && <EvidenceModal key={e.seq} seq={e.seq} onClose={()=>setEvidenceOpen(false)} />}
       {rawOpen && <RawJsonModal title={`${e.eventName} · ${e.eventID}`} json={rawJSON} onClose={() => setRawOpen(false)} />}
     </div>

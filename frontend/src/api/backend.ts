@@ -21,6 +21,8 @@ import type {
   FilterField,
   Lineage,
   LineageTree,
+  InvestigationOptions,
+  InvestigationResult,
   QueryFilter,
   RequiredPermission,
   SigmaDiag,
@@ -92,6 +94,7 @@ export interface Backend {
   querySnapshotPage(filter: QueryFilter, snapshot: EvidenceSnapshot, before: number, limit: number): Promise<CloudTrailEvent[]>;
   exportFiltered(filter: QueryFilter, snapshot: EvidenceSnapshot, signal?: AbortSignal): Promise<FilteredExport>;
   getEventRaw(seq: number): Promise<string>;
+  investigate(options: InvestigationOptions, signal?: AbortSignal): Promise<InvestigationResult>;
   queryLineageRaw(seq: number, snapshot: EvidenceSnapshot): Promise<string>;
   queryLineage(seq: number): Promise<Lineage>; // assumed-role ancestry chain
   queryLineageGraph(seq: number): Promise<LineageTree>; // full lineage tree centred on the event
@@ -269,6 +272,7 @@ class WailsBackend implements Backend {
   getEventRaw(seq: number) {
     return this.app.GetEventRaw(seq) as Promise<string>;
   }
+  investigate(options: InvestigationOptions, signal?: AbortSignal) { return this.request<InvestigationResult>(signal, id=>this.app.Investigate(options,id) as Promise<InvestigationResult>); }
   queryLineageRaw(seq: number, snapshot: EvidenceSnapshot) { return this.app.QueryLineageRaw(seq, snapshot) as Promise<string>; }
   queryLineage(seq: number) {
     return this.app.QueryLineage(seq) as Promise<Lineage>;
@@ -432,6 +436,7 @@ class MockBackend implements Backend {
   async getEventRaw(seq: number) {
     return this.data.find((e) => e.seq === seq)?.rawJSON ?? "";
   }
+  async investigate(): Promise<InvestigationResult> { throw new Error("Event investigation requires the desktop query engine."); }
   async queryLineageRaw(): Promise<string> { throw new Error("Credential lineage requires the desktop query engine."); }
   async queryLineage(): Promise<Lineage> {
     return { applicable: false, sourceIdentity: "", complete: false, nodes: [] }; // no engine in the browser preview

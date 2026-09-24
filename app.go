@@ -612,3 +612,16 @@ func (a *App) QueryLineageRaw(seq int64, snapshot store.Snapshot) (string, error
 	}
 	return a.db.LineageRaw(seq, snapshot)
 }
+
+// Investigate reads surrounding events with explicit, observed relation evidence.
+func (a *App) Investigate(options store.InvestigationOptions, requestID string) (store.Investigation, error) {
+	if a.ensureDB() == nil {
+		return store.Investigation{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.Investigation{}, err
+	}
+	defer done()
+	return a.db.Investigate(ctx, options)
+}

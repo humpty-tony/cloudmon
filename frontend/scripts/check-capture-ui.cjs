@@ -80,6 +80,17 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     QueryNewer:async(_filter,since)=>{state.newerCalls++;state.newerActive++;state.newerMax=Math.max(state.newerMax,state.newerActive);const rows=state.rows.filter(r=>r.seq>since);try{if(state.delayNewer)await new Promise(resolve=>{state.resolveNewer=resolve});return rows}finally{state.newerActive--}},
     GetEventRaw:async(seq)=>{state.rawCalls++;if(state.failRaw)throw Error('Storage unavailable');const value=state.rawBySeq[seq] || state.raw;if(state.delayRawSeq===seq)return new Promise(resolve=>{state.resolveRaw=()=>resolve(value)});return value},
     QueryLineage:async(seq)=>{if(state.failLineage)throw Error('Lineage unavailable');return state.lineage || {applicable:state.rows.find(r=>r.seq===seq)?.identityType==='AssumedRole',sourceIdentity:'',complete:false,status:'missing',reason:'No successful supported STS issuance for this key is present in the loaded evidence.',nodes:[]}},
+    Investigate:async(options,id)=>{
+     state.investigationCalls=(state.investigationCalls||[]).concat([options]);
+     try{
+      if(state.delayInvestigation)await new Promise((resolve,reject)=>searchJobs.set(id,{resolve,reject}));
+      if(state.failInvestigation)throw Error('Investigation query unavailable');
+      const anchor=state.rows.find(r=>r.seq===options.seq);
+      const snap=options.snapshot||snapshot();
+      const matches=state.rows.filter(r=>r.seq<=snap.maxSeq&&(options.relation!=='resources'||r.seq%2===0||r.seq===options.seq)).sort((a,b)=>a.seq-b.seq);
+      return {anchor,snapshot:snap,resources:[{arn:'arn:aws:s3:::evidence-bucket',kind:'AWS::S3::Bucket',source:'resources[0].ARN'},{arn:'arn:aws:s3:::evidence-bucket/audit/events.json',kind:'AWS::S3::Object',source:'resources[1].ARN'}],resourcesTruncated:false,events:matches.slice(0,500).map(r=>({event:r,deltaMs:(r.seq-options.seq)*500,reasons:r.seq===options.seq?[{kind:'anchor',label:'Selected event'}]:[{kind:'resource',label:'Shared recorded ARN',value:'arn:aws:s3:::evidence-bucket/audit/events.json'},{kind:'ip',label:'Same source IP (context)',value:'192.0.2.1'}]})),total:matches.length,limit:500,fromMs:Date.parse(anchor.eventTime)-options.minutes*60000,toMs:Date.parse(anchor.eventTime)+options.minutes*60000,notes:['Shared identifiers show relationships in the loaded evidence, not causation. A principal or IP can be used by multiple operators.']};
+     }finally{searchJobs.delete(id)}
+    },
     QueryLineageGraph:async()=>{if(state.failGraph)throw Error('Graph query unavailable');return {...state.graph,snapshot:snapshot()}},
     QueryLineageChildren:async(key,snap)=>{state.expansionSnapshot=snap;if(state.failExpansion)throw Error('The dataset changed; reload lineage.');return {nodes:[],edges:[],notes:['No further unambiguous child links are present.']}},
     QueryLineageEvents:async(key,snap)=>{state.expansionSnapshot=snap;return {nodes:[],edges:[],notes:[]}},
@@ -405,6 +416,53 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByText('No further unambiguous child links are present.',{exact:true}).waitFor();
   await page.screenshot({path:path.join(output,'investigation-context.png'),fullPage:true});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  // Event context uses a virtual timeline, snapshot-preserving pivots, and retries.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.evaluate(()=>{
+    const state=window.captureTest,base=state.rows[0];
+    state.rows=Array.from({length:520},(_,i)=>({...base,seq:i+1,eventID:`context-${i+1}`,eventName:i===0?'GetObject':i%2?'PutObject':'HeadObject',eventSource:'s3.amazonaws.com',eventTime:new Date(Date.parse('2026-09-24T00:00:00Z')+i*500).toISOString()}));
+    state.raw=JSON.stringify({eventID:'context-1',eventName:'GetObject',resources:[{ARN:'arn:aws:s3:::evidence-bucket'},{ARN:'arn:aws:s3:::evidence-bucket/audit/events.json'}]});
+    state.rawBySeq[2]='{"eventID":"context-2","eventName":"PutObject"}';state.failInvestigation=true;
+  });
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.locator('.row').getByText('GetObject',{exact:true}).click();
+  await page.getByRole('button',{name:'Investigate',exact:true}).click();
+  const investigation=page.getByRole('dialog',{name:'Event investigation',exact:true});
+  await investigation.getByText('Investigation query unavailable',{exact:false}).waitFor();
+  await page.evaluate(()=>{window.captureTest.failInvestigation=false});
+  await investigation.getByRole('button',{name:'Retry investigation',exact:true}).click();
+  await investigation.getByText('520 events',{exact:true}).waitFor();
+  await investigation.locator('.investigation-event').first().waitFor();
+  assert.ok(await investigation.locator('.investigation-event').count()<30,'context timeline was not virtualized');
+  await investigation.getByText('Showing 500 closest events of 520. Narrow the window or relationship.',{exact:true}).waitFor();
+  await investigation.locator('.investigation-event').nth(1).click();
+  await investigation.getByRole('button',{name:'Open original record',exact:true}).click();
+  await page.getByRole('dialog',{name:'Raw JSON',exact:true}).locator('pre').getByText('context-2',{exact:false}).waitFor();
+  await page.keyboard.press('Escape');
+  await investigation.waitFor({state:'visible'});
+  await investigation.getByRole('button',{name:'Center on this event',exact:true}).click();
+  await investigation.locator('.investigation-sub').getByText('PutObject · context-2',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.investigationCalls.at(-1).snapshot.generation),'fixture');
+  await investigation.getByRole('button',{name:'← Back',exact:true}).click();
+  await investigation.getByText('GetObject · context-1',{exact:true}).waitFor();
+  await investigation.getByText('520 events',{exact:true}).waitFor();
+  await page.evaluate(()=>{window.captureTest.delayInvestigation=true});
+  await investigation.getByLabel('Investigation relationship',{exact:true}).selectOption('related');
+  await page.clock.runFor(100);
+  await page.evaluate(()=>{window.captureTest.delayInvestigation=false});
+  await investigation.getByLabel('Investigation relationship',{exact:true}).selectOption('resources');
+  await investigation.getByText('261 events',{exact:true}).waitFor();
+  assert.ok(await page.evaluate(()=>window.captureTest.cancelledQueries)>0,'superseded context query was not cancelled');
+  await page.setViewportSize({width:1440,height:1000});
+  await page.clock.runFor(150);
+  await page.screenshot({path:path.join(output,'investigation-compare.png'),fullPage:true});
+  await page.setViewportSize({width:960,height:720});
+  await page.clock.runFor(150);
+  await page.screenshot({path:path.join(output,'investigation-context.png'),fullPage:true});
+  const fits=await investigation.evaluate(el=>{const r=el.getBoundingClientRect();return r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight&&el.scrollWidth<=el.clientWidth});
+  assert.ok(fits,'investigation spilled out of the window');
+  await investigation.getByRole('button',{name:'Close investigation',exact:true}).click();
+  await investigation.waitFor({state:'hidden'});
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture','invalid search stays unapplied','failed search shows stale results and retries','clear resets unapplied draft'],errors}));
  } finally {await browser.close();await server.close()}

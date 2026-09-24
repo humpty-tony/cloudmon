@@ -1281,3 +1281,48 @@ body { font-feature-settings: "liga", "calt"; }
 .lgv-note { overflow-wrap: anywhere; margin: 3px 0; }
 .lgv-error { padding: 10px 14px; color: var(--sev-warn); overflow-wrap: anywhere; }
 .lgv-error button { margin-left: 8px; }
+
+/* Event-centered investigation: bounded timeline plus explicit evidence. */
+.investigation-scrim { position: fixed; inset: 0; z-index: 160; background: rgba(4,8,12,.7); display: grid; place-items: center; padding: 18px; }
+.investigation { width: min(1400px, 100%); height: min(920px, 94vh); min-width: 0; display: flex; flex-direction: column; overflow: hidden; background: var(--bg-1); color: var(--tx-1); border: 1px solid var(--line-struct); border-radius: 10px; box-shadow: var(--overlay-shadow); }
+.investigation button, .investigation select { color: var(--tx-1); background: var(--bg-2); border: 1px solid var(--border-fn); border-radius: 5px; padding: 6px 9px; cursor: pointer; font: inherit; }
+.investigation button:hover { border-color: var(--acc); }
+.investigation button:disabled { opacity: .6; cursor: wait; }
+.investigation-head { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--line-struct); }
+.investigation-head>div { flex: 1; min-width: 0; }
+.investigation h2 { font-size: 17px; margin: 0 0 5px; }
+.investigation h3 { font-size: 13px; margin: 0 0 8px; }
+.investigation h4 { font-size: 11px; margin: 12px 0 6px; color: var(--tx-3); }
+.investigation-sub { color: var(--tx-3); font: 11px var(--mono); overflow-wrap: anywhere; }
+.investigation-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; padding: 10px 16px; background: var(--bg-2); }
+.investigation-controls label { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.investigation-controls>span { flex: 1; color: var(--tx-3); font-size: 11px; }
+.investigation-summary { display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 9px 16px; font-size: 11px; color: var(--tx-3); border-bottom: 1px solid var(--line-struct); }
+.investigation-summary strong { color: var(--tx-1); }
+.investigation-body { display: flex; flex: 1; min-height: 0; }
+.investigation-timeline { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.investigation-list { flex: 1; min-height: 0; overflow: auto; }
+.investigation .investigation-event { position: absolute; inset: 0 0 auto; width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; border: 0; border-bottom: 1px solid var(--line-struct); border-radius: 0; padding: 10px 12px; background: var(--bg-1); }
+.investigation .investigation-event.selected { background: var(--acc-sel); box-shadow: inset 3px 0 var(--acc); }
+.investigation .investigation-event.anchor { border-left: 2px solid var(--sev-ok); }
+.investigation-offset { flex: none; width: 46px; color: var(--tx-3); font: 11px var(--mono); }
+.investigation-event-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+.investigation-event-main>b { font: 600 12px var(--mono); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.investigation-event-main>span { color: var(--tx-3); font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.investigation-tags { display: flex; gap: 6px; }
+.investigation-tags>span { background: var(--bg-3); border-radius: 3px; padding: 2px 5px; overflow: hidden; text-overflow: ellipsis; }
+.investigation-tags .relation-shared, .investigation-tags .relation-resource, .investigation-tags .relation-credential { color: var(--acc-text); }
+.investigation-failure { color: var(--sev-err); max-width: 100px; font-size: 10px; overflow: hidden; text-overflow: ellipsis; }
+.investigation-detail { flex: 0 0 34%; min-width: 250px; max-width: 450px; overflow: auto; border-left: 1px solid var(--line-struct); padding: 14px; }
+.investigation-detail section+section { border-top: 1px solid var(--line-struct); margin-top: 18px; padding-top: 14px; }
+.investigation-detail ul { list-style: none; padding: 0; margin: 8px 0; }
+.investigation-detail li { margin: 0 0 10px; font-size: 11px; }
+.investigation-detail code { display: block; color: var(--tx-2); font: 10px/1.5 var(--mono); overflow-wrap: anywhere; margin: 4px 0; }
+.investigation-resources span, .investigation-detail p { color: var(--tx-3); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.investigation-actions { display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; }
+.investigation-notes { flex-shrink: 0; max-height: 120px; overflow: auto; padding: 9px 16px; color: var(--tx-3); border-top: 1px solid var(--line-struct); font-size: 11px; }
+.investigation-notes summary { cursor: pointer; }
+.investigation-status { padding: 28px; color: var(--tx-3); overflow-wrap: anywhere; }
+.investigation-status button { margin-left: 12px; }
+.investigation-cap { padding: 8px 12px; color: var(--sev-warn); font-size: 11px; }
+@media (max-width: 780px) { .investigation-scrim { padding: 6px; } .investigation-body { flex-direction: column; } .investigation-detail { flex: 0 0 36%; min-width: 0; max-width: none; border-left: 0; border-top: 1px solid var(--line-struct); } .investigation-head { padding: 10px; } }

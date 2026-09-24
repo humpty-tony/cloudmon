@@ -428,3 +428,19 @@ export interface EvidencePage { total: number; variants: number; observations: S
 export function hasCredentialLineage(event: CloudTrailEvent): boolean {
   return ["AssumedRole", "FederatedUser", "IAMUser", "Root"].includes(event.userIdentity.type);
 }
+
+export interface ResourceReference { arn: string; kind: string; source: string }
+export interface CorrelationReason { kind: string; label: string; value?: string }
+export interface InvestigationOptions { seq: number; eventID: string; minutes: number; relation: string; snapshot: EvidenceSnapshot | null }
+export interface InvestigationResult {
+  snapshot: EvidenceSnapshot;
+  anchor: EventRow;
+  resources: ResourceReference[];
+  resourcesTruncated: boolean;
+  events: {event: EventRow; reasons: CorrelationReason[]; deltaMs: number}[];
+  total: number;
+  limit: number;
+  fromMs: number;
+  toMs: number;
+  notes: string[];
+}
