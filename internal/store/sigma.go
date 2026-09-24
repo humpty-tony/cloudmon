@@ -9,8 +9,11 @@ package store
 
 import (
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"math"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -30,14 +33,21 @@ type SigmaDiag struct {
 // Parsed=true, Supported=false → valid Sigma we can't translate yet (diagnostics say
 // why); the rule is NOT run. Supported=true → SQL ran; Matches/Rows are populated.
 type SigmaResult struct {
-	Parsed      bool        `json:"parsed"`
-	Supported   bool        `json:"supported"`
-	Title       string      `json:"title"`
-	Diagnostics []SigmaDiag `json:"diagnostics"`
-	SQL         string      `json:"sql"`
-	Matches     int         `json:"matches"`
-	Scanned     int         `json:"scanned"`
-	Rows        []Row       `json:"rows"`
+	Parsed       bool                       `json:"parsed"`
+	Supported    bool                       `json:"supported"`
+	Title        string                     `json:"title"`
+	Diagnostics  []SigmaDiag                `json:"diagnostics"`
+	SQL          string                     `json:"sql"`
+	Matches      int                        `json:"matches"`
+	Scanned      int                        `json:"scanned"`
+	Rows         []Row                      `json:"rows"`
+	Snapshot     *Snapshot                  `json:"snapshot"`
+	Explanations map[int64][]SigmaSelection `json:"explanations"`
+}
+
+type SigmaSelection struct {
+	Name    string `json:"name"`
+	Matched bool   `json:"matched"`
 }
 
 // sigmaFastFields maps common CloudTrail Sigma fields to indexed/extracted columns.
@@ -49,7 +59,6 @@ var sigmaFastFields = map[string]string{
 	"sourceIPAddress": "sourceIPAddress", "userAgent": "userAgent",
 	"errorCode": "errorCode", "errorMessage": "errorMessage", "eventID": "eventID",
 	"eventTime": "eventTime", "recipientAccountId": "recipientAccountId",
-	"readOnly": "CAST(readOnly AS VARCHAR)", "managementEvent": "CAST(managementEvent AS VARCHAR)",
 	"userIdentity.type": "identityType", "userIdentity.arn": "identityArn",
 	"userIdentity.principalId": "principalId", "userIdentity.accountId": "accountId",
 	"userIdentity.accessKeyId": "accessKeyId", "userIdentity.invokedBy": "invokedBy",
@@ -66,11 +75,20 @@ func sigmaFieldExpr(field string) string {
 	// via sqlStr so a field name containing a single quote can't break out of the
 	// literal and inject SQL. Sigma rules are routinely imported from third parties,
 	// so the field NAME is as untrusted as any value.
-	segs := strings.Split(field, ".")
-	for i, s := range segs {
-		segs[i] = `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
+	return "json_extract_string(raw, " + sqlStr(sigmaJSONPath(field)) + ")"
+}
+
+func sigmaJSONPath(field string) string {
+	parts := strings.Split(field, ".")
+	for i, part := range parts {
+		quoted, _ := json.Marshal(part)
+		parts[i] = string(quoted)
 	}
-	return "json_extract_string(raw, " + sqlStr("$."+strings.Join(segs, ".")) + ")"
+	path := "$." + strings.Join(parts, ".")
+	if strings.HasPrefix(field, "resources.") {
+		path = `$."resources"[*].` + strings.Join(parts[1:], ".")
+	}
+	return path
 }
 
 // sigmaGlobToLike converts a Sigma value (with * ? wildcards and \* \? \\ escapes)
@@ -120,7 +138,7 @@ func sigmaGlobToLike(v string) (string, bool) {
 // case-sensitivity flag (not a match op); transforms are value expansions applied
 // before matching (Rung 2). `op` is the match kind.
 type sigmaMod struct {
-	transforms []string // ordered: base64 | base64offset | windash | wide | utf16(le|be)
+	transforms []string // ordered: base64 | base64offset | wide | utf16(le|be)
 	op         string   // "" (eq) | contains | startswith | endswith | re | gt | gte | lt | lte | exists
 	all        bool     // |all: values are AND-ed instead of OR-ed
 	cased      bool     // case-sensitive match
@@ -130,7 +148,15 @@ type sigmaMod struct {
 
 func parseSigmaMods(mods []string) (sigmaMod, error) {
 	m := sigmaMod{}
+	if len(mods) > 8 {
+		return m, fmt.Errorf("at most 8 modifiers are supported")
+	}
+	seen := map[string]bool{}
 	for _, x := range mods {
+		if seen[x] {
+			return m, fmt.Errorf("duplicate modifier |%s", x)
+		}
+		seen[x] = true
 		switch x {
 		case "all":
 			m.all = true
@@ -145,13 +171,27 @@ func parseSigmaMods(mods []string) (sigmaMod, error) {
 				return m, fmt.Errorf("modifier chain |%s|%s not supported", m.op, x)
 			}
 			m.op = x
-		case "base64", "base64offset", "windash", "wide", "utf16", "utf16le", "utf16be":
-			m.transforms = append(m.transforms, x)
-			if x != "windash" {
-				m.cased = true // byte-exact encodings match case-sensitively
+		case "base64", "base64offset", "wide", "utf16", "utf16le", "utf16be":
+			if m.op != "" {
+				return m, fmt.Errorf("encoding modifiers must precede matching modifiers")
 			}
+			m.transforms = append(m.transforms, x)
+			m.cased = true // byte-exact encodings match case-sensitively
 		default:
 			return m, fmt.Errorf("modifier |%s not supported yet", x)
+		}
+	}
+	if len(m.transforms) > 3 {
+		return m, fmt.Errorf("at most 3 encoding transforms are supported")
+	}
+	if m.cidr && (m.fieldref || m.op != "" || m.cased || len(m.transforms) > 0) || m.fieldref && len(m.transforms) > 0 || (m.op == "exists" || m.op == "gt" || m.op == "gte" || m.op == "lt" || m.op == "lte") && (m.cased || m.fieldref || len(m.transforms) > 0) {
+		return m, fmt.Errorf("conflicting or unsupported modifier chain")
+	}
+	for i, tr := range m.transforms {
+		if tr == "wide" || strings.HasPrefix(tr, "utf16") {
+			if i+1 == len(m.transforms) || (m.transforms[i+1] != "base64" && m.transforms[i+1] != "base64offset") {
+				return m, fmt.Errorf("UTF-16 byte transforms require a following base64/base64offset encoding")
+			}
 		}
 	}
 	return m, nil
@@ -170,19 +210,6 @@ func toUTF16Bytes(s string, big bool) string {
 		}
 	}
 	return string(b)
-}
-
-var windashChars = []string{"-", "/", "–", "-", "―"}
-
-func windashVariants(s string) []string {
-	if !strings.Contains(s, "-") {
-		return []string{s}
-	}
-	out := make([]string, 0, len(windashChars))
-	for _, d := range windashChars {
-		out = append(out, strings.ReplaceAll(s, "-", d))
-	}
-	return out
 }
 
 // base64OffsetVariants mirrors pySigma: the value can appear at any of 3 byte
@@ -207,12 +234,12 @@ func applyTransforms(value string, transforms []string) []string {
 		next := make([]string, 0, len(vars))
 		for _, v := range vars {
 			switch tr {
-			case "wide", "utf16", "utf16le":
+			case "wide", "utf16le":
 				next = append(next, toUTF16Bytes(v, false))
 			case "utf16be":
 				next = append(next, toUTF16Bytes(v, true))
-			case "windash":
-				next = append(next, windashVariants(v)...)
+			case "utf16":
+				next = append(next, "\xff\xfe"+toUTF16Bytes(v, false))
 			case "base64":
 				next = append(next, base64.StdEncoding.EncodeToString([]byte(v)))
 			case "base64offset":
@@ -255,22 +282,17 @@ func matchOne(target, op, literal string, cased bool) string {
 		}
 		return "(" + target + " ILIKE " + sqlStr(pat) + " ESCAPE '\\')"
 	}
-	esc := escapeLike(literal)
+	pattern, _ := sigmaGlobToLike(literal)
 	switch op {
 	case "":
-		if pat, wild := sigmaGlobToLike(literal); wild {
-			return like(pat)
-		}
-		if cased {
-			return "(" + target + " = " + sqlStr(literal) + ")"
-		}
-		return "lower(" + target + ") = " + sqlStr(strings.ToLower(literal))
+		return like(pattern)
 	case "contains":
-		return like("%" + esc + "%")
+		return like("%" + pattern + "%")
 	case "startswith":
-		return like(esc + "%")
+		return like(pattern + "%")
 	case "endswith":
-		return like("%" + esc)
+		return like("%" + pattern)
+
 	case "re": // Sigma |re is case-SENSITIVE by default (no 'i' flag)
 		return "regexp_matches(" + target + ", " + sqlStr(literal) + ")"
 	}
@@ -280,21 +302,13 @@ func matchOne(target, op, literal string, cased bool) string {
 // buildValuePred compiles one value against `target` (column or lambda var).
 func buildValuePred(target string, m sigmaMod, v interface{}) (string, error) {
 	if v == nil {
+		if m.op != "" || len(m.transforms) > 0 || m.cased {
+			return "", fmt.Errorf("null values cannot have matching modifiers")
+		}
 		return "(" + target + " IS NULL)", nil
 	}
-	switch m.op {
-	case "gt", "gte", "lt", "lte":
-		s := sigmaStr(v)
-		if _, err := strconv.ParseFloat(s, 64); err != nil {
-			return "", fmt.Errorf("|%s needs a number, got %q", m.op, s)
-		}
-		op := map[string]string{"gt": ">", "gte": ">=", "lt": "<", "lte": "<="}[m.op]
-		return "(TRY_CAST(" + target + " AS DOUBLE) " + op + " " + s + ")", nil
-	case "exists":
-		if b, _ := v.(bool); b {
-			return "(" + target + " IS NOT NULL)", nil
-		}
-		return "(" + target + " IS NULL)", nil
+	if _, wild := sigmaGlobToLike(sigmaStr(v)); len(m.transforms) > 0 && wild {
+		return "", fmt.Errorf("wildcards inside encoded values are unsupported")
 	}
 	variants := applyTransforms(sigmaStr(v), m.transforms)
 	if m.op == "re" {
@@ -317,97 +331,112 @@ func buildValuePred(target string, m sigmaMod, v interface{}) (string, error) {
 	return "(" + strings.Join(subs, " OR ") + ")", nil
 }
 
-// cidrPredicate handles |cidr for ANY IPv4 mask (/0–/32) in pure SQL: convert the
-// dotted-quad to a 32-bit int and compare under the network mask. IPv6 fails loud.
+// CIDR matching shares the validated native IPv4/IPv6 parser used by hunts.
 func cidrPredicate(target, cidr string) (string, error) {
-	ip, mask, ok := strings.Cut(cidr, "/")
-	if !ok {
-		mask = "32" // a bare IP is a valid Sigma |cidr host (implicit /32)
+	network, err := networkPrefix(cidr)
+	if err != nil {
+		return "", fmt.Errorf("|cidr invalid IP/network %q", cidr)
 	}
-	if strings.Contains(ip, ":") {
-		return "", fmt.Errorf("|cidr IPv6 (%q) not supported yet", cidr)
-	}
-	bits, err := strconv.Atoi(mask)
-	if err != nil || bits < 0 || bits > 32 {
-		return "", fmt.Errorf("|cidr bad mask in %q", cidr)
-	}
-	octets := strings.Split(ip, ".")
-	if len(octets) != 4 {
-		return "", fmt.Errorf("|cidr bad IPv4 in %q", cidr)
-	}
-	var netint uint32
-	for _, o := range octets {
-		n, err := strconv.Atoi(o)
-		if err != nil || n < 0 || n > 255 {
-			return "", fmt.Errorf("|cidr bad IPv4 in %q", cidr)
-		}
-		netint = netint<<8 | uint32(n)
-	}
-	var maskint uint32
-	if bits > 0 {
-		maskint = ^uint32(0) << (32 - bits)
-	}
-	ipExpr := "(TRY_CAST(split_part(" + target + ",'.',1) AS BIGINT)*16777216" +
-		"+TRY_CAST(split_part(" + target + ",'.',2) AS BIGINT)*65536" +
-		"+TRY_CAST(split_part(" + target + ",'.',3) AS BIGINT)*256" +
-		"+TRY_CAST(split_part(" + target + ",'.',4) AS BIGINT))"
-	return "((" + ipExpr + " & " + strconv.FormatUint(uint64(maskint), 10) + ") = " + strconv.FormatUint(uint64(netint&maskint), 10) + ")", nil
+	return "cloudmon_ip_match(" + target + "," + sqlStr(network.Masked().String()) + ")", nil
 }
 
-// fieldrefPredicate compiles a field-to-field comparison (|fieldref).
-func fieldrefPredicate(target, op, otherField string) (string, error) {
+func fieldrefPredicate(target, op, otherField string, cased bool) (string, error) {
+	if strings.HasPrefix(otherField, "resources.") {
+		return "", fmt.Errorf("array-valued field references are unsupported")
+	}
 	other := sigmaFieldExpr(otherField)
+	if !cased {
+		target = "lower(" + target + ")"
+		other = "lower(" + other + ")"
+	}
 	switch op {
 	case "":
-		return "(lower(" + target + ") = lower(" + other + "))", nil
+		return "(" + target + " = " + other + ")", nil
 	case "contains":
-		return "(position(lower(" + other + ") IN lower(" + target + ")) > 0)", nil
+		return "(position(" + other + " IN " + target + ") > 0)", nil
 	case "startswith":
-		return "(starts_with(lower(" + target + "), lower(" + other + ")))", nil
+		return "starts_with(" + target + "," + other + ")", nil
 	case "endswith":
-		return "(ends_with(lower(" + target + "), lower(" + other + ")))", nil
+		return "ends_with(" + target + "," + other + ")", nil
 	}
 	return "", fmt.Errorf("|fieldref with |%s not supported", op)
 }
 
 func compileFieldMatcher(fm sigma.FieldMatcher) (string, error) {
+	if fm.Field == "" || len(fm.Field) > 512 || strings.ContainsRune(fm.Field, 0) {
+		return "", fmt.Errorf("invalid or overlong field name")
+	}
 	m, err := parseSigmaMods(fm.Modifiers)
 	if err != nil {
 		return "", fmt.Errorf("field %s: %w", fm.Field, err)
 	}
-	// CloudTrail `resources` is an array of objects → match ANY element (Rung 3, in SQL
-	// via a list_filter lambda) instead of a scalar compare that would never match.
+	if len(fm.Values) == 0 {
+		return "", fmt.Errorf("field %s has an empty value list", fm.Field)
+	}
+	if m.all && len(fm.Values) < 2 {
+		return "", fmt.Errorf("|all requires at least two values")
+	}
+	array := strings.HasPrefix(fm.Field, "resources.")
 	target := sigmaFieldExpr(fm.Field)
+	arr := target
 	wrap := func(p string) string { return p }
-	if strings.HasPrefix(fm.Field, "resources.") {
-		leaf := strings.ReplaceAll(strings.TrimPrefix(fm.Field, "resources."), `"`, `\"`)
-		arr := "CAST(json_extract(raw, " + sqlStr(`$.resources[*]."`+leaf+`"`) + ") AS VARCHAR[])"
+	if array {
 		target = "x"
-		// `x -> …` is the lambda form the pinned DuckDB (v1.5.5) accepts with a
-		// parenthesized predicate; the deprecation warning goes to stderr, so stdout
-		// stays valid JSON. (The newer `lambda x:` form rejects `(…)` here.)
-		wrap = func(p string) string { return "(len(list_filter(" + arr + ", x -> " + p + ")) > 0)" }
+		wrap = func(p string) string { return "COALESCE(len(list_filter(" + arr + ", x -> " + p + ")) > 0,FALSE)" }
 	}
-
-	vals := fm.Values
-	if len(vals) == 0 {
-		vals = []interface{}{nil}
-	}
-	parts := make([]string, 0, len(vals))
-	for _, v := range vals {
+	parts := make([]string, 0, len(fm.Values))
+	for _, v := range fm.Values {
+		switch v.(type) {
+		case nil, string, bool, json.Number:
+		default:
+			return "", fmt.Errorf("field %s needs scalar values", fm.Field)
+		}
+		_, number := v.(json.Number)
+		numeric := m.op == "gt" || m.op == "gte" || m.op == "lt" || m.op == "lte" || number && m.op == "" && len(m.transforms) == 0 && !m.fieldref && !m.cidr
 		var p string
 		switch {
-		case m.fieldref:
-			p, err = fieldrefPredicate(target, m.op, sigmaStr(v))
-		case m.cidr:
-			p, err = cidrPredicate(target, sigmaStr(v))
+		case m.op == "exists":
+			want, ok := v.(bool)
+			if !ok {
+				return "", fmt.Errorf("field %s: |exists requires a boolean", fm.Field)
+			}
+			p = "json_exists(raw," + sqlStr(sigmaJSONPath(fm.Field)) + ")"
+			if array {
+				p = "COALESCE(list_contains(" + p + ",TRUE),FALSE)"
+			}
+			if !want {
+				p = "(NOT COALESCE(" + p + ",FALSE))"
+			}
+		case numeric:
+			p, err = numericPredicate(fm.Field, m.op, sigmaStr(v))
+		case v == nil && array:
+			p = "(NOT " + wrap("x IS NOT NULL") + ")"
+			if len(fm.Modifiers) > 0 {
+				return "", fmt.Errorf("null values cannot have matching modifiers")
+			}
 		default:
-			p, err = buildValuePred(target, m, v)
+			switch {
+			case m.fieldref:
+				value, ok := v.(string)
+				if !ok {
+					return "", fmt.Errorf("|fieldref requires a field name")
+				}
+				p, err = fieldrefPredicate(target, m.op, value, m.cased)
+			case m.cidr:
+				value, ok := v.(string)
+				if !ok {
+					return "", fmt.Errorf("|cidr requires an IP/network string")
+				}
+				p, err = cidrPredicate(target, value)
+			default:
+				p, err = buildValuePred(target, m, v)
+			}
+			p = wrap(p)
 		}
 		if err != nil {
 			return "", fmt.Errorf("field %s: %w", fm.Field, err)
 		}
-		parts = append(parts, wrap(p))
+		parts = append(parts, p)
 	}
 	join := " OR "
 	if m.all {
@@ -420,7 +449,8 @@ func compileSearch(name string, s sigma.Search) (string, error) {
 	var parts []string
 	// keywords: unstructured full-text over the whole raw event
 	for _, kw := range s.Keywords {
-		parts = append(parts, "(raw ILIKE "+sqlStr("%"+escapeLike(kw)+"%")+" ESCAPE '\\')")
+		pattern, _ := sigmaGlobToLike(kw)
+		parts = append(parts, "(raw ILIKE "+sqlStr("%"+pattern+"%")+" ESCAPE '\\')")
 	}
 	kwJoined := ""
 	if len(parts) > 0 {
@@ -459,13 +489,12 @@ func compileSearch(name string, s sigma.Search) (string, error) {
 // matchName reports whether a search identifier matches a "1 of X" / "all of X"
 // pattern (which may contain a trailing/leading '*').
 func matchName(pattern, name string) bool {
-	if pattern == "them" || pattern == "" {
+	if pattern == "them" {
 		return true
 	}
-	if strings.HasSuffix(pattern, "*") {
-		return strings.HasPrefix(name, strings.TrimSuffix(pattern, "*"))
-	}
-	return pattern == name
+	expression := "^" + strings.ReplaceAll(regexp.QuoteMeta(pattern), `\*`, ".*") + "$"
+	matched, _ := regexp.MatchString(expression, name)
+	return matched
 }
 
 func namesMatching(pattern string, searches map[string]string) []string {
@@ -475,12 +504,21 @@ func namesMatching(pattern string, searches map[string]string) []string {
 			out = append(out, n)
 		}
 	}
+	sort.Strings(out)
 	return out
 }
 
 // compileCondition lowers the sigma-go condition AST to SQL, given each search's
 // precompiled SQL. Undefined identifiers are a hard error (a real Sigma mistake).
 func compileCondition(e sigma.SearchExpr, searches map[string]string) (string, error) {
+	result, err := compileConditionNode(e, searches)
+	if len(result) > 1_000_000 {
+		return "", fmt.Errorf("compiled condition exceeds 1 MB")
+	}
+	return result, err
+}
+
+func compileConditionNode(e sigma.SearchExpr, searches map[string]string) (string, error) {
 	switch n := e.(type) {
 	case sigma.And:
 		parts := make([]string, 0, len(n))
@@ -565,20 +603,22 @@ func compileAggregation(searchWhere string, agg sigma.AggregationExpr, timeframe
 		if f.Field == "" {
 			aggExpr = "count(*)"
 		} else {
+			if strings.HasPrefix(f.Field, "resources.") {
+				return "", fmt.Errorf("array distinct counts are unsupported")
+			}
 			aggExpr = "count(DISTINCT " + sigmaFieldExpr(f.Field) + ")"
 		}
 		groupBy = f.GroupedBy
-	case sigma.Sum:
-		aggExpr, groupBy = "sum(TRY_CAST("+sigmaFieldExpr(f.Field)+" AS DOUBLE))", f.GroupedBy
-	case sigma.Min:
-		aggExpr, groupBy = "min(TRY_CAST("+sigmaFieldExpr(f.Field)+" AS DOUBLE))", f.GroupedBy
-	case sigma.Max:
-		aggExpr, groupBy = "max(TRY_CAST("+sigmaFieldExpr(f.Field)+" AS DOUBLE))", f.GroupedBy
-	case sigma.Average:
-		aggExpr, groupBy = "avg(TRY_CAST("+sigmaFieldExpr(f.Field)+" AS DOUBLE))", f.GroupedBy
 	default:
-		return "", fmt.Errorf("this aggregation function isn't supported yet")
+		return "", fmt.Errorf("only count aggregation is supported; approximate numeric aggregates are not run")
 	}
+	if math.IsNaN(cmp.Threshold) || math.IsInf(cmp.Threshold, 0) || math.Trunc(cmp.Threshold) != cmp.Threshold || math.Abs(cmp.Threshold) > 9007199254740991 {
+		return "", fmt.Errorf("count aggregation needs an exact safe integer threshold")
+	}
+	if strings.HasPrefix(groupBy, "resources.") {
+		return "", fmt.Errorf("array aggregation groups are unsupported")
+	}
+
 	thr := strconv.FormatFloat(cmp.Threshold, 'f', -1, 64)
 	if groupBy == "" { // global: keep selection rows iff the whole-selection aggregate passes
 		return "(" + searchWhere + " AND (SELECT " + aggExpr + " FROM events WHERE " + searchWhere + ") " + op + " " + thr + ")", nil
@@ -591,10 +631,20 @@ func compileAggregation(searchWhere string, agg sigma.AggregationExpr, timeframe
 // compileRule translates a parsed rule to a WHERE clause, or returns diagnostics
 // explaining why it can't (fail-loud). ok=false means: do not run this rule.
 func compileRule(rule sigma.Rule) (where string, diags []SigmaDiag, ok bool) {
-	// logsource sanity (non-blocking): flag non-CloudTrail rules - fields may not map.
 	ls := rule.Logsource
-	if ls.Product != "" && !strings.EqualFold(ls.Product, "aws") {
-		diags = append(diags, SigmaDiag{Severity: "warning", Message: fmt.Sprintf("logsource product is %q, not aws/cloudtrail - fields may not map to this dataset", ls.Product)})
+	if ls.Product != "" && !strings.EqualFold(ls.Product, "aws") || ls.Service != "" && !strings.EqualFold(ls.Service, "cloudtrail") || ls.Category != "" || len(ls.AdditionalFields) > 0 {
+		return "", []SigmaDiag{{Severity: "error", Message: "only aws/cloudtrail log sources without category/custom constraints are supported"}}, false
+	}
+	if ls.Product == "" || ls.Service == "" {
+		diags = append(diags, SigmaDiag{Severity: "warning", Message: "this rule is evaluated only against the loaded CloudTrail dataset"})
+	}
+	for _, key := range []string{"correlation", "action", "filter"} {
+		if _, exists := rule.AdditionalFields[key]; exists {
+			return "", []SigmaDiag{{Severity: "error", Message: key + " rules are unsupported"}}, false
+		}
+	}
+	if taxonomy, exists := rule.AdditionalFields["taxonomy"]; exists && taxonomy != "sigma" {
+		return "", []SigmaDiag{{Severity: "error", Message: "custom Sigma taxonomy is unsupported"}}, false
 	}
 
 	searches := map[string]string{}
@@ -639,56 +689,8 @@ func compileRule(rule sigma.Rule) (where string, diags []SigmaDiag, ok bool) {
 		}
 	}
 	where = "(" + strings.Join(condSQLs, " OR ") + ")"
+	if len(where) > 1_000_000 {
+		return "", []SigmaDiag{{Severity: "error", Message: "compiled rule exceeds 1 MB"}}, false
+	}
 	return where, diags, true
-}
-
-// SigmaRun validates a Sigma rule and, if fully supported, runs it against the
-// events table, returning matches (capped at limit) + the generated SQL.
-func (s *Store) SigmaRun(ruleYAML string, limit int) (SigmaResult, error) {
-	if limit <= 0 {
-		limit = 500
-	}
-	res := SigmaResult{Diagnostics: []SigmaDiag{}, Rows: []Row{}}
-
-	rule, err := sigma.ParseRule([]byte(ruleYAML))
-	if err != nil {
-		res.Diagnostics = append(res.Diagnostics, SigmaDiag{Severity: "error", Message: err.Error()})
-		return res, nil // a parse error is a result, not a transport error
-	}
-	res.Parsed = true
-	res.Title = rule.Title
-
-	where, diags, ok := compileRule(rule)
-	res.Diagnostics = append(res.Diagnostics, diags...)
-	if !ok {
-		return res, nil
-	}
-	res.Supported = true
-	res.SQL = "SELECT " + pageCols + " FROM events WHERE " + where + " ORDER BY seq DESC LIMIT " + strconv.Itoa(limit)
-
-	// dataset size (scanned) - best-effort
-	var tot []struct {
-		N int `json:"n"`
-	}
-	if err := s.queryJSON("SELECT count(*) AS n FROM events;", &tot); err == nil && len(tot) > 0 {
-		res.Scanned = tot[0].N
-	}
-	// match count over the full dataset
-	var mc []struct {
-		N int `json:"n"`
-	}
-	if err := s.queryJSON("SELECT count(*) AS n FROM events WHERE "+where+";", &mc); err != nil {
-		return res, fmt.Errorf("sigma count: %w", err)
-	} else if len(mc) > 0 {
-		res.Matches = mc[0].N
-	}
-	// the capped page of matching rows
-	var rows []Row
-	if err := s.queryJSON(res.SQL+";", &rows); err != nil {
-		return res, fmt.Errorf("sigma query: %w", err)
-	}
-	if rows != nil {
-		res.Rows = rows
-	}
-	return res, nil
 }

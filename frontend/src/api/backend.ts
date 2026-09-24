@@ -63,6 +63,15 @@ export interface SigmaOutcome {
   matches: number;
   scanned: number;
   events: CloudTrailEvent[];
+  snapshot: EvidenceSnapshot | null;
+  explanations: Record<string, {name:string; matched:boolean}[]>;
+}
+export interface SigmaSuiteOutcome {
+  snapshot: EvidenceSnapshot;
+  results: {name:string; result:SigmaOutcome}[];
+}
+function sigmaOutcome(r:SigmaResultRaw):SigmaOutcome {
+ return {parsed:r.parsed,supported:r.supported,title:r.title,diagnostics:r.diagnostics??[],sql:r.sql,matches:r.matches,scanned:r.scanned,events:(r.rows??[]).map(rowToEvent),snapshot:r.snapshot,explanations:r.explanations??{}};
 }
 
 export interface Backend {
@@ -102,11 +111,12 @@ export interface Backend {
   analyze(options: AnalysisOptions, signal?: AbortSignal): Promise<ActivityAnalysis>;
   hunt(options: HuntOptions, signal?: AbortSignal): Promise<HuntResult>;
   queryLineageRaw(seq: number, snapshot: EvidenceSnapshot): Promise<string>;
-  queryLineage(seq: number): Promise<Lineage>; // assumed-role ancestry chain
+  queryLineage(seq: number, snapshot?:EvidenceSnapshot): Promise<Lineage>; // assumed-role ancestry chain
   queryLineageGraph(seq: number): Promise<LineageTree>; // full lineage tree centred on the event
   queryLineageChildren(accessKeyId: string, snapshot?: EvidenceSnapshot): Promise<LineageTree>; // lazy expand a node's child sessions
   queryLineageEvents(accessKeyId: string, snapshot?: EvidenceSnapshot): Promise<LineageTree>; // expand a session's own events as nodes
-  sigmaRun(ruleYAML: string): Promise<SigmaOutcome>; // validate + test a Sigma rule
+  sigmaRun(ruleYAML: string, signal?:AbortSignal): Promise<SigmaOutcome>;
+  sigmaSuite(rules:{name:string; yaml:string}[], signal?:AbortSignal):Promise<SigmaSuiteOutcome>;
 }
 
 interface WailsWindow {
@@ -282,8 +292,8 @@ class WailsBackend implements Backend {
   analyze(options: AnalysisOptions, signal?: AbortSignal) { return this.request<ActivityAnalysis>(signal, id=>this.app.Analyze(options,id)); }
   hunt(options: HuntOptions, signal?: AbortSignal) { return this.request<HuntResult>(signal, id=>this.app.Hunt(options,id)); }
   queryLineageRaw(seq: number, snapshot: EvidenceSnapshot) { return this.app.QueryLineageRaw(seq, snapshot) as Promise<string>; }
-  queryLineage(seq: number) {
-    return this.app.QueryLineage(seq) as Promise<Lineage>;
+  queryLineage(seq: number,snapshot?:EvidenceSnapshot) {
+    return (snapshot?this.app.QueryLineageSnapshot(seq,snapshot):this.app.QueryLineage(seq)) as Promise<Lineage>;
   }
   queryLineageGraph(seq: number) {
     return this.app.QueryLineageGraph(seq) as Promise<LineageTree>;
@@ -294,14 +304,14 @@ class WailsBackend implements Backend {
   queryLineageEvents(accessKeyId: string, snapshot?: EvidenceSnapshot) {
     return this.app.QueryLineageEvents(accessKeyId, snapshot ?? null) as Promise<LineageTree>;
   }
-  async sigmaRun(ruleYAML: string): Promise<SigmaOutcome> {
-    const r = (await this.app.SigmaRun(ruleYAML)) as SigmaResultRaw;
-    return {
-      parsed: r.parsed, supported: r.supported, title: r.title,
-      diagnostics: r.diagnostics || [], sql: r.sql, matches: r.matches, scanned: r.scanned,
-      events: (r.rows || []).map(rowToEvent),
-    };
+  async sigmaRun(ruleYAML:string,signal?:AbortSignal):Promise<SigmaOutcome> {
+    return sigmaOutcome(await this.request<SigmaResultRaw>(signal,id=>this.app.SigmaRunRequest(ruleYAML,id)));
   }
+  async sigmaSuite(rules:{name:string; yaml:string}[],signal?:AbortSignal):Promise<SigmaSuiteOutcome> {
+    const r=await this.request<{snapshot:EvidenceSnapshot;results:{name:string;result:SigmaResultRaw}[]}>(signal,id=>this.app.SigmaSuite(rules,id));
+    return {snapshot:r.snapshot,results:r.results.map(entry=>({name:entry.name,result:sigmaOutcome(entry.result)}))};
+  }
+
 }
 
 // ---- in-memory mock (browser preview): same windowed API over a JS array ----
@@ -460,10 +470,11 @@ class MockBackend implements Backend {
   async queryLineageEvents(): Promise<LineageTree> {
     return { applicable: false, currentId: "", rootId: "", nodes: [], edges: [], notes: [] };
   }
+  async sigmaSuite():Promise<SigmaSuiteOutcome> {throw new Error("Sigma testing needs the desktop app (the Go engine).");}
   async sigmaRun(): Promise<SigmaOutcome> {
     // The Sigma engine lives in Go - unavailable in the browser preview.
     return { parsed: false, supported: false, title: "", sql: "", matches: 0, scanned: 0, events: [],
-      diagnostics: [{ severity: "warning", message: "Sigma testing needs the desktop app (the Go engine)." }] };
+      snapshot:null,explanations:{},diagnostics: [{ severity: "warning", message: "Sigma testing needs the desktop app (the Go engine)." }] };
   }
 }
 

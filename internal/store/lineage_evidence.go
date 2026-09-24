@@ -261,9 +261,13 @@ func (s *lineageReader) ancestry(seed ancRow) ([]ancRow, string, string, error) 
 	}
 	return rows, "depth-limit", fmt.Sprintf("Stopped after %d credential links; earlier ancestry is not shown.", lineageMaxDepth), nil
 }
-func (s *Store) Lineage(seq int64) (Lineage, error) {
+func (s *Store) Lineage(seq int64, snapshots ...Snapshot) (Lineage, error) {
+	var requested *Snapshot
+	if len(snapshots) > 0 {
+		requested = &snapshots[0]
+	}
 	lin := Lineage{Nodes: []LineageNode{}}
-	_, err := s.lineageRead(nil, func(r *lineageReader) error {
+	_, err := s.lineageRead(requested, func(r *lineageReader) error {
 		seed, err := r.seed(seq)
 		if err != nil {
 			return err

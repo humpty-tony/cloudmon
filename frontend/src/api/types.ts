@@ -261,6 +261,8 @@ export interface SigmaResultRaw {
   matches: number; // dataset-wide match count
   scanned: number; // total events evaluated
   rows: EventRow[];
+  snapshot: EvidenceSnapshot | null;
+  explanations: Record<string, {name:string; matched:boolean}[]>;
 }
 
 /** Map an EventRow (flat) back to the CloudTrailEvent shape the UI components use.
