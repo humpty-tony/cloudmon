@@ -38,9 +38,14 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
    const recovering=location.search.includes('recovery');
    const state=window.captureTest={delayIdentity:false,delayTrail:false,failTrail:false,startCalls:0,resumeCalls:0,removeCalls:0,cleanupFails:false,exportFails:false,exported:null,raw,
      aggCalls:0,aggActive:0,aggMax:0,newerCalls:0,newerActive:0,newerMax:0,delayAgg:false,delayNewer:false,searchMode:false,failSearch:false,
+     rawBySeq:{},rawCalls:0,failRaw:false,failLineage:false,delayRawSeq:0,inspectorLoads:0,
      rows:[{seq:1,eventID:"saved-1",eventName:"RunInstances",eventSource:"ec2.amazonaws.com",eventTime:"2026-09-24T00:00:00Z",awsRegion:"us-east-1",identityType:"IAMUser",userName:"analyst",readOnly:false,managementEvent:true}],
      recovery:{evidence:{events:recovering?1:0,observations:recovering?3:0,variantEvents:recovering?1:0,lossy:recovering?1:0},capture:recovering?{version:1,phase:'ready',config,infra}:null,captureError:'',active:false}};
    const handlers=new Map();
+   const NativeWorker=window.Worker;
+   window.Worker=class extends NativeWorker {
+    postMessage(message,...rest){if(message && typeof message.json==='string')state.inspectorLoads++;return super.postMessage(message,...rest)}
+   };
    const queryRows=(filter)=>{
     if(state.failSearch)throw Error('Storage temporarily unavailable');
     // Only the event-ID UI scenarios below need filtering. Real search semantics
@@ -59,7 +64,8 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     QueryAggregates:async(filter)=>{state.aggCalls++;const rows=queryRows(filter);state.aggActive++;state.aggMax=Math.max(state.aggMax,state.aggActive);const result={total:rows.length,facets:{},histogram:[],histFrom:0,histTo:0,histStep:60000,stats:{errors:0,principals:1,sources:1,regions:1,minMs:0,maxMs:0}};try{if(state.delayAgg)await new Promise(resolve=>{state.resolveAgg=resolve});return result}finally{state.aggActive--}},
     QueryPage:async(filter)=>queryRows(filter),
     QueryNewer:async(_filter,since)=>{state.newerCalls++;state.newerActive++;state.newerMax=Math.max(state.newerMax,state.newerActive);const rows=state.rows.filter(r=>r.seq>since);try{if(state.delayNewer)await new Promise(resolve=>{state.resolveNewer=resolve});return rows}finally{state.newerActive--}},
-    GetEventRaw:async()=>raw,
+    GetEventRaw:async(seq)=>{state.rawCalls++;if(state.failRaw)throw Error('Storage unavailable');const value=state.rawBySeq[seq] || state.raw;if(state.delayRawSeq===seq)return new Promise(resolve=>{state.resolveRaw=()=>resolve(value)});return value},
+    QueryLineage:async()=>{if(state.failLineage)throw Error('Lineage unavailable');return {applicable:true,sourceIdentity:'',complete:false,nodes:[]}},
     RawBySeqs:async()=>{if(state.exportFails)throw Error('Storage unavailable');return [raw]},
     ExportEventsJSON:async(data)=>{state.exported=data;return 'selection.json'},
     GetEventEvidence:async()=>({total:3,variants:3,observations:[1,2,3].map(id=>({id,source:id===3?'/evidence/history.csv':'/evidence/CloudTrail/2026/09/24/events.json.gz',ordinal:id,format:id===3?'event-history-csv':'cloudtrail-json',lossy:id===3,sha256:String(id).repeat(64),observedAt:'2026-09-24T00:01:00Z',displayed:id===1}))}),
@@ -238,6 +244,77 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await query.fill('(');
   await page.getByTitle('Clear all filters',{exact:true}).click();
   assert.equal(await query.inputValue(),'','Clear did not discard an unapplied draft');
+  // Large-event rendering stays bounded; exact evidence survives the worker,
+  // field pages, raw-source segments, and progress updates.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.evaluate(()=>{
+    const state=window.captureTest;
+    state.raw=JSON.stringify({eventID:'saved-1',eventName:'RunInstances',eventTime:'2026-09-24T00:00:00Z',userIdentity:{type:'IAMUser',userName:'analyst'},opaque:'EXACT_INTEGER',requestParameters:{items:Array.from({length:20000},(_,i)=>({resourceId:`i-${i}`,state:'active'}))},longValue:'x'.repeat(100000)}).replace('"EXACT_INTEGER"','9007199254740993');
+    state.rawBySeq[1]=state.raw;
+  });
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.locator('.row').filter({hasText:'RunInstances'}).click();
+  const fields=page.getByRole('region',{name:'Event fields',exact:true});
+  await fields.getByText('9007199254740993',{exact:true}).waitFor();
+  await fields.getByRole('button',{name:/requestParameters/}).click();
+  await fields.getByRole('button',{name:/items/}).click();
+  await page.clock.runFor(50);
+  assert.ok(await fields.locator('.ft-row').count()<40,'field tree mounted the full large array');
+  await fields.evaluate(el=>{el.scrollTop=el.scrollHeight});
+  await page.clock.runFor(100);
+  await fields.getByRole('button',{name:'Next fields',exact:true}).click();
+  await fields.getByText('51–100 of 20,000',{exact:true}).waitFor();
+  await fields.evaluate(el=>{el.scrollTop=0});
+  await page.clock.runFor(100);
+  const parsedOnce=await page.evaluate(()=>window.captureTest.inspectorLoads);
+  await page.evaluate(()=>window.captureTest.emit(2));
+  await page.clock.runFor(500);
+  assert.equal(await page.evaluate(()=>window.captureTest.inspectorLoads),parsedOnce,'capture progress reparsed the selected record');
+  assert.ok(await fields.locator('.ft-row').count()<40);
+  await page.setViewportSize({width:960,height:720});
+  await page.clock.runFor(100);
+  await page.screenshot({path:path.join(output,'inspector-large.png'),fullPage:true});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  await page.getByRole('button',{name:'{ } Raw JSON',exact:true}).click();
+  const rawDialog=page.getByRole('dialog',{name:'Raw JSON',exact:true});
+  assert.ok((await rawDialog.locator('pre').textContent()).includes('9007199254740993'));
+  assert.ok((await rawDialog.locator('pre').textContent()).length<=32769);
+  await rawDialog.getByRole('button',{name:'Next text segment',exact:true}).click();
+  await rawDialog.getByText('Segment 2 of',{exact:false}).waitFor();
+  await page.screenshot({path:path.join(output,'inspector-raw.png'),fullPage:true});
+  await page.keyboard.press('Escape');
+  await rawDialog.waitFor({state:'hidden'});
+  await fields.waitFor({state:'visible'});
+  // Late details must not replace a different event; failures have an explicit retry.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.evaluate(()=>{
+    const state=window.captureTest;state.emit(2);state.delayRawSeq=1;
+    state.rawBySeq[2]='{"eventID":"second-event","eventName":"LiveEvent2","userIdentity":{"type":"AssumedRole"}}';
+    state.rows[0].identityType='AssumedRole';state.failLineage=true;
+  });
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.locator('.row').filter({hasText:'RunInstances'}).click();
+  await page.waitForFunction(()=>!!window.captureTest.resolveRaw);
+  await page.locator('.etbody').evaluate(el=>{el.scrollTop=0});
+  await page.clock.runFor(100);
+  await page.locator('.row').filter({hasText:'LiveEvent2'}).click();
+  await fields.getByText('second-event',{exact:true}).waitFor();
+  await page.evaluate(()=>window.captureTest.resolveRaw());
+  await page.clock.runFor(100);
+  assert.equal(await fields.getByText('saved-1',{exact:true}).count(),0,'late response replaced selected evidence');
+  await page.getByRole('button',{name:'Retry lineage',exact:true}).waitFor();
+  await page.evaluate(()=>{window.captureTest.failLineage=false});
+  await page.getByRole('button',{name:'Retry lineage',exact:true}).click();
+  await fields.getByText('second-event',{exact:true}).waitFor();
+  assert.equal(await page.getByRole('button',{name:'Retry lineage',exact:true}).count(),0);
+  await page.locator('.row').filter({hasText:'LiveEvent2'}).click();
+  await page.evaluate(()=>{window.captureTest.failRaw=true});
+  await page.locator('.row').filter({hasText:'LiveEvent2'}).click();
+  await page.getByRole('button',{name:'Retry event',exact:true}).waitFor();
+  await page.screenshot({path:path.join(output,'inspector-error.png'),fullPage:true});
+  await page.evaluate(()=>{window.captureTest.failRaw=false});
+  await page.getByRole('button',{name:'Retry event',exact:true}).click();
+  await fields.getByText('second-event',{exact:true}).waitFor();
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture','invalid search stays unapplied','failed search shows stale results and retries','clear resets unapplied draft'],errors}));
