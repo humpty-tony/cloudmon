@@ -445,6 +445,7 @@ export function hasCredentialLineage(event: CloudTrailEvent): boolean {
 export interface ResourceReference { arn: string; kind: string; source: string }
 export interface CorrelationReason { kind: string; label: string; value?: string }
 export interface InvestigationOptions { seq: number; eventID: string; minutes: number; relation: string; snapshot: EvidenceSnapshot | null }
+export interface InvestigationExport { path:string; eventCount:number; totalMatches:number; observationCount:number; truncated:boolean }
 export interface InvestigationResult {
   snapshot: EvidenceSnapshot;
   anchor: EventRow;

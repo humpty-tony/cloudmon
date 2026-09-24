@@ -3,7 +3,7 @@ import {useEffect, useRef, useState} from "react";
 import {createPortal} from "react-dom";
 import {useVirtualizer} from "@tanstack/react-virtual";
 import {backend} from "../api/backend";
-import type {CloudTrailEvent, EvidenceSnapshot, InvestigationResult} from "../api/types";
+import type {CloudTrailEvent, EvidenceSnapshot, InvestigationOptions, InvestigationResult} from "../api/types";
 import {RawJsonModal} from "./RawJsonModal";
 
 type Anchor = {seq:number;eventID:string;eventName:string};
@@ -24,6 +24,11 @@ export function InvestigationView({event,onClose,initialSnapshot}:{event:CloudTr
   const [raw,setRaw]=useState<{title:string;json:string}|null>(null);
   const [rawBusy,setRawBusy]=useState(false);
   const [rawError,setRawError]=useState("");
+  const [applied,setApplied]=useState<{options:InvestigationOptions;key:string}|null>(null);
+  const [exportBusy,setExportBusy]=useState(false),[exportCancelling,setExportCancelling]=useState(false);
+  const [exportNotice,setExportNotice]=useState(""),[exportError,setExportError]=useState("");
+  const exportController=useRef<AbortController|null>(null),exportRequest=useRef(0);
+  const controlsKey=JSON.stringify({anchor,minutes,relation,reload});
   const snapshot=useRef<EvidenceSnapshot|null>(initialSnapshot??null);
   const queue=useRef<Promise<void>>(Promise.resolve());
   const request=useRef(0);
@@ -42,18 +47,21 @@ export function InvestigationView({event,onClose,initialSnapshot}:{event:CloudTr
   },[onClose,raw]);
   useEffect(()=>{
     const controller=new AbortController(),id=++request.current;
+    exportController.current?.abort();exportController.current=null;exportRequest.current++;
+    setApplied(null);setExportBusy(false);setExportCancelling(false);setExportNotice("");setExportError("");
     rawRequest.current++;setRaw(null);setRawBusy(false);setRawError("");setSelected(null);setResult(null);setLoading(true);setError("");
     const run=async()=>{
       if(controller.signal.aborted)return;
       try{
-        const next=await backend.investigate({seq:anchor.seq,eventID:anchor.eventID,minutes,relation,snapshot:snapshot.current},controller.signal);
+        const options:InvestigationOptions={seq:anchor.seq,eventID:anchor.eventID,minutes,relation,snapshot:snapshot.current};
+        const next=await backend.investigate(options,controller.signal);
         if(controller.signal.aborted||id!==request.current)return;
-        snapshot.current=next.snapshot;setResult(next);setSelected(next.events.find(r=>r.event.seq===anchor.seq)??null);
+        snapshot.current=next.snapshot;setResult(next);setApplied({options:{...options,snapshot:{...next.snapshot}},key:controlsKey});setSelected(next.events.find(r=>r.event.seq===anchor.seq)??null);
       }catch(e){if(!controller.signal.aborted&&id===request.current)setError(String(e))}
       finally{if(!controller.signal.aborted&&id===request.current)setLoading(false)}
     };
     queue.current=queue.current.then(run,run);
-    return ()=>controller.abort();
+    return ()=>{controller.abort();exportController.current?.abort();exportRequest.current++};
   },[anchor,minutes,relation,reload]);
   useEffect(()=>{if(result)virtual.measure()},[result]);
   const center=(item:Match)=>{setHistory(h=>[...h,anchor].slice(-20));setAnchor(item.event);setRelation("all")};
@@ -67,6 +75,20 @@ export function InvestigationView({event,onClose,initialSnapshot}:{event:CloudTr
     finally{if(id===rawRequest.current)setRawBusy(false)}
   };
   const choose=(item:Match)=>{rawRequest.current++;setRawBusy(false);setRawError("");setSelected(item)};
+  const exportReport=async()=>{
+    if(!result||loading||!applied||applied.key!==controlsKey||exportController.current)return;
+    const abort=new AbortController(),id=++exportRequest.current;exportController.current=abort;
+    setExportBusy(true);setExportCancelling(false);setExportNotice("");setExportError("");
+    try{
+      const saved=await backend.exportInvestigation(applied.options,abort.signal);
+      if(id!==exportRequest.current)return;
+      // A completed save may win a cancellation race. Preserve that fact instead
+      // of claiming a successfully published report was never written.
+      if(saved.path)setExportNotice(`Saved investigation report: ${saved.path} · ${saved.eventCount.toLocaleString()} of ${saved.totalMatches.toLocaleString()} matching events · ${saved.observationCount.toLocaleString()} source observations${saved.truncated?". Result cap applies; narrow the investigation to include other matches.":"."}`);
+      else setExportNotice("Export cancelled. No report was saved.");
+    }catch(e){if(id===exportRequest.current){if(abort.signal.aborted)setExportNotice("Export cancelled. No report was saved.");else setExportError(String(e))}}
+    finally{if(id===exportRequest.current){exportController.current=null;setExportBusy(false);setExportCancelling(false)}}
+  };
   return createPortal(<><div className="investigation-scrim" onClick={onClose}>
     <section className="investigation" role="dialog" aria-modal="true" aria-label="Event investigation" onClick={e=>e.stopPropagation()} onKeyDown={e=>{
       if(e.key!=="Tab")return;
@@ -85,6 +107,12 @@ export function InvestigationView({event,onClose,initialSnapshot}:{event:CloudTr
         <label>Relationship <select aria-label="Investigation relationship" value={relation} onChange={e=>setRelation(e.target.value)}>{relationships.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
         <span>Scope: all recorded evidence in this window</span>
         <button onClick={()=>{snapshot.current=null;setReload(n=>n+1)}}>Refresh snapshot</button>
+      </div>
+      <div className="investigation-export">
+        <div><button disabled={loading||!result||!applied||applied.key!==controlsKey||exportBusy} onClick={()=>void exportReport()}>Export investigation</button>{exportBusy&&<button disabled={exportCancelling} onClick={()=>{exportController.current?.abort();setExportCancelling(true)}}>Cancel export</button>}<span>ZIP with a printable report and retained source records. Includes the displayed scope, up to 500 events.</span></div>
+        {exportBusy&&<p className="investigation-export-status" role="status">{exportCancelling?"Cancel requested. Close the save dialog if it is still open.":"Preparing investigation report…"}</p>}
+        {exportNotice&&<p className="investigation-export-status" role="status">{exportNotice}</p>}
+        {exportError&&<p className="investigation-export-error" role="alert">{exportError}</p>}
       </div>
       {loading?<div className="investigation-status" role="status">Loading investigation…</div>:error?<div className="investigation-status" role="alert">{error}<button onClick={()=>setReload(n=>n+1)}>Retry investigation</button></div>:result&&<>
         <div className="investigation-summary">

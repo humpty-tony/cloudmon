@@ -27,6 +27,7 @@ import type {
   LineageTree,
   InvestigationOptions,
   InvestigationResult,
+  InvestigationExport,
   QueryFilter,
   RequiredPermission,
   SigmaDiag,
@@ -108,6 +109,7 @@ export interface Backend {
   exportFiltered(filter: QueryFilter, snapshot: EvidenceSnapshot, signal?: AbortSignal): Promise<FilteredExport>;
   getEventRaw(seq: number): Promise<string>;
   investigate(options: InvestigationOptions, signal?: AbortSignal): Promise<InvestigationResult>;
+  exportInvestigation(options: InvestigationOptions, signal?: AbortSignal): Promise<InvestigationExport>;
   analyze(options: AnalysisOptions, signal?: AbortSignal): Promise<ActivityAnalysis>;
   hunt(options: HuntOptions, signal?: AbortSignal): Promise<HuntResult>;
   queryLineageRaw(seq: number, snapshot: EvidenceSnapshot): Promise<string>;
@@ -289,6 +291,7 @@ class WailsBackend implements Backend {
     return this.app.GetEventRaw(seq) as Promise<string>;
   }
   investigate(options: InvestigationOptions, signal?: AbortSignal) { return this.request<InvestigationResult>(signal, id=>this.app.Investigate(options,id) as Promise<InvestigationResult>); }
+  exportInvestigation(options: InvestigationOptions, signal?: AbortSignal) { return this.request<InvestigationExport>(signal, id=>this.app.ExportInvestigation(options,id) as Promise<InvestigationExport>); }
   analyze(options: AnalysisOptions, signal?: AbortSignal) { return this.request<ActivityAnalysis>(signal, id=>this.app.Analyze(options,id)); }
   hunt(options: HuntOptions, signal?: AbortSignal) { return this.request<HuntResult>(signal, id=>this.app.Hunt(options,id)); }
   queryLineageRaw(seq: number, snapshot: EvidenceSnapshot) { return this.app.QueryLineageRaw(seq, snapshot) as Promise<string>; }
@@ -455,6 +458,7 @@ class MockBackend implements Backend {
     return this.data.find((e) => e.seq === seq)?.rawJSON ?? "";
   }
   async investigate(): Promise<InvestigationResult> { throw new Error("Event investigation requires the desktop query engine."); }
+  async exportInvestigation(): Promise<InvestigationExport> { throw new Error("Investigation report export requires the desktop app."); }
   async analyze(): Promise<ActivityAnalysis> { throw new Error("Activity analysis requires the desktop query engine."); }
   async hunt(): Promise<HuntResult> { throw new Error("Investigation hunts require the desktop query engine."); }
   async queryLineageRaw(): Promise<string> { throw new Error("Credential lineage requires the desktop query engine."); }
