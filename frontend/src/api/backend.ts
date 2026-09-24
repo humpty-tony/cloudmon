@@ -5,6 +5,8 @@
 // the UI pulls pages + aggregates, never the whole dataset.
 
 import type {
+  HuntOptions,
+  HuntResult,
   AnalysisOptions,
   ActivityAnalysis,
   AwsIdentity,
@@ -98,6 +100,7 @@ export interface Backend {
   getEventRaw(seq: number): Promise<string>;
   investigate(options: InvestigationOptions, signal?: AbortSignal): Promise<InvestigationResult>;
   analyze(options: AnalysisOptions, signal?: AbortSignal): Promise<ActivityAnalysis>;
+  hunt(options: HuntOptions, signal?: AbortSignal): Promise<HuntResult>;
   queryLineageRaw(seq: number, snapshot: EvidenceSnapshot): Promise<string>;
   queryLineage(seq: number): Promise<Lineage>; // assumed-role ancestry chain
   queryLineageGraph(seq: number): Promise<LineageTree>; // full lineage tree centred on the event
@@ -277,6 +280,7 @@ class WailsBackend implements Backend {
   }
   investigate(options: InvestigationOptions, signal?: AbortSignal) { return this.request<InvestigationResult>(signal, id=>this.app.Investigate(options,id) as Promise<InvestigationResult>); }
   analyze(options: AnalysisOptions, signal?: AbortSignal) { return this.request<ActivityAnalysis>(signal, id=>this.app.Analyze(options,id)); }
+  hunt(options: HuntOptions, signal?: AbortSignal) { return this.request<HuntResult>(signal, id=>this.app.Hunt(options,id)); }
   queryLineageRaw(seq: number, snapshot: EvidenceSnapshot) { return this.app.QueryLineageRaw(seq, snapshot) as Promise<string>; }
   queryLineage(seq: number) {
     return this.app.QueryLineage(seq) as Promise<Lineage>;
@@ -442,6 +446,7 @@ class MockBackend implements Backend {
   }
   async investigate(): Promise<InvestigationResult> { throw new Error("Event investigation requires the desktop query engine."); }
   async analyze(): Promise<ActivityAnalysis> { throw new Error("Activity analysis requires the desktop query engine."); }
+  async hunt(): Promise<HuntResult> { throw new Error("Investigation hunts require the desktop query engine."); }
   async queryLineageRaw(): Promise<string> { throw new Error("Credential lineage requires the desktop query engine."); }
   async queryLineage(): Promise<Lineage> {
     return { applicable: false, sourceIdentity: "", complete: false, nodes: [] }; // no engine in the browser preview

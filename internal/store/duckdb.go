@@ -79,6 +79,7 @@ func (s *Store) engine() error {
 		s.writer = sql.OpenDB(shared)
 		s.writer.SetMaxOpenConns(1)
 		s.writer.SetMaxIdleConns(1)
+		s.initErr = registerEvidenceFunctions(s.ctx, s.db)
 	})
 	return s.initErr
 }

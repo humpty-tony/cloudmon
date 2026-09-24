@@ -637,3 +637,15 @@ func (a *App) Analyze(options store.AnalysisOptions, requestID string) (store.Ac
 	defer done()
 	return a.db.Analyze(ctx, options)
 }
+
+func (a *App) Hunt(options store.HuntOptions, requestID string) (store.HuntResult, error) {
+	if a.ensureDB() == nil {
+		return store.HuntResult{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.HuntResult{}, err
+	}
+	defer done()
+	return a.db.Hunt(ctx, options)
+}

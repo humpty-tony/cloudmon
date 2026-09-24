@@ -57,6 +57,6 @@ export function AnalysisView({filter}:{filter:QueryFilter}) {
       <details className="analysis-notes"><summary>Scope and interpretation</summary>{result.notes.map(note=><p key={note}>{note}</p>)}<p>Overall scope: {number(result.scope.events)} stored events; {number(result.scope.invalidTimes)} lack usable timestamps. Missing entity values form an explicit “Not recorded” bucket.</p></details>
     </>}
     {raw&&<RawJsonModal title={raw.title} json={raw.json} onClose={()=>setRaw(null)}/>}
-    {investigation&&<InvestigationView event={investigation} onClose={()=>setInvestigation(null)}/>}
+    {investigation&&result&&<InvestigationView event={investigation} initialSnapshot={result.snapshot} onClose={()=>setInvestigation(null)}/>}
   </main>;
 }
