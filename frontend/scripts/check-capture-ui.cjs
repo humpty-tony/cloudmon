@@ -120,7 +120,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     ResumeCapture:async()=>{state.resumeCalls++;state.recovery.active=true;return infra},
     StopCapture:async()=>{state.recovery.active=false},
     TeardownCapture:async()=>{state.removeCalls++;state.recovery.active=false;if(state.cleanupFails){state.recovery.capture.phase='cleanup';throw Error('Queue deletion denied; saved resources retained')}state.recovery.capture=null},
-    QueryAggregates:async(filter)=>{state.aggCalls++;const rows=queryRows(filter);state.aggActive++;state.aggMax=Math.max(state.aggMax,state.aggActive);const result={snapshot:snapshot(),total:rows.length,facets:{},histogram:[],histFrom:0,histTo:0,histStep:60000,stats:{errors:0,principals:1,sources:1,regions:1,minMs:0,maxMs:0}};try{if(state.delayAgg)await new Promise(resolve=>{state.resolveAgg=resolve});return result}finally{state.aggActive--}},
+    QueryAggregates:async(filter)=>{state.aggCalls++;const rows=queryRows(filter);state.aggActive++;state.aggMax=Math.max(state.aggMax,state.aggActive);const result={snapshot:snapshot(),total:rows.length,facets:state.workbenchFacets||{},histogram:[],histFrom:0,histTo:0,histStep:60000,stats:{errors:0,principals:1,sources:1,regions:1,minMs:0,maxMs:0}};try{if(state.delayAgg)await new Promise(resolve=>{state.resolveAgg=resolve});return result}finally{state.aggActive--}},
     QueryPage:async(filter)=>queryRows(filter),
     QueryAggregatesRequest:async(filter)=>window.go.main.App.QueryAggregates(filter),
     QuerySearch:async(filter,id,limit)=>{
@@ -342,6 +342,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.goto('http://127.0.0.1:5181/?recovery');
   await page.evaluate(()=>{
     const state=window.captureTest;state.emit(120);
+    state.workbenchFacets={eventSource:[{value:'ec2.amazonaws.com',count:120}],userName:[{value:'analyst',count:120}],identityType:[{value:'IAMUser',count:120}],awsRegion:[{value:'us-east-1',count:120}]};
     for(const row of state.rows)state.rawBySeq[row.seq]=JSON.stringify({
       eventID:row.eventID,eventName:row.eventName,eventTime:row.eventTime,
       requestParameters:{items:Array.from({length:150},(_,i)=>({resourceId:`resource-${i}`,state:'active'}))},

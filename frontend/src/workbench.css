@@ -9,6 +9,8 @@
 .app--workbench .toolbar .tb-btn { font-size: 12px; padding: 6px 9px; border-radius: 5px; }
 .app--workbench .toolbar .tb-count { display: none; }
 .app--workbench .toolbar .tb-right { margin-left: auto; }
+/* Settings and Help already live in the titlebar menus; keep the command palette. */
+.app--workbench .toolbar .tb-right > button:nth-of-type(-n + 2) { display: none; }
 .app--workbench .toolbar .tb-sep { margin: 0 3px; }
 .workbench-search { display: flex; align-items: flex-start; gap: 12px; padding: 5px 18px 10px; background: var(--bg-1); border-bottom: 1px solid var(--line-struct); flex: none; }
 .workbench-search-tools { display: flex; gap: 5px; padding-top: 3px; }
