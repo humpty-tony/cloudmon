@@ -63,6 +63,8 @@ jobs:
           'CGO_ENABLED=1' >> $env:GITHUB_ENV
           'CC=gcc' >> $env:GITHUB_ENV
           'CXX=g++' >> $env:GITHUB_ENV
+          & $compiler --version
+          & C:\msys64\ucrt64\bin\ld.exe --version
       - name: Install frontend
         working-directory: frontend
         run: npm ci
@@ -70,7 +72,8 @@ jobs:
         working-directory: frontend
         run: npm run build
       - name: Backend checks with real DuckDB
-        run: go test -tags "${{ matrix.tags }}" ./...
+        # Native static links are large; serialize package builds on hosted runners.
+        run: go test -p 1 -tags "${{ matrix.tags }}" ./...
       - name: Capture setup browser check
         if: runner.os == 'Linux'
         working-directory: frontend
