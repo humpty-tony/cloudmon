@@ -48,6 +48,13 @@ def verify_tag(tag, commit):
     subprocess.run(["git", "merge-base", "--is-ancestor", commit, "refs/remotes/origin/main"], check=True)
 
 
+def refresh_tag(tag, commit):
+    # A moved or deleted tag fails the fetch instead of silently releasing new code.
+    subprocess.run(["git", "fetch", "--no-tags", "origin",
+                    "+refs/heads/main:refs/remotes/origin/main", f"refs/tags/{tag}:refs/tags/{tag}"], check=True)
+    verify_tag(tag, commit)
+
+
 def metadata():
     commit = git("rev-parse", "HEAD")
     ref = os.environ.get("GITHUB_REF", "")
@@ -150,11 +157,10 @@ def api(method, endpoint, data=None):
 
 def publish(tag, directory, repo, commit):
     _, prerelease = version_info(tag)
+    marker = f"<!-- cloudmon-release:{commit} -->"
     files = assemble(tag, directory, verify=True)
     # Recheck the remote tag/main after the build, before any release mutation.
-    subprocess.run(["git", "fetch", "--no-tags", "origin",
-                    "+refs/heads/main:refs/remotes/origin/main", f"refs/tags/{tag}:refs/tags/{tag}"], check=True)
-    verify_tag(tag, commit)
+    refresh_tag(tag, commit)
     endpoint = f"repos/{repo}/releases"
     try:
         release = api("GET", f"{endpoint}/tags/{quote(tag, safe='')}")
@@ -165,20 +171,22 @@ def publish(tag, directory, repo, commit):
             "tag_name": tag, "target_commitish": commit, "name": f"CloudMon {tag}",
             "draft": True, "prerelease": prerelease, "generate_release_notes": True,
             "body": "Download the archive for your OS and verify it against SHA256SUMS. "
-                    "macOS includes Intel and Apple Silicon. These binaries are not code-signed or notarized.\n\n"
-                    f"Built from commit `{commit}`. See [installation and release notes]"
+                    "macOS includes Intel and Apple Silicon. Binaries are not signed with a publisher certificate; macOS is not notarized.\n\n"
+                    f"{marker}\n\nBuilt from commit `{commit}`. See [installation and release notes]"
                     f"(https://github.com/{repo}/blob/{commit}/docs/releases.md)."
         })
     if not release["draft"]:
         raise ValueError("This release is already published. Published downloads are never overwritten; use a new version.")
-    if release["target_commitish"] != commit or release["tag_name"] != tag:
+    # target_commitish is ignored by GitHub when the tag already exists. The
+    # resolved Git tag verifies the code; the marker identifies our retryable draft.
+    if marker not in (release.get("body") or "") or release["tag_name"] != tag:
         raise ValueError("Existing draft was not created for this exact commit/tag; inspect it before retrying.")
     expected = {path.name: path for path in files}
     if any(asset["name"] not in expected for asset in release["assets"]):
         raise ValueError("Existing draft contains unexpected assets; inspect it before retrying.")
     gh("release", "upload", tag, *map(str, files), "--repo", repo, "--clobber")
     uploaded = api("GET", f"{endpoint}/{release['id']}")
-    if not uploaded["draft"] or uploaded["tag_name"] != tag or uploaded["target_commitish"] != commit:
+    if not uploaded["draft"] or uploaded["tag_name"] != tag or marker not in (uploaded.get("body") or ""):
         raise ValueError("Release changed during upload; refusing to publish.")
     assets = uploaded["assets"]
     if len(assets) != len(files) or {a["name"] for a in assets} != set(expected):
@@ -187,6 +195,7 @@ def publish(tag, directory, repo, commit):
         path = expected[asset["name"]]
         if asset["state"] != "uploaded" or asset["size"] != path.stat().st_size or asset.get("digest") != "sha256:" + digest(path):
             raise ValueError(f"Release asset verification failed: {path.name}; draft retained for retry.")
+    refresh_tag(tag, commit)
     result = api("PATCH", f"{endpoint}/{release['id']}", {
         "draft": False, "prerelease": prerelease, "make_latest": "false" if prerelease else "legacy"
     })

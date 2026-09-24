@@ -60,6 +60,20 @@ class ReleaseChecks(unittest.TestCase):
             self.assertIn("publish=true\n", output.read_text())
             verify.assert_called_with(self.tag, self.commit)
 
+    def test_native_stamp_uses_numeric_core_and_keeps_full_build_in_comments(self):
+        previous = Path.cwd()
+        os.chdir(self.root)
+        self.addCleanup(os.chdir, previous)
+        config = {"name": "cloudmon", "info": {"productVersion": "0.1.0", "productName": "CloudMon"}}
+        Path("wails.json").write_text(json.dumps(config))
+        with patch.object(release, "git", return_value=self.commit):
+            release.stamp("v12.34.56-rc.1")
+        stamped = json.loads(Path("wails.json").read_text())
+        self.assertEqual(stamped["info"]["productVersion"], "12.34.56")
+        self.assertEqual(stamped["info"]["productName"], "CloudMon")
+        self.assertIn("v12.34.56-rc.1", stamped["info"]["comments"])
+        self.assertIn(self.commit, stamped["info"]["comments"])
+
     def test_tag_must_name_checked_commit_already_on_main(self):
         previous = Path.cwd()
         os.chdir(self.root)
@@ -104,7 +118,8 @@ class ReleaseChecks(unittest.TestCase):
     def exercise_publish(self, *, new=False, published=False, wrong_digest=False, upload_fails=False, forbidden=False):
         files = self.packages()
         record = {"id": 7, "draft": not published, "tag_name": self.tag,
-                  "target_commitish": self.commit, "assets": []}
+                  "target_commitish": "main", "assets": [],
+                  "body": f"<!-- cloudmon-release:{self.commit} -->"}
         calls = []
         def api(method, endpoint, data=None):
             calls.append((method, endpoint, data))

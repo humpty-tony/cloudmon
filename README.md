@@ -58,7 +58,7 @@ Nothing leaves the host. It is for the people who do this work without a Splunk 
 
 ## Install
 
-Prebuilt binaries for Windows, Linux, and macOS are on the [releases page](https://github.com/humpty-tony/CloudMon/releases). Each one is self-contained (the DuckDB engine is embedded), so download the build for your platform and run it, with nothing else to install.
+Prebuilt binaries for Windows, Linux, and macOS are on the [releases page](https://github.com/humpty-tony/cloudmon/releases). Download the archive for your platform, verify it against `SHA256SUMS`, and extract it. The DuckDB engine is embedded. Windows uses WebView2; Linux requires compatible GTK 3 and WebKit2GTK 4.1 runtime libraries. See [downloads and tagged releases](docs/releases.md) for platform requirements and the release process.
 
 ### Build from source
 
