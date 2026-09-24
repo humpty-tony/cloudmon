@@ -1,3 +1,4 @@
+import {AliasBadge} from "./AliasBadge";
 import type { CloudTrailEvent, FilterField, Lineage, LineageNode, QueryOp } from "../api/types";
 import { identityGlyph } from "../api/types";
 
@@ -67,7 +68,7 @@ function Node(props: {
     >
       <span className={`lg-glyph ${GLYPH_CLS[props.type] || "lg-other"}`}>{identityGlyph(props.type)}</span>
       <span className="lg-body">
-        <span className="lg-primary">{v.primary}</span>
+        <span className="lg-primary"><span className="lg-primary-text">{v.primary}</span><AliasBadge kind="arn" value={props.arn||props.roleArn}/></span>
         {v.secondary && <span className="lg-secondary">{v.secondary}</span>}
       </span>
       {props.current && <span className="lg-here">this event</span>}

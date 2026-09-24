@@ -1,3 +1,4 @@
+import {AliasBadge} from "./AliasBadge";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { FilterField, QueryOp } from "../api/types";
@@ -110,6 +111,7 @@ export const FieldTree = memo(function FieldTree({ json, height, onPivot }: { js
               <span className={`ft-caret ${open.has(key)?'open':''}`}>▸</span><span className="ft-key">{field.key}</span>
               <span className="ft-meta">{field.kind==='array'?`[${field.children.toLocaleString()}]`:`{${field.children.toLocaleString()}}`}</span>
             </button> : <><span className="ft-key" title={field.path.join('.')}>{field.key}</span><span className={`ft-val ft-${field.kind==='number'?'num':field.kind==='boolean'?'bool':field.kind==='null'?'null':'str'}`} title={field.truncated?'Long value · open Raw JSON for the complete text':value}>{value===''?'""':value}{field.truncated?'…':''}</span>
+              {!field.truncated&&field.kind==="string"&&<AliasBadge field={field.key} value={value}/>}
               {pivot && !field.truncated && field.kind!=='null' && <span className="ft-pivot">
                 <button className="pv" title={`Filter for ${value}`} onClick={()=>onPivot(pivot,value,'include')}>⌕+</button>
                 <button className="pv" title={`Filter out ${value}`} onClick={()=>onPivot(pivot,value,'exclude')}>⌕−</button>

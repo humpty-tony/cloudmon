@@ -1,3 +1,4 @@
+import {AliasBadge} from "./AliasBadge";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { CloudTrailEvent, EvidenceSnapshot, FilterField, Lineage, QueryOp } from "../api/types";
@@ -59,6 +60,7 @@ function IdentityCell({ e }: { e: CloudTrailEvent }) {
       <span className={`c-ident-glyph t-${ui.type}`}>{identityGlyph(ui.type)}</span>
       <span className="c-ident-name">{eventUser(e)}</span>
       {ui.arn && <span className="c-ident-arn">{truncateArn(ui.arn, 22)}</span>}
+      <AliasBadge kind="arn" value={ui.arn||""} />
     </span>
   );
 }
@@ -309,7 +311,7 @@ export function EventTable({
                     const pivotable = c.field !== "eventTime";
                     return (
                       <div key={c.key} className={`cell ${c.mono ? "mono" : ""} c-${c.key}`} title={c.get(e)}>
-                        <span className="cell-inner">{content}</span>
+                        <span className="cell-inner">{content}{c.key!=="identity"&&<AliasBadge field={c.field} value={rawVal}/>}</span>
                         {pivotable && (
                           <span className="pivot-icons">
                             <button
