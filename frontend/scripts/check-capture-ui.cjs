@@ -6,6 +6,31 @@ const {pathToFileURL} = require('node:url');
 const root = path.resolve(__dirname, '..');
 const output = path.join(root, 'test-results', 'capture');
 fs.mkdirSync(output, {recursive:true});
+async function chooseThemed(page,label,option,scope=page) {
+ await scope.getByRole('combobox',{name:label,exact:true}).click();
+ await page.getByRole('listbox',{name:label,exact:true}).getByRole('option',{name:option,exact:true}).click();
+}
+async function checkThemedList(page,label) {
+ const colors=await page.getByRole('listbox',{name:label,exact:true}).evaluate(list=>{
+  const probe=document.createElement('div');probe.style.backgroundColor='var(--bg-2)';probe.style.color='var(--tx-1)';document.body.append(probe);
+  const actual=getComputedStyle(list),expected=getComputedStyle(probe),r=list.getBoundingClientRect();
+  const result={background:actual.backgroundColor,color:actual.color,expectedBackground:expected.backgroundColor,expectedColor:expected.color,
+   fits:r.left>=0&&r.top>=0&&r.right<=innerWidth&&r.bottom<=innerHeight};
+  probe.remove();return result;
+ });
+ assert.equal(colors.background,colors.expectedBackground,'dropdown background differs from the active theme');
+ assert.equal(colors.color,colors.expectedColor,'dropdown text differs from the active theme');
+ assert.ok(colors.fits,'dropdown spills outside the window');
+ return colors;
+}
+async function checkModalFocus(page,dialog) {
+ const actions=dialog.locator('button:not(:disabled),[tabindex="0"]');
+ await actions.first().focus();
+ await page.keyboard.press('Shift+Tab');
+ assert.ok(await actions.last().evaluate(el=>document.activeElement===el),'Shift+Tab escaped the event inspector');
+ await page.keyboard.press('Tab');
+ assert.ok(await actions.first().evaluate(el=>document.activeElement===el),'Tab escaped the event inspector');
+}
 async function checkStatusBar(page, expected='↑ 1 new event') {
  // Flush resize/paint work and the badge entrance animation on the test clock.
  await page.clock.runFor(300);
@@ -439,7 +464,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     state.lineage={applicable:true,sourceIdentity:'recorded-operator',complete:true,status:'observed',reason:'Chain reaches a recorded principal; this does not verify the human operator.',nodes:[{identityType:'IAMUser',arn:'arn:aws:iam::111:user/alice',userName:'alice',accountId:'111',roleArn:'',sessionName:'',invokedBy:'',viaSeq:10,viaEvent:'GetSessionToken',viaTime:'2026-09-24T00:00:00Z',viaSourceIP:'192.0.2.1',evidence:'Exact access-key match to successful STS issuance; expiration not recorded',evidenceSeqs:[10,11]}]};
     const common={roleArn:'',roleName:'',sessionName:'',invokedBy:'',childCount:1,events:1};
     state.graph={applicable:true,rootId:'AKIAALICE',currentId:'ASIACHILD',notes:['Recorded sourceIdentity is a session attribute; identity assurance depends on the issuing policy.'],nodes:[{...common,id:'AKIAALICE',kind:'origin',identityType:'IAMUser',arn:'arn:aws:iam::111:user/alice',accountId:'111',userName:'alice',accessKeyId:'AKIAALICE'},{...common,id:'ASIACHILD',kind:'current',identityType:'IAMUser',arn:'arn:aws:iam::111:user/alice',accountId:'111',userName:'alice',accessKeyId:'ASIACHILD'}],edges:[{parent:'AKIAALICE',child:'ASIACHILD',viaSeq:10,viaEvent:'GetSessionToken',viaTime:'2026-09-24T00:00:00Z',viaIP:'192.0.2.1',evidence:'Exact access-key match; issuance precedes use; expiration not recorded',evidenceSeqs:[10,11]}]};
-    state.rawBySeq[10]='{"eventName":"GetSessionToken","eventID":"issuance-evidence"}';state.failGraph=true;
+    state.rawBySeq[10]='{"eventName":"GetSessionToken","eventID":"issuance-evidence","userIdentity":{"type":"IAMUser","userName":"alice"},"opaque":9007199254740993}';state.failGraph=true;
   });
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.locator('.row').getByText('RunInstances',{exact:true}).click();
@@ -450,10 +475,47 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('button',{name:'Reload lineage',exact:true}).click();
   await page.locator('.lgv-canvas .lgv-g').first().waitFor();
   assert.equal(await page.locator('.lgv-canvas .lgv-g').count(),2);
+  await page.clock.runFor(100);
+  const graphViewport=page.locator('.lgv-canvas > g');
+  const centeredTransform=await graphViewport.getAttribute('transform');
+  await page.locator('.lgv-canvas .lgv-g').nth(1).click();
+  await page.clock.runFor(50);
+  assert.equal(await graphViewport.getAttribute('transform'),centeredTransform,'a node click started panning');
+  const graphBox=await page.locator('.lgv-canvas').boundingBox();
+  assert.ok(graphBox,'lineage graph has no visible canvas');
+  await page.mouse.move(graphBox.x+30,graphBox.y+graphBox.height-30);
+  await page.mouse.down();
+  await page.mouse.move(graphBox.x+100,graphBox.y+graphBox.height-65,{steps:12});
+  await page.mouse.up();
+  await page.clock.runFor(50);
+  const draggedTransform=await graphViewport.getAttribute('transform');
+  assert.notEqual(draggedTransform,centeredTransform,'background dragging did not move the graph');
+  await page.mouse.wheel(0,-200);
+  await page.clock.runFor(100);
+  assert.notEqual(await graphViewport.getAttribute('transform'),draggedTransform,'wheel zoom did not update the graph');
+  await page.screenshot({path:path.join(output,'lineage-graph.png'),fullPage:true});
   await page.getByRole('button',{name:'Open issuance event',exact:true}).click();
-  await page.getByRole('dialog',{name:'Raw JSON',exact:true}).locator('pre').getByText('issuance-evidence',{exact:false}).waitFor();
+  const lineageEvent=page.getByRole('dialog',{name:'Lineage event',exact:true});
+  await lineageEvent.getByText('issuance-evidence',{exact:true}).waitFor();
+  await lineageEvent.getByText('9007199254740993',{exact:true}).waitFor();
+  await lineageEvent.locator('.ft-toggle').filter({hasText:'userIdentity'}).click();
+  await lineageEvent.getByText('alice',{exact:true}).waitFor();
+  assert.ok(await lineageEvent.locator('.ft-row').count()<30,'lineage event mounted an unbounded field tree');
+  await checkModalFocus(page,lineageEvent);
+  await page.screenshot({path:path.join(output,'lineage-event-fields.png'),fullPage:true});
+  await lineageEvent.getByRole('button',{name:'Original JSON',exact:true}).click();
+  const lineageOriginal=page.getByRole('dialog',{name:'Raw JSON',exact:true});
+  await lineageOriginal.locator('pre').getByText('issuance-evidence',{exact:false}).waitFor();
+  await checkModalFocus(page,lineageOriginal);
+  assert.equal(await lineageOriginal.locator('pre').textContent(),await page.evaluate(()=>window.captureTest.rawBySeq[10]),'lineage original changed source bytes');
+  await lineageOriginal.getByRole('button',{name:'⧉ Copy',exact:true}).click();
+  assert.equal(await page.evaluate(()=>window.captureTest.copied),await page.evaluate(()=>window.captureTest.rawBySeq[10]),'lineage copy changed the exact number or original source');
   assert.equal(await page.evaluate(()=>window.captureTest.rawSnapshot.generation),'fixture');
   await page.keyboard.press('Escape');
+  await lineageOriginal.waitFor({state:'hidden'});
+  await lineageEvent.waitFor({state:'visible'});
+  await page.keyboard.press('Escape');
+  await lineageEvent.waitFor({state:'hidden'});
   await page.locator('.lgv-modal').waitFor({state:'visible'});
   await page.getByRole('button',{name:'Open linked observation 11',exact:true}).waitFor();
   await page.evaluate(()=>{window.captureTest.failExpansion=true});
@@ -484,6 +546,32 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await investigation.locator('.investigation-event').first().waitFor();
   assert.ok(await investigation.locator('.investigation-event').count()<30,'context timeline was not virtualized');
   await investigation.getByText('Showing 500 closest events of 520. Narrow the window or relationship.',{exact:true}).waitFor();
+  const previousTheme=await page.evaluate(()=>document.documentElement.dataset.theme);
+  await page.evaluate(()=>{document.documentElement.dataset.theme='graphite'});
+  const windowControl=investigation.getByRole('combobox',{name:'Investigation window',exact:true});
+  await windowControl.click();
+  await page.clock.runFor(250);
+  const graphiteList=await checkThemedList(page,'Investigation window');
+  await page.screenshot({path:path.join(output,'investigation-window-graphite.png'),fullPage:true});
+  await page.keyboard.press('Escape');
+  await page.getByRole('listbox',{name:'Investigation window',exact:true}).waitFor({state:'hidden'});
+  await investigation.waitFor({state:'visible'});
+  assert.equal(await windowControl.getAttribute('aria-expanded'),'false','Escape left the window list open');
+  await page.evaluate(()=>{document.documentElement.dataset.theme='light'});
+  await windowControl.click();
+  await page.clock.runFor(250);
+  const lightList=await checkThemedList(page,'Investigation window');
+  assert.notEqual(lightList.background,graphiteList.background,'changing themes left the dropdown in its old palette');
+  await page.screenshot({path:path.join(output,'investigation-window-light.png'),fullPage:true});
+  await page.keyboard.press('Escape');
+  await page.evaluate(theme=>{if(theme===undefined)delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=theme},previousTheme);
+  await windowControl.press('End');
+  await windowControl.press('Enter');
+  await page.waitForFunction(()=>window.captureTest.investigationCalls.at(-1).minutes===60);
+  await investigation.getByText('520 events',{exact:true}).waitFor();
+  await chooseThemed(page,'Investigation window','±5 minutes',investigation);
+  await page.waitForFunction(()=>window.captureTest.investigationCalls.at(-1).minutes===5);
+  await investigation.getByText('520 events',{exact:true}).waitFor();
   await investigation.locator('.investigation-event').nth(1).click();
   await investigation.getByRole('button',{name:'Open original record',exact:true}).click();
   await page.getByRole('dialog',{name:'Raw JSON',exact:true}).locator('pre').getByText('context-2',{exact:false}).waitFor();
@@ -496,10 +584,10 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await investigation.getByText('GetObject · context-1',{exact:true}).waitFor();
   await investigation.getByText('520 events',{exact:true}).waitFor();
   await page.evaluate(()=>{window.captureTest.delayInvestigation=true});
-  await investigation.getByLabel('Investigation relationship',{exact:true}).selectOption('related');
+  await chooseThemed(page,'Investigation relationship','Related events',investigation);
   await page.clock.runFor(100);
   await page.evaluate(()=>{window.captureTest.delayInvestigation=false});
-  await investigation.getByLabel('Investigation relationship',{exact:true}).selectOption('resources');
+  await chooseThemed(page,'Investigation relationship','Shared resource ARN',investigation);
   await investigation.getByText('261 events',{exact:true}).waitFor();
   assert.ok(await page.evaluate(()=>window.captureTest.cancelledQueries)>0,'superseded context query was not cancelled');
   await page.setViewportSize({width:1440,height:1000});
@@ -638,7 +726,10 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.setViewportSize({width:960,height:720});
   await page.screenshot({path:path.join(output,'analysis-hunts.png'),fullPage:true});
   assert.ok(await page.locator('.analysis-view').evaluate(el=>el.scrollWidth<=el.clientWidth),'analysis content overflows');
-  await page.getByLabel('Analysis dimension',{exact:true}).selectOption('eventSource');
+  await page.getByRole('combobox',{name:'Analysis dimension',exact:true}).click();
+  await checkThemedList(page,'Analysis dimension');
+  await page.screenshot({path:path.join(output,'analysis-group-by.png'),fullPage:true});
+  await page.getByRole('listbox',{name:'Analysis dimension',exact:true}).getByRole('option',{name:'Service',exact:true}).click();
   await page.getByText('Settings changed. Run analysis to apply them; the results below use the previous settings.',{exact:true}).waitFor();
   await page.evaluate(()=>{window.captureTest.delayAnalysis=true});
   await page.getByRole('button',{name:'Run analysis',exact:true}).click();
@@ -1026,7 +1117,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await exportInvestigation.click();
   await page.waitForFunction(()=>window.captureTest.reportCalls.length===6);
   await page.evaluate(()=>{window.captureTest.holdReportInvestigation=true});
-  await reportDialog.getByLabel('Investigation relationship',{exact:true}).selectOption('resources');
+  await chooseThemed(page,'Investigation relationship','Shared resource ARN',reportDialog);
   await reportDialog.getByText('Loading investigation…',{exact:true}).waitFor();
   await page.waitForFunction(()=>window.captureTest.reportCancelled.length===3&&!!window.captureTest.finishReportInvestigation);
   assert.ok(await exportInvestigation.isDisabled(),'export remained available while the new investigation was unresolved');

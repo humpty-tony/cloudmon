@@ -175,12 +175,14 @@ jobs:
           python3 scripts/check_linux_abi.py "$RUNNER_TEMP/cloudmon-package/cloudmon"
           xvfb-run -a -s '-screen 0 1280x880x24' dbus-run-session -- \
             python3 scripts/check_linux_startup.py "$RUNNER_TEMP/cloudmon-package/cloudmon" "$RUNNER_TEMP/cloudmon-linux-smoke"
+          CLOUDMON_DISABLE_GPU=1 xvfb-run -a -s '-screen 0 1280x880x24' dbus-run-session -- \
+            python3 scripts/check_linux_startup.py "$RUNNER_TEMP/cloudmon-package/cloudmon" "$RUNNER_TEMP/cloudmon-linux-smoke/software-fallback"
       - name: Upload native Linux startup evidence
         if: runner.os == 'Linux' && !cancelled()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: linux-startup
-          path: ${{ runner.temp }}/cloudmon-linux-smoke/*
+          path: ${{ runner.temp }}/cloudmon-linux-smoke/
           if-no-files-found: warn
           retention-days: 7
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

@@ -34,7 +34,13 @@ export function LineageEventModal({ title, json, onClose, onPivot }: Props) {
 
   return createPortal(
     <div className="rawmodal-scrim" onClick={event => { event.stopPropagation(); onClose(); }}>
-      <div className="rawmodal" role="dialog" aria-modal="true" aria-label="Lineage event" onClick={event => event.stopPropagation()}>
+      <div className="rawmodal" role="dialog" aria-modal="true" aria-label="Lineage event" inert={original} onClick={event => event.stopPropagation()} onKeyDown={event => {
+        if (original || event.key !== "Tab") return;
+        const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),[tabindex="0"]'));
+        const first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+      }}>
         <div className="rawmodal-head">
           <div className="rawmodal-title">{title}</div>
           <div className="rawmodal-actions">
