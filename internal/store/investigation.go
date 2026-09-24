@@ -62,6 +62,17 @@ type Investigation struct {
 
 func (s *Store) Investigate(parent context.Context, options InvestigationOptions) (Investigation, error) {
 	result := Investigation{Resources: []ResourceReference{}, Events: []InvestigationEvent{}, Notes: []string{}, Limit: investigationLimit}
+	err := s.readSnapshot(parent, func(ctx context.Context, tx *sql.Tx) error {
+		var err error
+		result, err = investigateOn(ctx, tx, options)
+		return err
+	})
+	return result, err
+}
+
+// investigateOn also lets exports read the context and its evidence in one transaction.
+func investigateOn(ctx context.Context, tx *sql.Tx, options InvestigationOptions) (Investigation, error) {
+	result := Investigation{Resources: []ResourceReference{}, Events: []InvestigationEvent{}, Notes: []string{}, Limit: investigationLimit}
 	if options.Minutes == 0 {
 		options.Minutes = 5
 	}
@@ -73,7 +84,7 @@ func (s *Store) Investigate(parent context.Context, options InvestigationOptions
 	if !ok {
 		return result, fmt.Errorf("unknown investigation relationship")
 	}
-	err := s.readSnapshot(parent, func(ctx context.Context, tx *sql.Tx) error {
+	err := func() error {
 		var err error
 		if options.Snapshot == nil {
 			result.Snapshot, err = snapshotOn(ctx, tx)
@@ -224,6 +235,6 @@ func (s *Store) Investigate(parent context.Context, options InvestigationOptions
 		result.Notes = append(result.Notes, "Only ingested events with usable timestamps appear in this window. Capture gaps and omitted resource fields can hide relationships.")
 		result.Notes = append(result.Notes, "Shared identifiers show relationships in the loaded evidence, not causation. A principal or IP can be used by multiple operators.")
 		return nil
-	})
+	}()
 	return result, err
 }

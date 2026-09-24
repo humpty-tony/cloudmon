@@ -173,30 +173,45 @@ func (s *Store) ExportSnapshot(ctx context.Context, f Filter, snapshot Snapshot,
 	return count, err
 }
 
-// ExportFile publishes only a complete export. Errors preserve an existing file.
+// ExportFile publishes only a complete export. Errors before publication preserve an existing file.
 func (s *Store) ExportFile(ctx context.Context, f Filter, snapshot Snapshot, path string) (int, error) {
-	file, err := os.CreateTemp(filepath.Dir(path), ".cloudmon-export-*")
+	count := 0
+	err := writeCompletedExport(ctx, path, func(dst io.Writer) error {
+		var err error
+		count, err = s.ExportSnapshot(ctx, f, snapshot, dst)
+		return err
+	})
 	if err != nil {
 		return 0, err
+	}
+	return count, nil
+}
+
+// writeCompletedExport never opens the destination for writing. The caller must
+// obtain the user's save/replace choice first. Rename has OS-specific atomicity
+// guarantees; this is not a promise of crash durability on every filesystem.
+func writeCompletedExport(ctx context.Context, path string, write func(io.Writer) error) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	file, err := os.CreateTemp(filepath.Dir(path), ".cloudmon-export-*")
+	if err != nil {
+		return err
 	}
 	temporary := file.Name()
 	defer os.Remove(temporary)
 	defer file.Close()
-	count, err := s.ExportSnapshot(ctx, f, snapshot, file)
-	if err != nil {
-		return 0, err
+	if err := write(file); err != nil {
+		return err
 	}
 	if err := file.Sync(); err != nil {
-		return 0, err
+		return err
 	}
 	if err := file.Close(); err != nil {
-		return 0, err
+		return err
 	}
 	if err := ctx.Err(); err != nil {
-		return 0, err
+		return err
 	}
-	if err := os.Rename(temporary, path); err != nil {
-		return 0, err
-	}
-	return count, nil
+	return os.Rename(temporary, path)
 }
