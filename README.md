@@ -98,6 +98,7 @@ The binary is written to `build/bin/`. Run it directly, or use `wails dev` (`mak
 
 ## Usage
 
+- **Reuse hunt configurations.** Save named hunts on this device with a copy of their exact filter scope. Load deliberately and rerun against the current evidence. See [saved hunts](docs/saved-hunts.md).
 - **Hunt across evidence.** Use **Hunts** for bulk IP/CIDR, key-ID, event-ID and ARN searches, or look for one event followed by another for the same recorded principal/credential. Matches expose their source records, scope and limitations. See [investigation hunts](docs/investigation-hunts.md).
 - **Analyze activity.** Use **Analysis** for activity rankings, exact entity drilldowns, and comparisons against the preceding equal time window. Results explain scope, missing fields and evidence gaps; original records remain accessible. See [activity analysis](docs/activity-analysis.md).
 - **Import a dump.** Point CloudMon at a CloudTrail JSON/CSV export, an S3 log object, or a folder of logs. No credentials required.

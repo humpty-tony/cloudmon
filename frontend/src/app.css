@@ -1451,3 +1451,19 @@ body { font-feature-settings: "liga", "calt"; }
 .lg-primary { display:flex; align-items:center; min-width:0; }
 .lg-primary-text { min-width:0; overflow:hidden; text-overflow:ellipsis; }
 .lg-primary .alias-badge { max-width:14ch; }
+
+/* Saved hunt controls share the available width at the minimum desktop size. */
+.saved-hunts { margin:16px 0; padding:12px 14px; border:1px solid var(--line-struct); border-radius:6px; background:var(--bg-1); font-size:12px; min-width:0; }
+.saved-hunts summary,.saved-hunt-scope summary { cursor:pointer; color:var(--tx-1); }
+.saved-hunts p { color:var(--tx-2); line-height:1.6; overflow-wrap:anywhere; }
+.saved-hunt-controls { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(0,1fr); gap:12px; align-items:end; margin:14px 0; }
+.saved-hunt-controls label { display:flex; flex-direction:column; gap:6px; min-width:0; color:var(--tx-2); }
+.saved-hunt-controls input,.saved-hunt-controls select { width:100%; min-width:0; box-sizing:border-box; padding:8px; color:var(--tx-1); background:var(--bg-0); border:1px solid var(--border-fn); border-radius:4px; font:12px var(--mono); }
+.saved-hunt-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.saved-hunt-error { color:var(--sev-err); line-height:1.6; overflow-wrap:anywhere; margin:10px 0; }
+.saved-hunts .saved-hunt-notice { color:var(--sev-ok); }
+.saved-hunt-meta { margin-bottom:0; }
+.saved-hunt-scope { margin:10px 0; font-size:12px; }
+.saved-hunt-scope pre { max-height:180px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; padding:12px; border:1px solid var(--line-struct); background:var(--bg-1); font:11px var(--mono); }
+.saved-hunt-scope .saved-hunt-actions { margin-top:10px; }
+@media(max-width:720px) { .saved-hunt-controls { grid-template-columns:minmax(0,1fr) auto; } .saved-hunt-controls label:last-child { grid-column:1/-1; } }
