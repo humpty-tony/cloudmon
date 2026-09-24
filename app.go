@@ -625,3 +625,15 @@ func (a *App) Investigate(options store.InvestigationOptions, requestID string) 
 	defer done()
 	return a.db.Investigate(ctx, options)
 }
+
+func (a *App) Analyze(options store.AnalysisOptions, requestID string) (store.ActivityAnalysis, error) {
+	if a.ensureDB() == nil {
+		return store.ActivityAnalysis{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.ActivityAnalysis{}, err
+	}
+	defer done()
+	return a.db.Analyze(ctx, options)
+}

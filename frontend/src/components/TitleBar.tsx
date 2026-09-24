@@ -6,8 +6,8 @@ interface Props {
   connected: boolean;
   canExport: boolean;
   canExportMatches: boolean;
-  view: "console" | "sigma";
-  onView: (v: "console" | "sigma") => void;
+  view: "console" | "sigma" | "analysis";
+  onView: (v: "console" | "sigma" | "analysis") => void;
   onOpenDataset: () => void;
   onExport: () => void;
   onExportMatches: () => void;
@@ -97,6 +97,7 @@ export function TitleBar({ connected, canExport, canExportMatches, view, onView,
         <div className="tbar-views">
           <button className={`tbar-view ${view === "console" ? "on" : ""}`} onClick={() => onView("console")}>Console</button>
           <button className={`tbar-view ${view === "sigma" ? "on" : ""}`} onClick={() => onView("sigma")}>⬡ Sigma</button>
+          <button className={`tbar-view ${view === "analysis" ? "on" : ""}`} onClick={() => onView("analysis")}>Analysis</button>
         </div>
       )}
 

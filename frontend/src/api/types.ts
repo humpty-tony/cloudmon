@@ -146,6 +146,12 @@ export interface QueryFilter {
 
 /** Raw aggregate shape returned by the Go engine (App.QueryAggregates). */
 export interface EvidenceSnapshot { generation: string; maxSeq: number; capturedAt: string }
+export type AnalysisDimension = "identityArn" | "roleArn" | "accountId" | "recipientAccountId" | "eventSource" | "eventName" | "sourceIPAddress" | "awsRegion";
+export interface AnalysisEntity { dimension: AnalysisDimension; value: string }
+export interface AnalysisOptions { filter: QueryFilter; dimension: AnalysisDimension; compare: boolean; windowHours: number; entity: AnalysisEntity | null; snapshot: EvidenceSnapshot | null }
+export interface ActivityStats { events: number; errors: number; writes: number; unknownReadOnly: number; credentialIDs: number; invalidTimes: number; firstMs: number | null; lastMs: number | null }
+export interface ActivityGroup { value: string; current: number; previous: number; errors: number; writes: number; totalGroups: number }
+export interface ActivityAnalysis { snapshot: EvidenceSnapshot; scope: ActivityStats; current: ActivityStats; previous: ActivityStats; groups: ActivityGroup[]; totalGroups: number; limit: number; fromMs: number; toMs: number; previousFromMs: number; hasWindow: boolean; breakdowns: Record<string, ActivityGroup[]>; events: EventRow[]; notes: string[] }
 export interface EngineAggregates {
   snapshot: EvidenceSnapshot;
   total: number;
