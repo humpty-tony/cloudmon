@@ -1271,3 +1271,13 @@ body { font-feature-settings: "liga", "calt"; }
 .evidence-original h3 { color: var(--tx-1); font-size: 13px; }
 .evidence-original pre { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 260px; overflow: auto; background: var(--bg-0); padding: 12px; color: var(--tx-1); user-select: text; }
 .evidence-footnote { color: var(--tx-3); margin: 14px 0 0; }
+
+/* Credential evidence and uncertainty remain readable at the minimum window size. */
+.lg-head { flex-wrap: wrap; }
+.lg-reason, .lg-evidence { color: var(--tx-3); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; margin: 6px 0; }
+.lg-reason { color: var(--sev-warn); }
+.lgv-bar { flex-wrap: wrap; flex-shrink: 0; }
+.lgv-notes { padding: 8px 14px; max-height: 100px; overflow: auto; flex-shrink: 0; border-bottom: 1px solid var(--line-struct); }
+.lgv-note { overflow-wrap: anywhere; margin: 3px 0; }
+.lgv-error { padding: 10px 14px; color: var(--sev-warn); overflow-wrap: anywhere; }
+.lgv-error button { margin-left: 8px; }

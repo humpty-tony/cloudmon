@@ -1,3 +1,4 @@
+import { hasCredentialLineage } from "./api/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SavedCapture, RecoveryState, CloudTrailEvent, ConnectionConfig, EvidenceSnapshot, FilterField, Lineage, QueryFilter, QueryOp, QueryTerm } from "./api/types";
 import { backend, maximizeWindow, exportEvents, onMenuEvent, type QueryResult } from "./api/backend";
@@ -571,10 +572,10 @@ export default function App() {
       .catch(() => {
         if (id === detailReq.current) setSelectedRawErr(true);
       });
-    // Assumed-role ancestry: only worth a query for AssumedRole events.
+    // The store checks whether the recorded credentials are temporary.
     setSelectedLineage(null);
     setSelectedLineageError(false);
-    if (e.userIdentity.type === "AssumedRole") {
+    if (hasCredentialLineage(e)) {
       backend
         .queryLineage(e.seq)
         .then((l) => {

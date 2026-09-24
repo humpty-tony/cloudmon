@@ -1,6 +1,6 @@
 import { memo, useState } from "react";
 import type { CloudTrailEvent, FilterField, Lineage, QueryOp } from "../api/types";
-import { eventResult } from "../api/types";
+import { eventResult, hasCredentialLineage } from "../api/types";
 import { EvidenceModal } from "./EvidenceModal";
 import { RawJsonModal } from "./RawJsonModal";
 import { FieldTree } from "./FieldTree";
@@ -20,7 +20,7 @@ interface Props {
 export const InlineDetail = memo(function InlineDetail({ event: e, rawJSON, fieldHeight, lineage, lineageError, onRetry, onPivot, onOpenLineage }: Props) {
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [rawOpen, setRawOpen] = useState(false);
-  const isRole = e.userIdentity.type === "AssumedRole";
+  const isRole = hasCredentialLineage(e) && (lineage?.applicable ?? true);
 
   const idNote = isRole ? "" : `${e.userIdentity.type || "This identity"} · inspect the identity fields and original source below.`;
 
@@ -48,8 +48,8 @@ export const InlineDetail = memo(function InlineDetail({ event: e, rawJSON, fiel
         <div className="xd-cols">
           <div className="xd-tree"><FieldTree json={rawJSON} height={fieldHeight} onPivot={onPivot} /></div>
           {lineage ? <LineageGraph lineage={lineage} current={e} onPivot={onPivot} onFullView={onOpenLineage ? () => onOpenLineage(e.seq) : undefined} />
-            : lineageError ? <div className="lg lg-loading" role="alert">Could not load role lineage. <button className="btn-ghost" onClick={onRetry}>Retry lineage</button></div>
-            : <div className="lg lg-loading" role="status">Tracing role lineage…</div>}
+            : lineageError ? <div className="lg lg-loading" role="alert">Could not load credential lineage. <button className="btn-ghost" onClick={onRetry}>Retry lineage</button></div>
+            : <div className="lg lg-loading" role="status">Tracing credential lineage…</div>}
         </div>
       ) : <>
         {idNote && <div className="xd-idnote"><span className="xd-idnote-glyph">◈</span><span>{idNote}</span></div>}

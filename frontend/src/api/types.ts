@@ -157,7 +157,7 @@ export interface EngineAggregates {
   histTo: number;
 }
 
-// ---- Assumed-role lineage (mirror internal/store Lineage). ----
+// ---- Credential lineage (mirror internal/store Lineage). ----
 
 export interface LineageNode {
   identityType: string;
@@ -171,11 +171,15 @@ export interface LineageNode {
   viaEvent: string;
   viaTime: string;
   viaSourceIP: string;
+  evidence?: string;
+  evidenceSeqs?: number[];
 }
 export interface Lineage {
   applicable: boolean; // false unless the event is an AssumedRole
-  sourceIdentity: string; // immutable origin if sts:SourceIdentity is set
-  complete: boolean; // reached a real principal (not an unresolved role)
+  sourceIdentity: string; // recorded session attribute
+  complete: boolean; // reached a recorded non-session principal
+  status?: string;
+  reason?: string;
   nodes: LineageNode[]; // origin-first → immediate parent
 }
 
@@ -193,6 +197,7 @@ export interface GraphNode {
   accountId: string;
   accessKeyId: string;
   invokedBy: string; // for AWSService: the calling service
+  identityNote?: string;
   originKind?: string; // sso | service-linked | service - drives a badge
   events: number; // activity count for THIS session key
   childCount: number; // # AssumeRole calls this session made (expandable if > shown)
@@ -214,9 +219,12 @@ export interface GraphEdge {
   viaEvent: string;
   viaTime: string;
   viaIP: string;
+  evidence?: string;
+  evidenceSeqs?: number[];
   crossAccount?: boolean; // caller and role live in different accounts
 }
 export interface LineageTree {
+  snapshot?: EvidenceSnapshot;
   applicable: boolean;
   currentId: string;
   rootId: string;
@@ -416,3 +424,7 @@ export interface SourceEvidence {
   format: string; lossy: boolean; observedAt: string; displayed: boolean;
 }
 export interface EvidencePage { total: number; variants: number; observations: SourceEvidence[] }
+
+export function hasCredentialLineage(event: CloudTrailEvent): boolean {
+  return ["AssumedRole", "FederatedUser", "IAMUser", "Root"].includes(event.userIdentity.type);
+}
