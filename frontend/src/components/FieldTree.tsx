@@ -1,5 +1,8 @@
-import { useState } from "react";
+import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { FilterField, QueryOp } from "../api/types";
+import { InspectorClient } from "../api/inspectorClient";
+import { FIELD_PAGE_SIZE, type FieldPage, type FieldSummary } from "../api/inspectorModel";
 
 // Leaf paths (dotted) that map to a filterable field → get pivot affordances.
 // Each maps to a CONCRETE, round-tripping field: the value shown at that JSON
@@ -24,84 +27,98 @@ const PATH_FIELD: Record<string, FilterField> = {
   "userIdentity.sessionContext.sessionIssuer.userName": "userName", // assumed-role name → userName (coalesced by the engine)
 };
 
+
 type PivotFn = (field: FilterField, value: string, op: QueryOp) => void;
+const pathKey = (path: string[]) => JSON.stringify(path);
+type DisplayRow = {kind:"field"; field:FieldSummary;depth:number} | {kind:"page";page:FieldPage;depth:number} | {kind:"status";path:string[];message:string;error:boolean;depth:number};
 
-// Keys never worth showing in the tree (internal / empty-by-design).
-const HIDE_KEYS = new Set(["rawJSON"]);
+/** A bounded worker supplies summaries; only visible tree rows mount in React. */
+export const FieldTree = memo(function FieldTree({ json, onPivot }: { json: string; onPivot: PivotFn }) {
+  const [pages,setPages] = useState<Map<string,FieldPage>>(new Map());
+  const [open,setOpen] = useState<Set<string>>(new Set());
+  const [errors,setErrors] = useState<Map<string,string>>(new Map());
+  const [busy,setBusy] = useState<Set<string>>(new Set());
+  const [retry,setRetry] = useState(0);
+  const client = useRef<InspectorClient | null>(null);
+  const scroll = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let current: InspectorClient | null = null;
+    setPages(new Map());setOpen(new Set());setErrors(new Map());setBusy(new Set(['[]']));
+    try {
+      current = new InspectorClient(); client.current = current;
+      current.request({json}).then(page => {
+        if (client.current === current) setPages(new Map([['[]',page]]));
+      }).catch(error => { if (client.current === current) setErrors(new Map([['[]',String(error)]])); })
+        .finally(()=>{if(client.current===current)setBusy(new Set())});
+    } catch (error) { setErrors(new Map([['[]',String(error)]]));setBusy(new Set()); }
+    return () => { client.current = null; current?.dispose(); };
+  },[json,retry]);
 
-function valClass(v: unknown): string {
-  if (v === null) return "ft-null";
-  if (typeof v === "number") return "ft-num";
-  if (typeof v === "boolean") return "ft-bool";
-  return "ft-str";
-}
-
-function Leaf({ k, v, path, onPivot }: { k: string; v: unknown; path: string; onPivot: PivotFn }) {
-  const field = PATH_FIELD[path];
-  const val = v === null ? "null" : String(v);
-  return (
-    <div className="ft-row">
-      <span className="ft-key">{k}</span>
-      <span className={`ft-val ${valClass(v)}`}>{val}</span>
-      {field && val && val !== "null" && (
-        <span className="ft-pivot">
-          <button className="pv" title={`Filter for ${val}`} onClick={() => onPivot(field, val, "include")}>
-            <span className="pv-loupe">⌕</span>
-            <span className="pv-sign">+</span>
-          </button>
-          <button className="pv" title={`Filter out ${val}`} onClick={() => onPivot(field, val, "exclude")}>
-            <span className="pv-loupe">⌕</span>
-            <span className="pv-sign">−</span>
-          </button>
-        </span>
-      )}
+  const loadPage = async(path: string[], offset: number) => {
+    const current=client.current, key=pathKey(path);
+    if(!current || busy.has(key))return;
+    setBusy(previous=>new Set(previous).add(key));
+    setErrors(previous=>{const next=new Map(previous);next.delete(key);return next});
+    try {
+      const page=await current.request({path,offset});
+      if(client.current===current)setPages(previous=>new Map(previous).set(key,page));
+    } catch(error) {if(client.current===current)setErrors(previous=>new Map(previous).set(key,String(error)))}
+    finally {if(client.current===current)setBusy(previous=>{const next=new Set(previous);next.delete(key);return next})}
+  };
+  const toggle=(field:FieldSummary)=>{
+    const key=pathKey(field.path);
+    if(open.has(key))setOpen(previous=>{const next=new Set(previous);next.delete(key);return next});
+    else {setOpen(previous=>new Set(previous).add(key));if(!pages.has(key))void loadPage(field.path,0)}
+  };
+  const rows=useMemo(()=>{
+    const result:DisplayRow[]=[];
+    const visit=(path:string[],depth:number)=>{
+      const key=pathKey(path),page=pages.get(key),error=errors.get(key);
+      if(error)result.push({kind:'status',path,message:error,error:true,depth});
+      if(!page){if(!error)result.push({kind:'status',path,message:'Loading fields…',error:false,depth});return}
+      for(const field of page.fields){
+        result.push({kind:'field',field,depth});
+        if(open.has(pathKey(field.path)))visit(field.path,depth+1);
+      }
+      if(page.total>FIELD_PAGE_SIZE)result.push({kind:'page',page,depth});
+    };
+    visit([],0);return result;
+  },[pages,open,errors]);
+  const virtual=useVirtualizer({count:rows.length,getScrollElement:()=>scroll.current,estimateSize:()=>28,overscan:6,
+    getItemKey:index=>{const row=rows[index];return row.kind==='field'?pathKey(row.field.path):row.kind+pathKey(row.kind==='page'?row.page.path:row.path)}});
+  return <div className="ft-view">
+    <div className="ft-toolbar"><span>Event fields · expand a section to inspect it</span><button className="btn-ghost" onClick={()=>setOpen(new Set())}>Collapse all</button></div>
+    <div className="ft ft-viewport" ref={scroll} role="region" aria-label="Event fields" tabIndex={0} style={{height:Math.min(392,Math.max(56,rows.length*28))}}>
+      <div style={{height:virtual.getTotalSize(),position:'relative'}}>
+        {virtual.getVirtualItems().map(item=>{
+          const row=rows[item.index];
+          const style={position:'absolute' as const,top:0,left:0,width:'100%',height:28,transform:`translateY(${item.start}px)`,paddingLeft:Math.min(row.depth,12)*14};
+          if(row.kind==='page')return <div key={item.key} className="ft-row ft-page" style={style}>
+            <button className="btn-ghost" disabled={row.page.offset===0 || busy.has(pathKey(row.page.path))} onClick={()=>void loadPage(row.page.path,Math.max(0,row.page.offset-FIELD_PAGE_SIZE))}>Previous fields</button>
+            <span>{row.page.offset+1}–{Math.min(row.page.total,row.page.offset+FIELD_PAGE_SIZE)} of {row.page.total.toLocaleString()}</span>
+            <button className="btn-ghost" disabled={row.page.offset+FIELD_PAGE_SIZE>=row.page.total || busy.has(pathKey(row.page.path))} onClick={()=>void loadPage(row.page.path,row.page.offset+FIELD_PAGE_SIZE)}>Next fields</button>
+          </div>;
+          if(row.kind==='status')return <div key={item.key} style={style} className="ft-row" role={row.error?'alert':'status'}>
+            <span className="ft-status" title={row.message}>{row.message}</span>{row.error && <button className="btn-ghost" onClick={()=>setRetry(n=>n+1)}>Retry fields</button>}
+          </div>;
+          const field=row.field,key=pathKey(field.path),branch=field.kind==='object'||field.kind==='array';
+          // Dots in a literal key must never impersonate a nested query field.
+          const pivot=field.path.every(part=>!part.includes('.')) ? PATH_FIELD[field.path.join('.')] : undefined;
+          const value=field.value;
+          return <div key={item.key} style={style} className="ft-row" data-field-path={key}>
+            {branch ? <button className="ft-toggle" aria-expanded={open.has(key)} onClick={()=>toggle(field)} title={field.path.join('.')}>
+              <span className={`ft-caret ${open.has(key)?'open':''}`}>▸</span><span className="ft-key">{field.key}</span>
+              <span className="ft-meta">{field.kind==='array'?`[${field.children.toLocaleString()}]`:`{${field.children.toLocaleString()}}`}</span>
+            </button> : <><span className="ft-key" title={field.path.join('.')}>{field.key}</span><span className={`ft-val ft-${field.kind==='number'?'num':field.kind==='boolean'?'bool':field.kind==='null'?'null':'str'}`} title={field.truncated?'Long value · open Raw JSON for the complete text':value}>{value===''?'""':value}{field.truncated?'…':''}</span>
+              {pivot && !field.truncated && field.kind!=='null' && <span className="ft-pivot">
+                <button className="pv" title={`Filter for ${value}`} onClick={()=>onPivot(pivot,value,'include')}>⌕+</button>
+                <button className="pv" title={`Filter out ${value}`} onClick={()=>onPivot(pivot,value,'exclude')}>⌕−</button>
+              </span>}
+            </>}
+          </div>;
+        })}
+      </div>
     </div>
-  );
-}
-
-function Branch({ k, v, path, onPivot }: { k: string; v: object; path: string; onPivot: PivotFn }) {
-  const [open, setOpen] = useState(true);
-  const isArr = Array.isArray(v);
-  const entries: [string, unknown][] = isArr
-    ? (v as unknown[]).map((x, i) => [String(i), x])
-    : Object.entries(v).filter(([k]) => !HIDE_KEYS.has(k));
-  return (
-    <div className="ft-branch">
-      <button className="ft-toggle" onClick={() => setOpen((o) => !o)}>
-        <span className={`ft-caret ${open ? "open" : ""}`}>▸</span>
-        <span className="ft-key">{k}</span>
-        <span className="ft-meta">{isArr ? `[${entries.length}]` : `{${entries.length}}`}</span>
-      </button>
-      {open && (
-        <div className="ft-nested">
-          {entries.map(([ck, cv]) => (
-            <Node key={ck} k={ck} v={cv} path={path ? `${path}.${ck}` : ck} onPivot={onPivot} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Node({ k, v, path, onPivot }: { k: string; v: unknown; path: string; onPivot: PivotFn }) {
-  if (v !== null && typeof v === "object") {
-    const empty = Array.isArray(v) ? v.length === 0 : Object.keys(v).length === 0;
-    if (empty) return <Leaf k={k} v={Array.isArray(v) ? "[ ]" : "{ }"} path={path} onPivot={onPivot} />;
-    return <Branch k={k} v={v} path={path} onPivot={onPivot} />;
-  }
-  return <Leaf k={k} v={v} path={path} onPivot={onPivot} />;
-}
-
-/** Renders an entire parsed CloudTrail event as a collapsible key/value tree. */
-export function FieldTree({ data, onPivot }: { data: unknown; onPivot: PivotFn }) {
-  if (data === null || typeof data !== "object") return null;
-  return (
-    <div className="ft">
-      {Object.entries(data)
-        .filter(([k]) => !HIDE_KEYS.has(k))
-        .map(([k, v]) => (
-          <Node key={k} k={k} v={v} path={k} onPivot={onPivot} />
-        ))}
-    </div>
-  );
-}
+    <span className="ft-footnote">Long values are shortened here. Raw JSON and Copy retain the complete source.</span>
+  </div>;
+});

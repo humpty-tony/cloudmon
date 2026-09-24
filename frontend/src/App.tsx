@@ -104,6 +104,7 @@ export default function App() {
   const [selectedRawErr, setSelectedRawErr] = useState(false); // raw fetch failed (distinct from still-loading)
   const detailReq = useRef(0); // guards the detail fetch: a newer expand supersedes an in-flight older one
   const [selectedLineage, setSelectedLineage] = useState<Lineage | null>(null); // assumed-role ancestry for the expanded row
+  const [selectedLineageError, setSelectedLineageError] = useState(false);
   const [lineageSeq, setLineageSeq] = useState<number | null>(null); // full lineage graph overlay, focused on this event
   const [refreshTick, setRefreshTick] = useState(0); // streaming bumps this to re-query
   const [capturing, setCapturing] = useState(false);
@@ -228,6 +229,7 @@ export default function App() {
   }, [connected]);
 
   const enterDataset = (cfg: ConnectionConfig, total: number, capture: SavedCapture | null, active: boolean) => {
+    ++detailReq.current;
     searchBlocked.current = true;
     resultsFilter.current = null;
     setQueryFailure(null);
@@ -533,7 +535,7 @@ export default function App() {
   const displayIndexOf = (seq: number) => (seq < 0 ? -1 : events.findIndex((e) => e.seq === seq));
 
   // Raw JSON + lineage aren't in the page rows; fetch them lazily on expand.
-  const fetchDetail = (e: CloudTrailEvent) => {
+  const fetchDetail = useCallback((e: CloudTrailEvent) => {
     const id = ++detailReq.current; // a newer expand must win if an older fetch resolves late
     setSelectedRaw("");
     setSelectedRawErr(false);
@@ -549,6 +551,7 @@ export default function App() {
       });
     // Assumed-role ancestry: only worth a query for AssumedRole events.
     setSelectedLineage(null);
+    setSelectedLineageError(false);
     if (e.userIdentity.type === "AssumedRole") {
       backend
         .queryLineage(e.seq)
@@ -556,10 +559,11 @@ export default function App() {
           if (id === detailReq.current) setSelectedLineage(l);
         })
         .catch(() => {
-          if (id === detailReq.current) setSelectedLineage(null);
+          if (id === detailReq.current) setSelectedLineageError(true);
         });
     }
-  };
+  }, []);
+  const retryDetail = useCallback(() => { if (selected) fetchDetail(selected); }, [selected, fetchDetail]);
   const openAt = (d: number) => {
     const e = rowAtDisplay(d);
     if (e) {
@@ -836,6 +840,8 @@ export default function App() {
             selectedRaw={selectedRaw}
             selectedRawError={selectedRawErr}
             selectedLineage={selectedLineage}
+            selectedLineageError={selectedLineageError}
+            onRetryDetail={retryDetail}
             onOpenLineage={setLineageSeq}
             loadingMore={loadingMore}
             atLoadCap={atLoadCap}

@@ -25,6 +25,8 @@ interface Props {
   selectedRaw?: string; // lazily-fetched raw JSON for the expanded row ("" = loading)
   selectedRawError?: boolean; // the raw fetch failed (show an error instead of "loading" forever)
   selectedLineage?: Lineage | null; // assumed-role ancestry for the expanded row
+  selectedLineageError?: boolean;
+  onRetryDetail: () => void;
   onOpenLineage?: (seq: number) => void; // open the full lineage graph view
   loadingMore?: boolean;
   atLoadCap?: boolean;
@@ -96,6 +98,8 @@ export function EventTable({
   selectedRaw,
   selectedRawError,
   selectedLineage,
+  selectedLineageError,
+  onRetryDetail,
   onOpenLineage,
   loadingMore,
   atLoadCap,
@@ -337,9 +341,9 @@ export function EventTable({
                   <div className="row-expand">
                     <div className="row-expand-pin" style={{ width: viewportW || undefined }}>
                       {selectedRaw ? (
-                        <InlineDetail event={{ ...e, rawJSON: selectedRaw }} lineage={selectedLineage} onPivot={onPivot} onOpenLineage={onOpenLineage} />
+                        <InlineDetail key={e.seq} event={e} rawJSON={selectedRaw} lineage={selectedLineage} lineageError={selectedLineageError} onRetry={onRetryDetail} onPivot={onPivot} onOpenLineage={onOpenLineage} />
                       ) : selectedRawError ? (
-                        <div className="xd-loading">Could not load this event (the database was busy). Collapse and reopen to retry.</div>
+                        <div className="xd-loading" role="alert">Could not load this event. <button className="btn-ghost" onClick={onRetryDetail}>Retry event</button></div>
                       ) : (
                         <div className="xd-loading">Loading event…</div>
                       )}
