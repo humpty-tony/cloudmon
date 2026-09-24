@@ -44,15 +44,16 @@ func RequiredPermissions(mode string) []RequiredPermission {
 			{"sqs:SetQueueAttributes", "Attach the policy allowing EventBridge to deliver"},
 			{"sqs:GetQueueAttributes", "Read queue ARN/attributes for wiring"},
 			{"sqs:ReceiveMessage / DeleteMessage", "Consume events at runtime"},
+			{"sqs:ChangeMessageVisibility", "Keep received messages leased while their local commit is pending"},
 			{"sqs:DeleteQueue", "Delete the queue on teardown (the rule teardown alone would leak it)"},
-			{"cloudtrail:DescribeTrails / GetTrailStatus", "Check a trail is actually feeding this region before capturing"},
+			{"cloudtrail:DescribeTrails / GetTrailStatus / GetEventSelectors", "Check active trails and their management-event selectors"},
 		}
 	case ModeExistingSQS:
 		return []RequiredPermission{
 			{"sqs:ReceiveMessage", "Poll the provided queue for events"},
-			{"sqs:DeleteMessage", "Acknowledge consumed messages"},
+			{"sqs:DeleteMessage", "Acknowledge messages only after the local commit"},
+			{"sqs:ChangeMessageVisibility", "Keep messages leased while processing"},
 			{"sqs:GetQueueAttributes", "Validate the queue is reachable"},
-			{"events:PutRule / PutTargets", "Only if you set a capture filter on the feeding rule"},
 		}
 	case ModeImportDump:
 		return []RequiredPermission{

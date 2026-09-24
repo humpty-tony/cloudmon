@@ -70,6 +70,10 @@ export interface TrailStatus {
   hasLoggingTrail: boolean;
   trailCount: number;
   globalCovered: boolean;
+  readManagement?: boolean;
+  writeManagement?: boolean;
+  coverageKnown: boolean;
+  coverageComplete?: boolean;
   summary: string;
 }
 

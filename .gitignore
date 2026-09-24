@@ -10,3 +10,6 @@ internal/duckdbbin/bin/*.gz
 
 # ---- local tooling state / runtime logs ----
 *.log
+
+# Browser-check screenshots
+frontend/test-results/

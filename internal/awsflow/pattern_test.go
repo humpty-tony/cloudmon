@@ -47,3 +47,25 @@ func TestRuleState(t *testing.T) {
 		t.Errorf("write-only state = %q, want ENABLED", got)
 	}
 }
+
+func TestCaptureGuardsOnDefaultAndCustomPatterns(t *testing.T) {
+	for _, pattern := range []string{`{"detail.eventCategory":["Data"]}`, `{"$or":[{"detail.eventCategory":["Data"]},{"source":["aws.iam"]}]}`, `{"detail":{"readOnly":[true]}}`, `{"detail":{"eventCategory":["Management","Data"]}}`} {
+		if _, err := ConstrainManagementPattern(pattern, false); err == nil {
+			t.Errorf("accepted conflicting capture filter: %s", pattern)
+		}
+	}
+	for _, pattern := range []string{"", `{"$or":[{"source":["aws.iam"]},{"source":["aws.sts"]}]}`} {
+		got, err := ConstrainManagementPattern(pattern, false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(got, `"eventCategory":["Management"]`) || !strings.Contains(got, `"readOnly":[false]`) {
+			t.Errorf("capture restrictions missing: %s", got)
+		}
+	}
+	for _, kind := range []string{"AWS Console Signin via CloudTrail", "AWS Console Action via CloudTrail", "AWS Service Event via CloudTrail"} {
+		if !strings.Contains(BuildEventPattern(true), kind) {
+			t.Errorf("missing documented management detail-type %q", kind)
+		}
+	}
+}

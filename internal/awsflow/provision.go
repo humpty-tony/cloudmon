@@ -101,8 +101,10 @@ func randSuffix() string {
 func Provision(ctx context.Context, cfg aws.Config, account, region, pattern string, allMgmt bool) (Infra, error) {
 	sfx := randSuffix()
 	names := Names{Queue: "cloudmon-capture-" + region + "-" + sfx, Rule: "cloudmon-cloudtrail-" + sfx}
-	if pattern == "" {
-		pattern = BuildEventPattern(allMgmt)
+	var err error
+	pattern, err = ConstrainManagementPattern(pattern, allMgmt)
+	if err != nil {
+		return Infra{}, err
 	}
 	sqsc := sqs.NewFromConfig(cfg)
 	ebc := eventbridge.NewFromConfig(cfg)
@@ -182,11 +184,13 @@ func Teardown(ctx context.Context, cfg aws.Config, infra Infra) error {
 	sqsc := sqs.NewFromConfig(cfg)
 	var errs []error
 	if infra.RuleName != "" {
-		if _, err := ebc.RemoveTargets(ctx, &eventbridge.RemoveTargetsInput{
+		if out, err := ebc.RemoveTargets(ctx, &eventbridge.RemoveTargetsInput{
 			Rule: aws.String(infra.RuleName),
 			Ids:  []string{targetID},
 		}); err != nil {
 			errs = append(errs, &ProvisionError{"events:RemoveTargets", err})
+		} else if out.FailedEntryCount > 0 {
+			errs = append(errs, &ProvisionError{"events:RemoveTargets", fmt.Errorf("%d target removals failed: %v", out.FailedEntryCount, out.FailedEntries)})
 		}
 		if _, err := ebc.DeleteRule(ctx, &eventbridge.DeleteRuleInput{Name: aws.String(infra.RuleName)}); err != nil {
 			errs = append(errs, &ProvisionError{"events:DeleteRule", err})
