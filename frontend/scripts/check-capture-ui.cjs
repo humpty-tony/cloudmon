@@ -33,7 +33,7 @@ async function checkStatusBar(page) {
      recovery:{evidence:{events:recovering?1:0,observations:recovering?3:0,variantEvents:recovering?1:0,lossy:recovering?1:0},capture:recovering?{version:1,phase:'ready',config,infra}:null,captureError:'',active:false}};
    const handlers=new Map();
    window.runtime={EventsOn:(name,cb)=>{if(!handlers.has(name))handlers.set(name,new Set());handlers.get(name).add(cb);return()=>handlers.get(name).delete(cb)}};
-   state.emit=total=>{while(state.rows.length<total){const seq=state.rows.length+1;state.rows.unshift({...state.rows[state.rows.length-1],seq,eventID:`live-${seq}`,eventName:`LiveEvent${seq}`})}state.recovery.evidence.events=total;for(const cb of handlers.get('cloudmon:events')||[])cb({added:1,total})};
+   state.emit=(total,withRows=true)=>{while(withRows && state.rows.length<total){const seq=state.rows.length+1;state.rows.unshift({...state.rows[state.rows.length-1],seq,eventID:`live-${seq}`,eventName:`LiveEvent${seq}`})}state.recovery.evidence.events=total;for(const cb of handlers.get('cloudmon:events')||[])cb({added:1,total})};
    window.go={main:{App:{
     Log:async()=>{},MaximizeWindow:async()=>{},
     GetRecoveryState:async()=>structuredClone(state.recovery),
@@ -175,6 +175,16 @@ async function checkStatusBar(page) {
   await page.clock.runFor(6000);
   assert.deepEqual(await page.evaluate(()=>({agg:window.captureTest.aggCalls,newer:window.captureTest.newerCalls})),frozen,'inspection did not freeze the visible window');
   await page.screenshot({path:path.join(output,'live-inspection.png'),fullPage:true});
+  await checkStatusBar(page);
+  await page.setViewportSize({width:960,height:640});
+  await checkStatusBar(page);
+  await page.screenshot({path:path.join(output,'statusbar-minimum.png'),fullPage:true});
+  // Inspection needs only a progress notification, not a million fixture rows.
+  await page.evaluate(()=>window.captureTest.emit(1000004,false));
+  await page.getByRole('button',{name:'↑ 1,000,000 new events',exact:true}).waitFor();
+  await checkStatusBar(page);
+  await page.screenshot({path:path.join(output,'statusbar-large-count.png'),fullPage:true});
+  await page.setViewportSize({width:1440,height:1000});
   await checkStatusBar(page);
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   assert.deepEqual(errors,[]);
