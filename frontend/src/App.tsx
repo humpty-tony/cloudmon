@@ -37,6 +37,7 @@ import { TitleBar } from "./components/TitleBar";
 import { LineageView } from "./components/LineageView";
 import { SigmaView } from "./components/SigmaView";
 import { AnalysisView } from "./components/AnalysisView";
+import { HuntView } from "./components/HuntView";
 import { SettingsModal } from "./components/SettingsModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { installCrashLogging } from "./api/log";
@@ -141,7 +142,7 @@ export default function App() {
   const [help, setHelp] = useState<{ open: boolean; tab: string }>({ open: false, tab: "getting-started" });
   const [narrow, setNarrow] = useState(false);
   const [theme, setTheme] = useState<string>(() => load("theme", DEFAULT_THEME));
-  const [uiView, setUiView] = useState<"console" | "sigma" | "analysis">("console");
+  const [uiView, setUiView] = useState<"console" | "sigma" | "analysis" | "hunts">("console");
   // ---- user settings (config menu) ----
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sensitiveOverride, setSensitiveOverride] = useState<SensitiveOverride>(() => {
@@ -775,7 +776,7 @@ export default function App() {
       </div>}
       {!connected ? (
         <ConnectionScreen onConnect={connect} onRestore={restoreDataset} />
-      ) : uiView === "analysis" ? <AnalysisView filter={filter}/> : uiView === "sigma" ? (
+      ) : uiView === "hunts" ? <HuntView filter={filter}/> : uiView === "analysis" ? <AnalysisView filter={filter}/> : uiView === "sigma" ? (
         <SigmaView
           columns={columns}
           visibleCols={visibleCols}

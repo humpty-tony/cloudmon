@@ -10,7 +10,7 @@ type Match = InvestigationResult["events"][number];
 const relationships = [["all","All nearby events"],["related","Related events"],["shared","Shared AWS action"],["credential","Matching credential"],["resources","Shared resource ARN"],["principal","Same principal (context)"],["ip","Same IP (context)"],["request","Same scoped request ID"]];
 function offset(ms:number){if(!ms)return "0s";const seconds=Math.abs(ms)/1000;return `${ms<0?"−":"+"}${seconds>=60?`${(seconds/60).toFixed(1)}m`:`${seconds.toFixed(1)}s`}`}
 
-export function InvestigationView({event,onClose}:{event:CloudTrailEvent;onClose:()=>void}) {
+export function InvestigationView({event,onClose,initialSnapshot}:{event:CloudTrailEvent;onClose:()=>void;initialSnapshot?:EvidenceSnapshot}) {
   const [anchor,setAnchor]=useState<Anchor>(event);
   const [history,setHistory]=useState<Anchor[]>([]);
   const [minutes,setMinutes]=useState(5);
@@ -23,7 +23,7 @@ export function InvestigationView({event,onClose}:{event:CloudTrailEvent;onClose
   const [raw,setRaw]=useState<{title:string;json:string}|null>(null);
   const [rawBusy,setRawBusy]=useState(false);
   const [rawError,setRawError]=useState("");
-  const snapshot=useRef<EvidenceSnapshot|null>(null);
+  const snapshot=useRef<EvidenceSnapshot|null>(initialSnapshot??null);
   const queue=useRef<Promise<void>>(Promise.resolve());
   const request=useRef(0);
   const rawRequest=useRef(0);

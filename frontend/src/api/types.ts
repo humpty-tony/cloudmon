@@ -147,6 +147,11 @@ export interface QueryFilter {
 /** Raw aggregate shape returned by the Go engine (App.QueryAggregates). */
 export interface EvidenceSnapshot { generation: string; maxSeq: number; capturedAt: string }
 export type AnalysisDimension = "identityArn" | "roleArn" | "accountId" | "recipientAccountId" | "eventSource" | "eventName" | "sourceIPAddress" | "awsRegion";
+export interface HuntIndicator { kind: "ip" | "cidr" | "key" | "event" | "arn"; value: string }
+export interface HuntOptions { mode: "indicators" | "sequence"; filter: QueryFilter; indicators: HuntIndicator[]; first: QueryExpr | null; second: QueryExpr | null; group: "principal" | "credential"; minutes: number; snapshot: EvidenceSnapshot | null }
+export interface HuntMatch { event: EventRow; indicators: number[] }
+export interface SequencePair { first: EventRow; second: EventRow; deltaMs: number; tiedFirst: number }
+export interface HuntResult { snapshot: EvidenceSnapshot; scanned: number; total: number; limit: number; invalidTimes: number; missingPrincipal: number; indicators: (HuntIndicator & {matches:number})[]; matches: HuntMatch[]; pairs: SequencePair[]; notes: string[] }
 export interface AnalysisEntity { dimension: AnalysisDimension; value: string }
 export interface AnalysisOptions { filter: QueryFilter; dimension: AnalysisDimension; compare: boolean; windowHours: number; entity: AnalysisEntity | null; snapshot: EvidenceSnapshot | null }
 export interface ActivityStats { events: number; errors: number; writes: number; unknownReadOnly: number; credentialIDs: number; invalidTimes: number; firstMs: number | null; lastMs: number | null }
