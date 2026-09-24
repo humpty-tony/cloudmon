@@ -607,7 +607,7 @@ func (a *App) ApplyCaptureFilter(pattern string) {
 }
 
 func (a *App) QueryLineageRaw(seq int64, snapshot store.Snapshot) (string, error) {
-	if a.db == nil {
+	if a.ensureDB() == nil {
 		return "", fmt.Errorf("query engine unavailable: %v", a.dbErr)
 	}
 	return a.db.LineageRaw(seq, snapshot)

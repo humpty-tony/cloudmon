@@ -28,9 +28,8 @@ type LineageNode struct {
 	EvidenceSeqs []int64 `json:"evidenceSeqs"`
 }
 
-// Lineage is the assumed-role ancestry for one event: who ultimately assumed the
-// role. Complete=false means the chain broke (an AssumeRole wasn't in the dataset
-// - cross-account, outside the time range, or a service-internal assumption).
+// Lineage is a credential ancestry supported by the loaded evidence. Status and
+// Reason explain where the walk stopped; Complete never verifies a human identity.
 type Lineage struct {
 	Applicable     bool          `json:"applicable"`     // recorded temporary credentials
 	SourceIdentity string        `json:"sourceIdentity"` // recorded attribute, not verified human identity
@@ -140,7 +139,7 @@ func originKind(identityType, roleArn, identityArn string) string {
 	switch {
 	case isSSOSession(roleArn, identityArn):
 		return "sso"
-	case strings.Contains(roleArn, "aws-service-role/") || strings.Contains(identityArn, "aws-service-role/"):
+	case strings.Contains(roleArn, ":role/aws-service-role/"):
 		// Require the observed service-linked role path, not a lookalike name.
 		return "service-linked"
 	case identityType == "AWSService":
@@ -150,13 +149,16 @@ func originKind(identityType, roleArn, identityArn string) string {
 }
 
 // ssoPermissionSet extracts the AWS IAM Identity Center (SSO) permission-set name
-// from a reserved SSO role/identity arn, or "" if it isn't one. These look like
+// from an observed reserved SSO role ARN, or "" if its path is not recorded. These look like
 //
 //	…:role/aws-reserved/sso.amazonaws.com/<region>/AWSReservedSSO_<Perm>_<hash>
 //
-// and the session arn  …:assumed-role/AWSReservedSSO_<Perm>_<hash>/<user>.
+// A session ARN alone lacks this path and is not enough for classification.
 // The trailing _<hash> is dropped; permission-set names may themselves contain "_".
 func ssoPermissionSet(arn string) string {
+	if !strings.Contains(arn, ":role/aws-reserved/sso.amazonaws.com/") {
+		return ""
+	}
 	for _, seg := range strings.Split(arn, "/") {
 		if strings.HasPrefix(seg, "AWSReservedSSO_") {
 			name := strings.TrimPrefix(seg, "AWSReservedSSO_")

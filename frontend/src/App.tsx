@@ -614,7 +614,7 @@ export default function App() {
   useEffect(() => {
     if (!connected) return;
     const onKey = (e: KeyboardEvent) => {
-      if (settingsOpen) return; // the settings modal owns its own keys (incl. Esc)
+      if (settingsOpen || lineageSeq != null) return; // overlays own their keyboard interactions
       if (uiView !== "console") return; // vim-style shortcuts are console-only (don't hijack the Sigma editor)
       const el = e.target as HTMLElement;
       const typing = el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
@@ -671,7 +671,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, uiView]);
+  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, lineageSeq, uiView]);
 
   const toggleCapture = async () => {
     if(captureBusy)return;

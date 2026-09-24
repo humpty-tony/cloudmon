@@ -164,14 +164,14 @@ export function LineageView({ seq, onClose, onPivot }: Props) {
     const notes = [...(t.notes??[]),...(omitted?["Some expansion links were omitted because they repeat an existing node or exceed the graph limit."]:[])];
     if(notes.length)setMeta(m=>({...m,notes:[...new Set([...m.notes,...notes])]}));
   };
-  const withBusy = async (id: string, fn: (request: number) => Promise<void>) => {
+  const withBusy = useCallback(async (id: string, fn: (request: number) => Promise<void>) => {
     if (busyRef.current.has(id)) return;
     const request=generation.current;
     busyRef.current.add(id); setBusy(new Set(busyRef.current));setError("");
     try { await fn(request); }
     catch(e) {if(request===generation.current)setError(String(e))}
     finally {if(request===generation.current){busyRef.current.delete(id);setBusy(new Set(busyRef.current))}}
-  };
+  }, []);
   const expandSessions = (n: GraphNode) => withBusy(n.id+":s",async request=>{
     if(!snapshotRef.current)throw Error("Graph snapshot unavailable; reload lineage.");
     const t=await backend.queryLineageChildren(n.accessKeyId,snapshotRef.current);
@@ -184,11 +184,11 @@ export function LineageView({ seq, onClose, onPivot }: Props) {
     if(request!==generation.current)return;
     merge(t);setExpEvents(s=>new Set(s).add(n.id));
   });
-  const openRaw = (viaSeq: number, title: string) => withBusy("raw",async request=>{
+  const openRaw = useCallback((viaSeq: number, title: string) => withBusy("raw",async request=>{
     if(!snapshotRef.current)throw Error("Graph snapshot unavailable; reload lineage.");
     const json=await backend.queryLineageRaw(viaSeq,snapshotRef.current);
     if(request===generation.current)setRaw({title,json});
-  });
+  }), [withBusy]);
 
   const incoming = useMemo(() => {
     const m = new Map<string, GraphEdge>();
