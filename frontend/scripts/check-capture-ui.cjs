@@ -38,10 +38,11 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
    const recovering=location.search.includes('recovery');
    const state=window.captureTest={delayIdentity:false,delayTrail:false,failTrail:false,startCalls:0,resumeCalls:0,removeCalls:0,cleanupFails:false,exportFails:false,exported:null,raw,
      aggCalls:0,aggActive:0,aggMax:0,newerCalls:0,newerActive:0,newerMax:0,delayAgg:false,delayNewer:false,searchMode:false,failSearch:false,
-     rawBySeq:{},rawCalls:0,failRaw:false,failLineage:false,delayRawSeq:0,inspectorLoads:0,
+     rawBySeq:{},rawCalls:0,copied:null,failRaw:false,failLineage:false,delayRawSeq:0,inspectorLoads:0,
      rows:[{seq:1,eventID:"saved-1",eventName:"RunInstances",eventSource:"ec2.amazonaws.com",eventTime:"2026-09-24T00:00:00Z",awsRegion:"us-east-1",identityType:"IAMUser",userName:"analyst",readOnly:false,managementEvent:true}],
      recovery:{evidence:{events:recovering?1:0,observations:recovering?3:0,variantEvents:recovering?1:0,lossy:recovering?1:0},capture:recovering?{version:1,phase:'ready',config,infra}:null,captureError:'',active:false}};
    const handlers=new Map();
+   Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{state.copied=text}}});
    const NativeWorker=window.Worker;
    window.Worker=class extends NativeWorker {
     postMessage(message,...rest){if(message && typeof message.json==='string')state.inspectorLoads++;return super.postMessage(message,...rest)}
@@ -253,7 +254,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     state.rawBySeq[1]=state.raw;
   });
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
-  await page.locator('.row').filter({hasText:'RunInstances'}).click();
+  await page.locator('.row').getByText('RunInstances',{exact:true}).click();
   const fields=page.getByRole('region',{name:'Event fields',exact:true});
   await fields.getByText('9007199254740993',{exact:true}).waitFor();
   await fields.getByRole('button',{name:/requestParameters/}).click();
@@ -281,6 +282,8 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.ok((await rawDialog.locator('pre').textContent()).length<=32769);
   await rawDialog.getByRole('button',{name:'Next text segment',exact:true}).click();
   await rawDialog.getByText('Segment 2 of',{exact:false}).waitFor();
+  await rawDialog.getByRole('button',{name:'⧉ Copy',exact:true}).click();
+  assert.equal(await page.evaluate(()=>window.captureTest.copied),await page.evaluate(()=>window.captureTest.raw),'Copy omitted source outside the visible segment');
   await page.screenshot({path:path.join(output,'inspector-raw.png'),fullPage:true});
   await page.keyboard.press('Escape');
   await rawDialog.waitFor({state:'hidden'});
@@ -293,11 +296,12 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     state.rows[0].identityType='AssumedRole';state.failLineage=true;
   });
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
-  await page.locator('.row').filter({hasText:'RunInstances'}).click();
-  await page.waitForFunction(()=>!!window.captureTest.resolveRaw);
+  await page.locator('.row').getByText('RunInstances',{exact:true}).click();
+  await page.getByText('Loading event…',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>typeof window.captureTest.resolveRaw),'function','delayed detail request was not started');
   await page.locator('.etbody').evaluate(el=>{el.scrollTop=0});
   await page.clock.runFor(100);
-  await page.locator('.row').filter({hasText:'LiveEvent2'}).click();
+  await page.locator('.row').getByText('LiveEvent2',{exact:true}).click();
   await fields.getByText('second-event',{exact:true}).waitFor();
   await page.evaluate(()=>window.captureTest.resolveRaw());
   await page.clock.runFor(100);
@@ -307,9 +311,9 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('button',{name:'Retry lineage',exact:true}).click();
   await fields.getByText('second-event',{exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'Retry lineage',exact:true}).count(),0);
-  await page.locator('.row').filter({hasText:'LiveEvent2'}).click();
+  await page.locator('.row').getByText('LiveEvent2',{exact:true}).click();
   await page.evaluate(()=>{window.captureTest.failRaw=true});
-  await page.locator('.row').filter({hasText:'LiveEvent2'}).click();
+  await page.locator('.row').getByText('LiveEvent2',{exact:true}).click();
   await page.getByRole('button',{name:'Retry event',exact:true}).waitFor();
   await page.screenshot({path:path.join(output,'inspector-error.png'),fullPage:true});
   await page.evaluate(()=>{window.captureTest.failRaw=false});
