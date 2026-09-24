@@ -18,8 +18,12 @@ fs.mkdirSync(output, {recursive:true});
    const infra={owned:true,queueUrl:'https://sqs.us-east-1.amazonaws.com/111122223333/cloudmon-capture-saved',queueName:'cloudmon-capture-saved',queueArn:'arn:aws:sqs:us-east-1:111122223333:cloudmon-capture-saved',ruleName:'cloudmon-cloudtrail-saved',ruleArn:'arn:aws:events:us-east-1:111122223333:rule/cloudmon-cloudtrail-saved',region:'us-east-1',account:'111122223333',allManagement:true};
    const recovering=location.search.includes('recovery');
    const state=window.captureTest={delayIdentity:false,delayTrail:false,failTrail:false,startCalls:0,resumeCalls:0,removeCalls:0,cleanupFails:false,exportFails:false,exported:null,raw,
+     aggCalls:0,aggActive:0,aggMax:0,newerCalls:0,newerActive:0,newerMax:0,delayAgg:false,delayNewer:false,
+     rows:[{seq:1,eventID:"saved-1",eventName:"RunInstances",eventSource:"ec2.amazonaws.com",eventTime:"2026-09-24T00:00:00Z",awsRegion:"us-east-1",identityType:"IAMUser",userName:"analyst",readOnly:false,managementEvent:true}],
      recovery:{evidence:{events:recovering?1:0,observations:recovering?3:0,variantEvents:recovering?1:0,lossy:recovering?1:0},capture:recovering?{version:1,phase:'ready',config,infra}:null,captureError:'',active:false}};
-   window.runtime={EventsOn:()=>()=>{}};
+   const handlers=new Map();
+   window.runtime={EventsOn:(name,cb)=>{if(!handlers.has(name))handlers.set(name,new Set());handlers.get(name).add(cb);return()=>handlers.get(name).delete(cb)}};
+   state.emit=total=>{while(state.rows.length<total){const seq=state.rows.length+1;state.rows.unshift({...state.rows[state.rows.length-1],seq,eventID:`live-${seq}`,eventName:`LiveEvent${seq}`})}state.recovery.evidence.events=total;for(const cb of handlers.get('cloudmon:events')||[])cb({added:1,total})};
    window.go={main:{App:{
     Log:async()=>{},MaximizeWindow:async()=>{},
     GetRecoveryState:async()=>structuredClone(state.recovery),
@@ -27,9 +31,10 @@ fs.mkdirSync(output, {recursive:true});
     ResumeCapture:async()=>{state.resumeCalls++;state.recovery.active=true;return infra},
     StopCapture:async()=>{state.recovery.active=false},
     TeardownCapture:async()=>{state.removeCalls++;state.recovery.active=false;if(state.cleanupFails){state.recovery.capture.phase='cleanup';throw Error('Queue deletion denied; saved resources retained')}state.recovery.capture=null},
-    QueryAggregates:async()=>({total:1,facets:{},histogram:[],histFrom:0,histTo:0,histStep:60000,stats:{errors:0,principals:1,sources:1,regions:1,minMs:0,maxMs:0}}),
-    QueryPage:async()=>[{seq:1,eventID:'saved-1',eventName:'RunInstances',eventSource:'ec2.amazonaws.com',eventTime:'2026-09-24T00:00:00Z',awsRegion:'us-east-1',identityType:'IAMUser',userName:'analyst',readOnly:false,managementEvent:true}],
-    QueryNewer:async()=>[],GetEventRaw:async()=>raw,
+    QueryAggregates:async()=>{state.aggCalls++;state.aggActive++;state.aggMax=Math.max(state.aggMax,state.aggActive);const result={total:state.rows.length,facets:{},histogram:[],histFrom:0,histTo:0,histStep:60000,stats:{errors:0,principals:1,sources:1,regions:1,minMs:0,maxMs:0}};try{if(state.delayAgg)await new Promise(resolve=>{state.resolveAgg=resolve});return result}finally{state.aggActive--}},
+    QueryPage:async()=>state.rows,
+    QueryNewer:async(_filter,since)=>{state.newerCalls++;state.newerActive++;state.newerMax=Math.max(state.newerMax,state.newerActive);const rows=state.rows.filter(r=>r.seq>since);try{if(state.delayNewer)await new Promise(resolve=>{state.resolveNewer=resolve});return rows}finally{state.newerActive--}},
+    GetEventRaw:async()=>raw,
     RawBySeqs:async()=>{if(state.exportFails)throw Error('Storage unavailable');return [raw]},
     ExportEventsJSON:async(data)=>{state.exported=data;return 'selection.json'},
     GetEventEvidence:async()=>({total:3,variants:3,observations:[1,2,3].map(id=>({id,source:id===3?'/evidence/history.csv':'/evidence/CloudTrail/2026/09/24/events.json.gz',ordinal:id,format:id===3?'event-history-csv':'cloudtrail-json',lossy:id===3,sha256:String(id).repeat(64),observedAt:'2026-09-24T00:01:00Z',displayed:id===1}))}),
@@ -116,7 +121,52 @@ fs.mkdirSync(output, {recursive:true});
   await page.getByText('Capture running ·',{exact:false}).waitFor();
   assert.equal(await page.evaluate(()=>window.captureTest.startCalls),0);
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+  // Drive the refresh cadence with a browser clock, including deliberately slow
+  // native responses. Incoming batches must coalesce rather than queue UI reads.
+  await page.clock.install();
+  await page.reload();
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  await page.getByRole('button',{name:'▶ Capture',exact:true}).click();
+  await page.getByText('Capture running ·',{exact:false}).waitFor();
+  await page.waitForFunction(()=>window.captureTest.aggCalls>=2 && window.captureTest.aggActive===0);
+  const idle=await page.evaluate(()=>({agg:window.captureTest.aggCalls,newer:window.captureTest.newerCalls}));
+  await page.clock.runFor(3000);
+  assert.equal(await page.evaluate(()=>window.captureTest.aggCalls),idle.agg,'idle capture rescanned the dataset');
+  await page.evaluate(()=>window.captureTest.emit(1)); // duplicate source observation
+  await page.clock.runFor(3000);
+  assert.equal(await page.evaluate(()=>window.captureTest.aggCalls),idle.agg);
+  assert.equal(await page.evaluate(()=>window.captureTest.newerCalls),idle.newer);
+
+  await page.evaluate(()=>{window.captureTest.delayNewer=true;window.captureTest.delayAgg=true;window.captureTest.emit(2)});
+  await page.clock.runFor(500);
+  await page.waitForFunction(()=>!!window.captureTest.resolveNewer);
+  await page.evaluate(()=>window.captureTest.emit(3));
+  await page.clock.runFor(1000);
+  assert.equal(await page.evaluate(()=>window.captureTest.newerCalls),idle.newer+1,'overlapping tail requests');
+  await page.evaluate(()=>{window.captureTest.delayNewer=false;window.captureTest.resolveNewer()});
+  await page.clock.runFor(500);
+  await page.getByText('LiveEvent3',{exact:true}).first().waitFor();
+  await page.getByText('LiveEvent2',{exact:true}).first().waitFor();
+  await page.clock.runFor(3000);
+  await page.waitForFunction(()=>!!window.captureTest.resolveAgg);
+  const busyAgg=await page.evaluate(()=>window.captureTest.aggCalls);
+  await page.evaluate(()=>window.captureTest.emit(4));
+  await page.clock.runFor(6000);
+  assert.equal(await page.evaluate(()=>window.captureTest.aggCalls),busyAgg,'overlapping aggregate refreshes');
+  await page.evaluate(()=>{window.captureTest.delayAgg=false;window.captureTest.resolveAgg()});
+  await page.clock.runFor(3000);
+  assert.equal(await page.evaluate(()=>window.captureTest.aggCalls),busyAgg+1,'arrivals during a refresh were lost');
+  assert.deepEqual(await page.evaluate(()=>[window.captureTest.aggMax,window.captureTest.newerMax]),[1,1]);
+
+  await page.getByText('RunInstances',{exact:true}).first().click();
+  await page.getByRole('button',{name:'Sources & hashes',exact:true}).waitFor();
+  const frozen=await page.evaluate(()=>({agg:window.captureTest.aggCalls,newer:window.captureTest.newerCalls}));
+  await page.evaluate(()=>window.captureTest.emit(5));
+  await page.clock.runFor(6000);
+  assert.deepEqual(await page.evaluate(()=>({agg:window.captureTest.aggCalls,newer:window.captureTest.newerCalls})),frozen,'inspection did not freeze the visible window');
+  await page.screenshot({path:path.join(output,'live-inspection.png'),fullPage:true});
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   assert.deepEqual(errors,[]);
-  console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture'],errors}));
+  console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture'],errors}));
  } finally {await browser.close();await server.close()}
 })().catch(e=>{console.error(e);process.exit(1)});
