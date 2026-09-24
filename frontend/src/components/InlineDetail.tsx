@@ -1,3 +1,4 @@
+import {PinComparisonButton} from "./EvidenceComparison";
 import { InvestigationView } from "./InvestigationView";
 import { memo, useState } from "react";
 import type { CloudTrailEvent, FilterField, Lineage, QueryOp } from "../api/types";
@@ -34,6 +35,7 @@ export const InlineDetail = memo(function InlineDetail({ event: e, rawJSON, fiel
         <span className="xd-sub">{e.eventSource}</span>
         <span className={`xd-result ${e.errorCode ? "fail" : "ok"}`}>{eventResult(e)}</span>
         <span className="xd-time">{new Date(e.eventTime).toLocaleString()}</span>
+        <PinComparisonButton event={e} json={rawJSON} />
         <button className="xd-raw-btn" onClick={() => setInvestigating(true)}>Investigate</button>
         <button className="xd-raw-btn" onClick={() => setEvidenceOpen(true)}>Sources & hashes</button>
         <button className="xd-raw-btn" onClick={() => setRawOpen(true)}>

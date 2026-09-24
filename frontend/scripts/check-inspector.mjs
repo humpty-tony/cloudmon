@@ -21,5 +21,26 @@ try {
   const unicode='x'.repeat(TEXT_PAGE_SIZE-1)+'😀'+source;
   const pages=Array.from({length:Math.ceil(unicode.length/TEXT_PAGE_SIZE)},(_,i)=>textPage(unicode,i));
   assert.equal(pages.join(''),unicode);assert.ok(pages[0].endsWith('😀'));
+  const {compareEvidence,COMPARE_MAX_NODES,COMPARE_MAX_CHANGES,COMPARE_MAX_CHARS}=await server.ssrLoadModule('/src/api/compareModel.ts');
+  const compared=compareEvidence('{"number":9007199254740993,"missing":null,"array":[1,2],"a/b~c":"old"}', '{"number":9007199254740992,"array":[2,1],"a/b~c":"new","added":false}');
+  assert.equal(compared.complete,true);
+  assert.equal(compared.changes.find(c=>c.path==='/number').left.text,'9007199254740993');
+  assert.equal(compared.changes.find(c=>c.path==='/missing').right.kind,'missing');
+  assert.equal(compared.changes.find(c=>c.path==='/missing').left.kind,'null');
+  assert.equal(compared.changes.find(c=>c.path==='/added').change,'added');
+  assert.ok(compared.changes.some(c=>c.path==='/a~1b~0c'));
+  assert.ok(compared.changes.some(c=>c.path==='/array/0'));
+  assert.equal(compareEvidence('{"b":2,"a":1}','{"a":1,"b":2}').changes.length,0);
+  assert.equal(compareEvidence('{"n":1e3}','{"n":1000}').changes.length,1,'numeric spelling was coerced');
+  assert.throws(()=>compareEvidence('{"__proto__":2}','{}'),/Raw JSON/);
+  assert.throws(()=>compareEvidence('{"n":1,"n":2}','{}'),/Duplicate/);
+  assert.throws(()=>compareEvidence('x'.repeat(COMPARE_MAX_CHARS+1),'{}'),/limit/);
+  const huge=JSON.stringify(Array.from({length:60000},()=>0));
+  const bounded=compareEvidence(huge,huge);assert.equal(bounded.complete,false);assert.ok(bounded.visited<=COMPARE_MAX_NODES);
+  const many=compareEvidence(JSON.stringify(Array.from({length:1000},()=>0)),JSON.stringify(Array.from({length:1000},()=>1)));
+  assert.equal(many.complete,false);assert.equal(many.changes.length,COMPARE_MAX_CHANGES);
+  const deep='{"nested":'.repeat(70)+'1'+'}'.repeat(70);assert.equal(compareEvidence(deep,deep).complete,false);
+  const preview=compareEvidence('{"long":"'+'x'.repeat(2000)+'"}','{}').changes[0];assert.equal(preview.left.truncated,true);assert.ok(preview.left.text.length<=512);
+  console.log('Comparison checks passed: exact numbers, missing/null, object order, array positions, pointers, parser errors, bounded work and previews.');
   console.log('Inspector checks passed: bounded pages/previews, exact numbers, duplicate keys, own-property paths, lossless source segments.');
 } finally {await server.close()}

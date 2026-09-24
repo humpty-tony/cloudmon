@@ -1326,3 +1326,43 @@ body { font-feature-settings: "liga", "calt"; }
 .investigation-status button { margin-left: 12px; }
 .investigation-cap { padding: 8px 12px; color: var(--sev-warn); font-size: 11px; }
 @media (max-width: 780px) { .investigation-scrim { padding: 6px; } .investigation-body { flex-direction: column; } .investigation-detail { flex: 0 0 36%; min-width: 0; max-width: none; border-left: 0; border-top: 1px solid var(--line-struct); } .investigation-head { padding: 10px; } }
+
+/* Two pinned source copies; the comparison never substitutes newly loaded rows. */
+.comparison-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 6px 12px; border-bottom: 1px solid var(--line-struct); background: var(--bg-2); flex-shrink: 0; font-size: 11px; }
+.comparison-bar>span { color: var(--tx-3); }
+.comparison-bar button, .comparison-dialog button { background: var(--bg-1); border: 1px solid var(--border-fn); color: var(--tx-1); border-radius: 4px; padding: 5px 9px; font: inherit; cursor: pointer; }
+.comparison-bar button:disabled { opacity: .5; cursor: default; }
+.comparison-pin { display: flex; align-items: center; gap: 6px; min-width: 0; max-width: 240px; flex: 0 1 auto; }
+.comparison-pin>b { color: var(--acc-text); }
+.comparison-pin>span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 10px var(--mono); }
+.comparison-pin>button { padding: 2px 5px; }
+.comparison-scrim { position: fixed; inset: 0; z-index: 170; display: grid; place-items: center; padding: 18px; background: rgba(4,8,12,.7); }
+.comparison-dialog { width: min(1400px,100%); height: min(900px,94vh); display: flex; flex-direction: column; min-width: 0; overflow: hidden; background: var(--bg-1); color: var(--tx-1); border: 1px solid var(--line-struct); border-radius: 10px; box-shadow: var(--overlay-shadow); }
+.comparison-dialog header { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--line-struct); }
+.comparison-dialog header>div { flex: 1; min-width: 200px; }
+.comparison-dialog h2 { margin: 0 0 5px; font-size: 17px; }
+.comparison-dialog header span { color: var(--tx-3); font-size: 11px; }
+.comparison-sources { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; padding: 12px 16px; background: var(--bg-2); }
+.comparison-sources>div { display: grid; gap: 5px; min-width: 0; font-size: 12px; }
+.comparison-sources code { font: 10px var(--mono); color: var(--tx-2); overflow-wrap: anywhere; }
+.comparison-sources span { color: var(--tx-3); font-size: 10px; }
+.comparison-sources button { justify-self: start; font-size: 11px; }
+.comparison-summary { padding: 9px 16px; font-size: 12px; color: var(--acc-text); border-bottom: 1px solid var(--line-struct); }
+.comparison-summary.partial { color: var(--sev-warn); }
+.comparison-columns, .comparison-change { display: grid; grid-template-columns: minmax(150px, 26%) minmax(0,1fr) minmax(0,1fr); }
+.comparison-columns { background: var(--bg-2); color: var(--tx-3); font-size: 11px; padding: 8px 0; }
+.comparison-columns>span { padding: 0 12px; }
+.comparison-changes { flex: 1; min-height: 0; overflow: auto; }
+.comparison-change { position: absolute; inset: 0 0 auto; width: 100%; border-bottom: 1px solid var(--line-struct); }
+.comparison-change>div { padding: 10px 12px; min-width: 0; overflow: hidden; }
+.comparison-change>div+div { border-left: 1px solid var(--line-struct); }
+.comparison-change code { display: block; max-height: 65px; overflow: auto; overflow-wrap: anywhere; font: 11px/1.4 var(--mono); }
+.comparison-change>div>span { display: block; font-size: 10px; margin-top: 5px; }
+.comparison-kind { color: var(--tx-3); }
+.comparison-change pre { margin: 6px 0 0; max-height: 66px; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.4 var(--mono); }
+.change-added { color: var(--sev-ok); } .change-removed { color: var(--sev-err); } .change-changed { color: var(--sev-warn); }
+.comparison-notes { flex-shrink: 0; max-height: 100px; overflow: auto; padding: 6px 16px; border-top: 1px solid var(--line-struct); color: var(--tx-3); font-size: 11px; }
+.comparison-notes p { margin: 5px 0; }
+.comparison-status { padding: 25px; color: var(--tx-3); }
+.comparison-status button { margin-left: 10px; }
+@media (max-width: 780px) { .comparison-scrim { padding: 6px; } .comparison-columns, .comparison-change { grid-template-columns: minmax(100px,24%) minmax(0,1fr) minmax(0,1fr); } }

@@ -1,3 +1,4 @@
+import {ComparisonBar} from "./components/EvidenceComparison";
 import { hasCredentialLineage } from "./api/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { SavedCapture, RecoveryState, CloudTrailEvent, ConnectionConfig, EvidenceSnapshot, FilterField, Lineage, QueryFilter, QueryOp, QueryTerm } from "./api/types";
@@ -766,6 +767,7 @@ export default function App() {
         onHelp={(t) => setHelp({ open: true, tab: t })}
         onSettings={() => setSettingsOpen(true)}
       />
+      <ComparisonBar />
       {exportNotice && <div className="search-notice" role="status"><span>{exportNotice}</span>
         {exporting ? <button className="btn-ghost" onClick={()=>exportAbort.current?.abort()}>Cancel export</button>
           : <button className="btn-ghost" onClick={()=>setExportNotice("")}>Dismiss</button>}
