@@ -1,6 +1,7 @@
+import {AliasBadge} from "./AliasBadge";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { CloudTrailEvent, FilterField, Lineage, QueryOp } from "../api/types";
+import type { CloudTrailEvent, EvidenceSnapshot, FilterField, Lineage, QueryOp } from "../api/types";
 import { filterFieldValue, eventUser, identityGlyph, truncateArn } from "../api/types";
 import type { ColumnDef } from "../api/columns";
 import type { TimeZonePref } from "../api/settings";
@@ -22,9 +23,12 @@ interface Props {
   onResizeColumn: (key: string, px: number) => void;
   onReorderColumns?: (from: string, to: string) => void; // drag a header onto another to reorder
   onNeedMore?: () => void; // scrolled near the bottom of the loaded window
+  selectedSnapshot?:EvidenceSnapshot;
   selectedRaw?: string; // lazily-fetched raw JSON for the expanded row ("" = loading)
   selectedRawError?: boolean; // the raw fetch failed (show an error instead of "loading" forever)
   selectedLineage?: Lineage | null; // assumed-role ancestry for the expanded row
+  selectedLineageError?: boolean;
+  onRetryDetail: () => void;
   onOpenLineage?: (seq: number) => void; // open the full lineage graph view
   loadingMore?: boolean;
   atLoadCap?: boolean;
@@ -56,6 +60,7 @@ function IdentityCell({ e }: { e: CloudTrailEvent }) {
       <span className={`c-ident-glyph t-${ui.type}`}>{identityGlyph(ui.type)}</span>
       <span className="c-ident-name">{eventUser(e)}</span>
       {ui.arn && <span className="c-ident-arn">{truncateArn(ui.arn, 22)}</span>}
+      <AliasBadge kind="arn" value={ui.arn||""} />
     </span>
   );
 }
@@ -93,9 +98,12 @@ export function EventTable({
   onResizeColumn,
   onReorderColumns,
   onNeedMore,
+  selectedSnapshot,
   selectedRaw,
   selectedRawError,
   selectedLineage,
+  selectedLineageError,
+  onRetryDetail,
   onOpenLineage,
   loadingMore,
   atLoadCap,
@@ -107,6 +115,7 @@ export function EventTable({
   const dragKey = useRef<string | null>(null); // header being dragged (reorder)
   const [overKey, setOverKey] = useState<string | null>(null); // header under the drag
   const [viewportW, setViewportW] = useState(0); // visible width → the pinned panel's fixed width
+  const [viewportH, setViewportH] = useState(400);
 
   const widths = columns.map((c) => colWidths[c.key] ?? c.width);
   const minTotal = widths.reduce((a, b) => a + b, 0);
@@ -143,7 +152,7 @@ export function EventTable({
   useEffect(() => {
     const el = parentRef.current;
     if (!el) return;
-    const update = () => setViewportW(el.clientWidth);
+    const update = () => { setViewportW(el.clientWidth); setViewportH(el.clientHeight); };
     update();
     const ro = new ResizeObserver(update);
     ro.observe(el);
@@ -302,7 +311,7 @@ export function EventTable({
                     const pivotable = c.field !== "eventTime";
                     return (
                       <div key={c.key} className={`cell ${c.mono ? "mono" : ""} c-${c.key}`} title={c.get(e)}>
-                        <span className="cell-inner">{content}</span>
+                        <span className="cell-inner">{content}{c.key!=="identity"&&<AliasBadge field={c.field} value={rawVal}/>}</span>
                         {pivotable && (
                           <span className="pivot-icons">
                             <button
@@ -337,9 +346,9 @@ export function EventTable({
                   <div className="row-expand">
                     <div className="row-expand-pin" style={{ width: viewportW || undefined }}>
                       {selectedRaw ? (
-                        <InlineDetail event={{ ...e, rawJSON: selectedRaw }} lineage={selectedLineage} onPivot={onPivot} onOpenLineage={onOpenLineage} />
+                        <InlineDetail key={e.seq} event={e} snapshot={selectedSnapshot} rawJSON={selectedRaw} fieldHeight={Math.max(84,Math.min(392,viewportH-160))} lineage={selectedLineage} lineageError={selectedLineageError} onRetry={onRetryDetail} onPivot={onPivot} onOpenLineage={onOpenLineage} />
                       ) : selectedRawError ? (
-                        <div className="xd-loading">Could not load this event (the database was busy). Collapse and reopen to retry.</div>
+                        <div className="xd-loading" role="alert">Could not load this event. <button className="btn-ghost" onClick={onRetryDetail}>Retry event</button></div>
                       ) : (
                         <div className="xd-loading">Loading event…</div>
                       )}

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"regexp"
 	"sort"
@@ -415,6 +416,7 @@ type Stats struct {
 	MaxMs      int64 `json:"maxMs"`
 }
 type Aggregates struct {
+	Snapshot  *Snapshot               `json:"snapshot"`
 	Total     int                     `json:"total"`
 	Stats     Stats                   `json:"stats"`
 	Facets    map[string][]FacetValue `json:"facets"`
@@ -427,18 +429,18 @@ type Aggregates struct {
 // Aggregates computes total count, per-field facet counts, and the time histogram
 // for the current filter - all in DuckDB, so the bridge carries only summaries.
 func (s *Store) Aggregates(f Filter) (Aggregates, error) {
+	return s.AggregatesContext(context.Background(), f)
+}
+
+func (s *Store) AggregatesContext(parent context.Context, f Filter) (Aggregates, error) {
 	var agg Aggregates
-	err := s.operation(context.Background(), func(ctx context.Context) error {
-		// All panels in this response describe one committed state even if a
-		// capture batch lands between the stats, facets, and histogram queries.
-		// Statement contexts cancel work; the deferred rollback must finish
-		// synchronously before operation releases its database lifetime lock.
-		tx, err := s.db.BeginTx(context.WithoutCancel(ctx), nil)
+	err := s.readSnapshot(parent, func(ctx context.Context, tx *sql.Tx) error {
+		snapshot, err := snapshotOn(ctx, tx)
 		if err != nil {
 			return err
 		}
-		defer tx.Rollback()
 		agg, err = aggregates(f, func(query string, dst any) error { return queryJSONOn(ctx, tx, query, dst) })
+		agg.Snapshot = &snapshot
 		return err
 	})
 	return agg, err

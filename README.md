@@ -22,7 +22,9 @@ CloudMon removes that gate. It reads CloudTrail directly (a downloaded dump, or 
 
 - a query language over supported event and identity fields ([semantics and limits](docs/search-correctness.md)),
 - facets, a time histogram, and live stats to pivot through millions of events,
-- assumed-role lineage that walks an AssumeRole chain back to its origin identity,
+- [event investigation](docs/investigation-context.md) with surrounding-event timelines, resource correlations, and explicit relationship evidence,
+- [credential lineage](docs/credential-lineage.md) with qualified STS links, explicit gaps/conflicts, and snapshot-consistent expansion,
+- [original-record comparison](docs/event-comparison.md) with two pinned source copies and exact numeric evidence,
 - a Sigma testbench to write and validate detections against real data.
 
 Nothing leaves the host. It is for the people who do this work without a Splunk budget: detection engineers, incident responders, researchers, and anyone learning what CloudTrail actually contains.
@@ -42,9 +44,11 @@ Nothing leaves the host. It is for the people who do this work without a Splunk 
 
 **Investigate**
 - Query language: field operators (`=`, `!=`, `~` regex, `:` contains, `*` `?` wildcards), boolean `and` / `or` / `not`, and parentheses.
+- Consistent search snapshots, stable paging during capture, and [complete filtered export](docs/query-snapshots.md) beyond the loaded-row limit.
 - Facet sidebar, a brushable time histogram, and a live stats bar (errors, principals, sources, regions, span).
 - Assumed-role lineage: trace an AssumeRole session back to the identity that started the chain, or open the full lineage graph.
-- Sigma testbench: paste a Sigma rule and see whether it parses and translates, the SQL it compiles to, and the events it matches.
+- [Personal labels](docs/local-aliases.md): local names for exact accounts, ARNs and source addresses, displayed alongside original evidence.
+- [Sigma investigation](docs/sigma-investigation.md): exact numeric matching, clear unsupported-rule diagnostics, cancellable snapshot runs, per-selection explanations, and suites of up to 25 rules.
 - Lenses: errors-only, hide read-only, and a tunable "sensitive API" highlight.
 
 **Operate**
@@ -94,6 +98,8 @@ The binary is written to `build/bin/`. Run it directly, or use `wails dev` (`mak
 
 ## Usage
 
+- **Hunt across evidence.** Use **Hunts** for bulk IP/CIDR, key-ID, event-ID and ARN searches, or look for one event followed by another for the same recorded principal/credential. Matches expose their source records, scope and limitations. See [investigation hunts](docs/investigation-hunts.md).
+- **Analyze activity.** Use **Analysis** for activity rankings, exact entity drilldowns, and comparisons against the preceding equal time window. Results explain scope, missing fields and evidence gaps; original records remain accessible. See [activity analysis](docs/activity-analysis.md).
 - **Import a dump.** Point CloudMon at a CloudTrail JSON/CSV export, an S3 log object, or a folder of logs. No credentials required.
 - **Capture live.** Pick an authenticated AWS profile and region, verify identity, and start. CloudMon provisions an EventBridge rule and SQS queue on your existing trail and streams events. Closing the app pauses consumption and preserves the local evidence and resource handles. Resume explicitly on the next launch, or use **Remove infrastructure** to delete the rule and queue; unread queued messages are lost on removal. AWS charges and queue retention still apply while CloudMon is closed. Needs a trail already logging in that region.
 - **Recover and inspect evidence.** Reopen saved evidence without AWS access. Expand an event and choose **Sources & hashes** to inspect original records, source locations, duplicate observations, and byte variants. Imports replace the dataset only after all input records validate and commit. See [evidence and recovery](docs/evidence-recovery.md).

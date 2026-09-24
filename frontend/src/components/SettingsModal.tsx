@@ -1,3 +1,4 @@
+import {AliasSettings} from "./AliasSettings";
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { DEFAULT_SENSITIVE_APIS, SENSITIVE_INFO, type SensitiveInfo } from "../api/sensitiveApis";
@@ -29,6 +30,7 @@ interface Props {
 const TABS = [
   { key: "sensitivity", label: "Sensitive actions" },
   { key: "display", label: "Display" },
+  { key: "aliases", label: "Personal labels" },
   { key: "general", label: "General" },
 ];
 
@@ -250,7 +252,7 @@ function GeneralTab({ onResetAll }: { onResetAll: () => void }) {
       <div className="set-field danger">
         <div className="set-field-head">
           <div className="set-field-name">Reset all preferences</div>
-          <div className="set-field-desc">Clears every saved setting (sensitive overrides, theme, columns, layout, filters) and reloads. Your imported data is not touched.</div>
+          <div className="set-field-desc">Clears every saved setting (sensitive overrides, theme, columns, layout, filters, personal labels) and reloads. Your imported data is not touched.</div>
         </div>
         <button
           className="set-danger-btn"
@@ -290,6 +292,7 @@ export function SettingsModal(p: Props) {
           <div className="settings-content">
             {tab === "sensitivity" && <SensitivityTab override={p.override} onOverride={p.onOverride} />}
             {tab === "display" && <DisplayTab theme={p.theme} onTheme={p.onTheme} density={p.density} onDensity={p.onDensity} timeZone={p.timeZone} onTimeZone={p.onTimeZone} />}
+            {tab === "aliases" && <AliasSettings />}
             {tab === "general" && <GeneralTab onResetAll={p.onResetAll} />}
           </div>
         </div>

@@ -1,5 +1,7 @@
+import {ComparisonBar} from "./components/EvidenceComparison";
+import { hasCredentialLineage } from "./api/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { SavedCapture, RecoveryState, CloudTrailEvent, ConnectionConfig, FilterField, Lineage, QueryFilter, QueryOp, QueryTerm } from "./api/types";
+import type { SavedCapture, RecoveryState, CloudTrailEvent, ConnectionConfig, EvidenceSnapshot, FilterField, Lineage, QueryFilter, QueryOp, QueryTerm } from "./api/types";
 import { backend, maximizeWindow, exportEvents, onMenuEvent, type QueryResult } from "./api/backend";
 import { COLUMN_BY_KEY } from "./api/columns";
 import { DEFAULT_PRESET, PRESETS, type Preset } from "./api/presets";
@@ -34,6 +36,8 @@ import { DEFAULT_THEME } from "./api/themes";
 import { TitleBar } from "./components/TitleBar";
 import { LineageView } from "./components/LineageView";
 import { SigmaView } from "./components/SigmaView";
+import { AnalysisView } from "./components/AnalysisView";
+import { HuntView } from "./components/HuntView";
 import { SettingsModal } from "./components/SettingsModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { installCrashLogging } from "./api/log";
@@ -46,6 +50,7 @@ const STREAM_APPEND_MS = 350; // live-tail throttle - only fetches + PREPENDS ne
 const AGG_REFRESH_MS = 2500; // facets/histogram/stats are a full scan - refresh them on a slower cadence while streaming
 
 const EMPTY_AGG: QueryResult = {
+  snapshot: null,
   total: 0,
   facets: [],
   histogram: { buckets: [], step: 60_000, from: 0, to: 0, max: 0 },
@@ -99,11 +104,20 @@ export default function App() {
   const [queryFailure, setQueryFailure] = useState<string | null>(null);
   const resultsFilter = useRef<QueryFilter | null>(null);
   const searchBlocked = useRef(true);
+  const pageSnapshot = useRef<EvidenceSnapshot | null>(null);
+  const unloadedSnapshotRows = useRef(0);
+  const tailFloor = useRef(0);
+  const queryQueue = useRef<Promise<unknown>>(Promise.resolve());
+  const aggregateAbort = useRef<AbortController | null>(null);
+  const exportAbort = useRef<AbortController | null>(null);
+  const [exporting,setExporting] = useState(false);
+  const [exportNotice,setExportNotice] = useState("");
   const [loadingMore, setLoadingMore] = useState(false); // fetching the next page
   const [selectedRaw, setSelectedRaw] = useState(""); // lazily-fetched raw JSON for the expanded row
   const [selectedRawErr, setSelectedRawErr] = useState(false); // raw fetch failed (distinct from still-loading)
   const detailReq = useRef(0); // guards the detail fetch: a newer expand supersedes an in-flight older one
   const [selectedLineage, setSelectedLineage] = useState<Lineage | null>(null); // assumed-role ancestry for the expanded row
+  const [selectedLineageError, setSelectedLineageError] = useState(false);
   const [lineageSeq, setLineageSeq] = useState<number | null>(null); // full lineage graph overlay, focused on this event
   const [refreshTick, setRefreshTick] = useState(0); // streaming bumps this to re-query
   const [capturing, setCapturing] = useState(false);
@@ -128,7 +142,7 @@ export default function App() {
   const [help, setHelp] = useState<{ open: boolean; tab: string }>({ open: false, tab: "getting-started" });
   const [narrow, setNarrow] = useState(false);
   const [theme, setTheme] = useState<string>(() => load("theme", DEFAULT_THEME));
-  const [uiView, setUiView] = useState<"console" | "sigma">("console"); // top-level workspace
+  const [uiView, setUiView] = useState<"console" | "sigma" | "analysis" | "hunts">("console");
   // ---- user settings (config menu) ----
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sensitiveOverride, setSensitiveOverride] = useState<SensitiveOverride>(() => {
@@ -228,6 +242,7 @@ export default function App() {
   }, [connected]);
 
   const enterDataset = (cfg: ConnectionConfig, total: number, capture: SavedCapture | null, active: boolean) => {
+    ++detailReq.current;
     searchBlocked.current = true;
     resultsFilter.current = null;
     setQueryFailure(null);
@@ -286,7 +301,7 @@ export default function App() {
     if (!followRef.current || searchBlocked.current || resultsFilter.current !== filterRef.current) return;
     appendInFlight.current = true;
     const cur = eventsRef.current;
-    const maxSeq = cur.length ? cur[0].seq : 0; // events are newest-first → [0] is newest
+    const maxSeq = Math.max(tailFloor.current, cur.length ? cur[0].seq : 0);
     const id = reqId.current;
     // NB: the append is meant to be invisible - it does NOT touch `querying`, so it can't
     // flicker the "loading" indicator or clobber the loading state of an in-flight search.
@@ -321,18 +336,21 @@ export default function App() {
     aggregateInFlight.current = true;
     const id = reqId.current;
     const version = streamVersion.current;
+    const controller = new AbortController();
+    aggregateAbort.current = controller;
     try {
-      const a = await backend.queryAggregates(filterRef.current);
+      const a = await backend.queryAggregates(filterRef.current, controller.signal);
       if (id !== reqId.current || searchBlocked.current || !followRef.current || !capturingRef.current) return;
       aggregateVersion.current = version;
       setAgg({ ...a, stats: { ...a.stats, total: datasetTotalRef.current } });
     } catch (error) {
-      if (id === reqId.current) {
+      if (id === reqId.current && !controller.signal.aborted) {
         searchBlocked.current = true;
         setQueryFailure(String(error));
       }
     } finally {
       aggregateInFlight.current = false;
+      if (aggregateAbort.current === controller) aggregateAbort.current = null;
     }
   }, []);
 
@@ -377,6 +395,7 @@ export default function App() {
   useEffect(() => {
     if (!connected) return;
     const id = ++reqId.current;
+    aggregateAbort.current?.abort();
     searchBlocked.current = true;
     setQueryFailure(null);
     if (compiled.error) {
@@ -385,20 +404,27 @@ export default function App() {
       return;
     }
     const version = streamVersion.current;
+    const controller = new AbortController();
     initialQuery.current = id;
     setQuerying(true);
-    Promise.all([backend.queryAggregates(filter), backend.queryPage(filter, 0, PAGE)])
-      .then(([a, page]) => {
+    // Cancel the obsolete job and wait for it to release its connection. Queued
+    // effects skip themselves when superseded; only the newest search runs.
+    const task = queryQueue.current.catch(() => {}).then(async () => {
+      if (controller.signal.aborted) return;
+      const {aggregates:a,events:page} = await backend.querySearch(filter, PAGE, controller.signal);
         if (id !== reqId.current) return;
         aggregateVersion.current = version;
         setAgg({ ...a, stats: { ...a.stats, total: datasetTotalRef.current } });
         setEvents(page); // newest-first
+        pageSnapshot.current = a.snapshot;
+        unloadedSnapshotRows.current = Math.max(0,a.total-page.length);
+        tailFloor.current = a.snapshot?.maxSeq ?? 0;
         resultsFilter.current = filter;
         searchBlocked.current = false;
         setQuerying(false);
         if (streamVersion.current !== version && followRef.current) scheduleAppendRef.current();
-      })
-      .catch((error) => {
+      });
+    queryQueue.current = task.catch((error) => {
         if (id !== reqId.current) return;
         // Keep the last results if this request failed.
         setQueryFailure(String(error));
@@ -407,7 +433,7 @@ export default function App() {
       .finally(() => {
         if (initialQuery.current === id) initialQuery.current = null;
       });
-    return () => { ++reqId.current; };
+    return () => { ++reqId.current; controller.abort(); };
   }, [connected, filter, refreshTick, compiled.error]);
 
   // Keep the "total" stat live while paused - datasetTotal climbs from the capture
@@ -420,17 +446,19 @@ export default function App() {
   // deep scroll can't balloon memory; loadingMoreRef prevents overlapping loads.
   const loadMore = useCallback(() => {
     if (loadingMoreRef.current || querying || searchBlocked.current || resultsFilter.current !== filter) return;
-    if (events.length >= agg.total || events.length >= MAX_LOADED) return;
+    const snapshot = pageSnapshot.current;
+    if (!snapshot) return;
+    if (unloadedSnapshotRows.current <= 0 || events.length >= MAX_LOADED) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     const id = reqId.current;
     backend
-      .queryPage(filter, events.length, PAGE)
+      .querySnapshotPage(filter, snapshot, events.at(-1)?.seq ?? 0, PAGE)
       .then((page) => {
         if (id !== reqId.current || searchBlocked.current) return;
+        unloadedSnapshotRows.current = page.length ? Math.max(0,unloadedSnapshotRows.current-page.length) : 0;
         setEvents((prev) => {
-          // Dedupe: a live append may have prepended rows while this page was in flight,
-          // shifting offsets - drop any seq we already hold before concatenating.
+          // Sequence cursors remain stable even while live rows are prepended.
           const seen = new Set(prev.map((e) => e.seq));
           const add = page.filter((e) => !seen.has(e.seq));
           return add.length ? [...prev, ...add] : prev;
@@ -446,7 +474,7 @@ export default function App() {
         loadingMoreRef.current = false;
         setLoadingMore(false);
       });
-  }, [filter, events.length, agg.total, querying]);
+  }, [filter, events, agg.total, querying]);
 
   const facets = agg.facets;
   const hist = agg.histogram;
@@ -533,7 +561,7 @@ export default function App() {
   const displayIndexOf = (seq: number) => (seq < 0 ? -1 : events.findIndex((e) => e.seq === seq));
 
   // Raw JSON + lineage aren't in the page rows; fetch them lazily on expand.
-  const fetchDetail = (e: CloudTrailEvent) => {
+  const fetchDetail = useCallback((e: CloudTrailEvent) => {
     const id = ++detailReq.current; // a newer expand must win if an older fetch resolves late
     setSelectedRaw("");
     setSelectedRawErr(false);
@@ -547,19 +575,21 @@ export default function App() {
       .catch(() => {
         if (id === detailReq.current) setSelectedRawErr(true);
       });
-    // Assumed-role ancestry: only worth a query for AssumedRole events.
+    // The store checks whether the recorded credentials are temporary.
     setSelectedLineage(null);
-    if (e.userIdentity.type === "AssumedRole") {
+    setSelectedLineageError(false);
+    if (hasCredentialLineage(e)) {
       backend
         .queryLineage(e.seq)
         .then((l) => {
           if (id === detailReq.current) setSelectedLineage(l);
         })
         .catch(() => {
-          if (id === detailReq.current) setSelectedLineage(null);
+          if (id === detailReq.current) setSelectedLineageError(true);
         });
     }
-  };
+  }, []);
+  const retryDetail = useCallback(() => { if (selected) fetchDetail(selected); }, [selected, fetchDetail]);
   const openAt = (d: number) => {
     const e = rowAtDisplay(d);
     if (e) {
@@ -587,7 +617,7 @@ export default function App() {
   useEffect(() => {
     if (!connected) return;
     const onKey = (e: KeyboardEvent) => {
-      if (settingsOpen) return; // the settings modal owns its own keys (incl. Esc)
+      if (settingsOpen || lineageSeq != null || document.querySelector('[aria-modal="true"]')) return; // overlays own their keyboard interactions
       if (uiView !== "console") return; // vim-style shortcuts are console-only (don't hijack the Sigma editor)
       const el = e.target as HTMLElement;
       const typing = el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
@@ -644,7 +674,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, uiView]);
+  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, lineageSeq, uiView]);
 
   const toggleCapture = async () => {
     if(captureBusy)return;
@@ -693,6 +723,16 @@ export default function App() {
     try {if(events.length)await exportEvents(events)}
     catch(e){window.alert("Export cancelled: "+String(e))}
   };
+  const exportMatches = async () => {
+    if (exportAbort.current || searchBlocked.current || resultsFilter.current !== filter || !agg.snapshot) return;
+    const controller = new AbortController(); exportAbort.current = controller; setExporting(true);
+    setExportNotice(`Exporting all ${agg.total.toLocaleString()} matches from the search snapshot at ${fmtStamp(Date.parse(agg.snapshot.capturedAt),timeZone)}…`);
+    try {
+      const result = await backend.exportFiltered(filter,agg.snapshot,controller.signal);
+      setExportNotice(result.path ? `Exported ${result.count.toLocaleString()} matching events to ${result.path}` : "Export cancelled.");
+    } catch(error) { setExportNotice(controller.signal.aborted ? "Export cancelled; no incomplete file was saved." : `Export failed: ${String(error)}`); }
+    finally { exportAbort.current=null;setExporting(false); }
+  };
 
   const commands: Command[] = useMemo(
     () => [
@@ -719,7 +759,9 @@ export default function App() {
     <div className="app">
       <TitleBar
         connected={connected}
-        canExport={agg.total > 0}
+        canExport={uiView === "console" && events.length > 0}
+        canExportMatches={uiView === "console" && !exporting && !querying && !queryFailure && resultsFilter.current === filter && !!agg.snapshot}
+        onExportMatches={exportMatches}
         view={uiView}
         onView={setUiView}
         onOpenDataset={openDataset}
@@ -727,9 +769,14 @@ export default function App() {
         onHelp={(t) => setHelp({ open: true, tab: t })}
         onSettings={() => setSettingsOpen(true)}
       />
+      <ComparisonBar />
+      {exportNotice && <div className="search-notice" role="status"><span>{exportNotice}</span>
+        {exporting ? <button className="btn-ghost" onClick={()=>exportAbort.current?.abort()}>Cancel export</button>
+          : <button className="btn-ghost" onClick={()=>setExportNotice("")}>Dismiss</button>}
+      </div>}
       {!connected ? (
         <ConnectionScreen onConnect={connect} onRestore={restoreDataset} />
-      ) : uiView === "sigma" ? (
+      ) : uiView === "hunts" ? <HuntView filter={filter}/> : uiView === "analysis" ? <AnalysisView filter={filter}/> : uiView === "sigma" ? (
         <SigmaView
           columns={columns}
           visibleCols={visibleCols}
@@ -836,6 +883,8 @@ export default function App() {
             selectedRaw={selectedRaw}
             selectedRawError={selectedRawErr}
             selectedLineage={selectedLineage}
+            selectedLineageError={selectedLineageError}
+            onRetryDetail={retryDetail}
             onOpenLineage={setLineageSeq}
             loadingMore={loadingMore}
             atLoadCap={atLoadCap}

@@ -1,6 +1,8 @@
-import { useState } from "react";
-import type { CloudTrailEvent, FilterField, Lineage, QueryOp } from "../api/types";
-import { eventResult } from "../api/types";
+import {PinComparisonButton} from "./EvidenceComparison";
+import { InvestigationView } from "./InvestigationView";
+import { memo, useState } from "react";
+import type { CloudTrailEvent, EvidenceSnapshot, FilterField, Lineage, QueryOp } from "../api/types";
+import { eventResult, hasCredentialLineage } from "../api/types";
 import { EvidenceModal } from "./EvidenceModal";
 import { RawJsonModal } from "./RawJsonModal";
 import { FieldTree } from "./FieldTree";
@@ -8,42 +10,23 @@ import { LineageGraph } from "./LineageGraph";
 
 interface Props {
   event: CloudTrailEvent;
+  snapshot?:EvidenceSnapshot;
+  rawJSON: string;
+  fieldHeight: number;
+  lineageError?: boolean;
+  onRetry: () => void;
   lineage?: Lineage | null; // assumed-role ancestry (null = still loading, for AssumedRole events)
   onPivot: (field: FilterField, value: string, op: QueryOp) => void;
   onOpenLineage?: (seq: number) => void; // open the full lineage graph view
 }
 
-export function InlineDetail({ event: e, lineage, onPivot, onOpenLineage }: Props) {
+export const InlineDetail = memo(function InlineDetail({ event: e, snapshot, rawJSON, fieldHeight, lineage, lineageError, onRetry, onPivot, onOpenLineage }: Props) {
+  const [investigating, setInvestigating] = useState(false);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [rawOpen, setRawOpen] = useState(false);
-  const isRole = e.userIdentity.type === "AssumedRole";
+  const isRole = hasCredentialLineage(e) && (lineage?.applicable ?? true);
 
-  // The full, original event (all fields incl. nested requestParameters,
-  // sessionContext, tlsDetails, …) lives in rawJSON - render the whole thing.
-  let parsed: unknown = null;
-  try {
-    parsed = JSON.parse(e.rawJSON);
-  } catch {
-    /* fall back to raw text below */
-  }
-
-  // Non-role identities have no AssumeRole ancestry to trace - say so explicitly so the
-  // absent lineage panel reads as "N/A by design", not "missing/broken". The access-key
-  // prefix is itself a signal: AKIA… = long-term IAM user key; ASIA… = temp session.
-  const accessKeyId = (parsed as { userIdentity?: { accessKeyId?: string } } | null)?.userIdentity?.accessKeyId ?? "";
-  const idNote = isRole
-    ? ""
-    : e.userIdentity.type === "IAMUser"
-    ? accessKeyId.startsWith("ASIA")
-      ? "IAM user using temporary session credentials (ASIA…, e.g. GetSessionToken/MFA) - not an assumed role, so there's no lineage chain to trace."
-      : accessKeyId.startsWith("AKIA")
-      ? "Direct call from a long-term IAM user access key (AKIA…) - this identity is the origin, so there's no role-assumption ancestry."
-      : "IAM user - the origin identity; no role-assumption ancestry to trace."
-    : e.userIdentity.type === "Root"
-    ? "Root account - the origin identity; no role-assumption ancestry to trace."
-    : e.userIdentity.type === "AWSService"
-    ? "AWS service principal - not an assumed-role session; no lineage chain."
-    : `${e.userIdentity.type || "This identity"} - no assumed-role ancestry to trace.`;
+  const idNote = isRole ? "" : `${e.userIdentity.type || "This identity"} · inspect the identity fields and original source below.`;
 
   return (
     <div className="xd">
@@ -53,6 +36,8 @@ export function InlineDetail({ event: e, lineage, onPivot, onOpenLineage }: Prop
         <span className="xd-sub">{e.eventSource}</span>
         <span className={`xd-result ${e.errorCode ? "fail" : "ok"}`}>{eventResult(e)}</span>
         <span className="xd-time">{new Date(e.eventTime).toLocaleString()}</span>
+        <PinComparisonButton event={e} json={rawJSON} />
+        <button className="xd-raw-btn" onClick={() => setInvestigating(true)}>Investigate</button>
         <button className="xd-raw-btn" onClick={() => setEvidenceOpen(true)}>Sources & hashes</button>
         <button className="xd-raw-btn" onClick={() => setRawOpen(true)}>
           {"{ }"} Raw JSON
@@ -65,35 +50,21 @@ export function InlineDetail({ event: e, lineage, onPivot, onOpenLineage }: Prop
         </div>
       )}
 
-      {parsed ? (
-        isRole ? (
-          <div className="xd-cols">
-            <div className="xd-tree">
-              <FieldTree data={parsed} onPivot={onPivot} />
-            </div>
-            {lineage ? (
-              <LineageGraph lineage={lineage} current={e} onPivot={onPivot} onFullView={onOpenLineage ? () => onOpenLineage(e.seq) : undefined} />
-            ) : (
-              <div className="lg lg-loading">Tracing role lineage…</div>
-            )}
-          </div>
-        ) : (
-          <>
-            {idNote && (
-              <div className="xd-idnote">
-                <span className="xd-idnote-glyph">◈</span>
-                <span>{idNote}</span>
-              </div>
-            )}
-            <FieldTree data={parsed} onPivot={onPivot} />
-          </>
-        )
-      ) : (
-        <pre className="xd-raw">{e.rawJSON}</pre>
-      )}
+      {isRole ? (
+        <div className="xd-cols">
+          <div className="xd-tree"><FieldTree json={rawJSON} height={fieldHeight} onPivot={onPivot} /></div>
+          {lineage ? <LineageGraph lineage={lineage} current={e} onPivot={onPivot} onFullView={onOpenLineage ? () => onOpenLineage(e.seq) : undefined} />
+            : lineageError ? <div className="lg lg-loading" role="alert">Could not load credential lineage. <button className="btn-ghost" onClick={onRetry}>Retry lineage</button></div>
+            : <div className="lg lg-loading" role="status">Tracing credential lineage…</div>}
+        </div>
+      ) : <>
+        {idNote && <div className="xd-idnote"><span className="xd-idnote-glyph">◈</span><span>{idNote}</span></div>}
+        <FieldTree json={rawJSON} height={fieldHeight} onPivot={onPivot} />
+      </>}
 
-      {evidenceOpen && <EvidenceModal key={e.seq} seq={e.seq} onClose={()=>setEvidenceOpen(false)} />}
-      {rawOpen && <RawJsonModal title={`${e.eventName} · ${e.eventID}`} json={e.rawJSON} onClose={() => setRawOpen(false)} />}
+      {investigating && <InvestigationView event={e} initialSnapshot={snapshot} onClose={()=>setInvestigating(false)} />}
+      {evidenceOpen && <EvidenceModal key={e.seq} seq={e.seq} snapshot={snapshot} onClose={()=>setEvidenceOpen(false)} />}
+      {rawOpen && <RawJsonModal title={`${e.eventName} · ${e.eventID}`} json={rawJSON} onClose={() => setRawOpen(false)} />}
     </div>
   );
-}
+});

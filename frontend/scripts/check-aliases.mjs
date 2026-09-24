@@ -1,0 +1,38 @@
+import assert from 'node:assert/strict';
+import {fileURLToPath} from 'node:url';
+import {createServer} from 'vite';
+const server=await createServer({root:fileURLToPath(new URL('..',import.meta.url)),server:{middlewareMode:true},appType:'custom',optimizeDeps:{noDiscovery:true,include:[]}});
+try {
+ const {AliasStore,ALIAS_KEY,aliasKey,validateAlias,MAX_ALIASES}=await server.ssrLoadModule('/src/api/aliases.ts');
+ const data=new Map();let reads=0,failWrite=false,failRead=false;
+ const storage={getItem:key=>{reads++;if(failRead)throw Error('unavailable');return data.get(key)??null},setItem:(key,value)=>{if(failWrite)throw Error('quota');data.set(key,value)},removeItem:key=>{if(failWrite)throw Error('denied');data.delete(key)}};
+ const store=new AliasStore(()=>storage);
+ const initial=store.getSnapshot();for(let i=0;i<100;i++)assert.equal(store.getSnapshot(),initial);assert.equal(reads,1,'rendering reread local storage');
+ const arn='arn:aws:iam::012345678901:role/ProductionReader';
+ store.put({kind:'arn',value:arn,label:'Production reader'});
+ store.put({kind:'account',value:'012345678901',label:'Audit account'});
+ store.put({kind:'address',value:'AWS Internal',label:'Recorded internal source'});
+ assert.equal(store.getSnapshot().items.length,3);
+ assert.equal(store.getSnapshot().labels.get(aliasKey('arn',arn)),'Production reader');
+ for(const changed of [arn.toLowerCase(),arn.replace(':aws:',':aws-us-gov:'),arn+'/session'])assert.equal(store.getSnapshot().labels.get(aliasKey('arn',changed)),undefined);
+ assert.equal(store.getSnapshot().labels.get(aliasKey('address','aws internal')),undefined);
+ assert.equal(store.getSnapshot().labels.get(aliasKey('account','12345678901')),undefined);
+ const reloaded=new AliasStore(()=>storage);assert.equal(reloaded.getSnapshot().items[1].value,'012345678901');
+ let notifications=0;const unsubscribe=store.subscribe(()=>notifications++);
+ store.put({kind:'arn',value:arn,label:'Renamed reader'});assert.equal(notifications,1);assert.equal(store.getSnapshot().items.length,3);
+ const before=store.getSnapshot(),bytes=data.get(ALIAS_KEY);
+ failWrite=true;assert.throws(()=>store.put({kind:'arn',value:arn,label:'Unsaved'}),/not saved/);assert.equal(store.getSnapshot(),before);assert.equal(data.get(ALIAS_KEY),bytes);
+ assert.throws(()=>store.remove('arn',arn),/not saved/);assert.throws(()=>store.clear(),/could not be reset/);assert.equal(store.getSnapshot(),before);failWrite=false;
+ store.remove('arn',arn);assert.equal(store.getSnapshot().labels.get(aliasKey('arn',arn)),undefined);
+ unsubscribe();
+ for(const bad of [{kind:'other',value:arn,label:'x'},{kind:'account',value:'123',label:'x'},{kind:'account',value:123456789012,label:'x'},{kind:'arn',value:'role/Reader',label:'x'},{kind:'address',value:'test',label:'\n'},{kind:'address',value:'test',label:'x'.repeat(101)}])assert.throws(()=>validateAlias(bad));
+ store.put({kind:'arn',value:'arn:aws:s3:::example/path',label:'Bucket object'});
+ store.put({kind:'address',value:'__proto__',label:'A literal identifier'});assert.equal({}.label,undefined);
+ data.set(ALIAS_KEY,'invalid saved bytes');const invalid=new AliasStore(()=>storage);assert.ok(invalid.getSnapshot().error);assert.throws(()=>invalid.put({kind:'address',value:'x',label:'x'}));assert.equal(data.get(ALIAS_KEY),'invalid saved bytes');
+ invalid.clear();assert.equal(invalid.getSnapshot().error,'');assert.equal(invalid.getSnapshot().items.length,0);
+ const filled=Array.from({length:MAX_ALIASES},(_,i)=>({kind:'address',value:String(i),label:'Label '+i}));data.set(ALIAS_KEY,JSON.stringify({version:1,items:filled}));
+ const capped=new AliasStore(()=>storage);assert.throws(()=>capped.put({kind:'address',value:'extra',label:'extra'}),/500/);capped.put({kind:'address',value:'0',label:'Renamed at limit'});assert.equal(capped.getSnapshot().items.length,MAX_ALIASES);
+ data.set(ALIAS_KEY,JSON.stringify({version:1,items:[filled[0],filled[0]]}));capped.refresh();assert.ok(capped.getSnapshot().error);
+ failRead=true;const unavailable=new AliasStore(()=>storage);assert.match(unavailable.getSnapshot().error,/unavailable/);failRead=false;
+ console.log('Label checks passed: exact identifiers, partitions/case, leading zeros, persistence, cached reads, rename/remove, save failures, corrupt data, bounds and recovery.');
+} finally {await server.close()}

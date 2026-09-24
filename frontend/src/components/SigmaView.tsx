@@ -1,4 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { SigmaSuite } from "./SigmaSuite";
+import { LineageView } from "./LineageView";
+import { hasCredentialLineage } from "../api/types";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { backend, type SigmaOutcome } from "../api/backend";
 import type { ColumnDef } from "../api/columns";
 import type { TimeZonePref } from "../api/settings";
@@ -37,6 +40,10 @@ export function SigmaView(p: Props) {
   const [out, setOut] = useState<SigmaOutcome | null>(null);
   const [running, setRunning] = useState(false);
   const [showSql, setShowSql] = useState(false);
+  const [mode,setMode]=useState<"single"|"suite">("single");
+  const [error,setError]=useState("");
+  const [graphSeq,setGraphSeq]=useState<number|null>(null);
+  const active=useRef<AbortController|null>(null);
   const reqId = useRef(0);
   const ruleRef = useRef(rule);
   ruleRef.current = rule;
@@ -45,12 +52,21 @@ export function SigmaView(p: Props) {
   const [selected, setSelected] = useState<CloudTrailEvent | null>(null);
   const [cursorSeq, setCursorSeq] = useState(-1);
   const [selectedRaw, setSelectedRaw] = useState("");
+  const [selectedRawError, setSelectedRawError] = useState(false);
+  const [selectedLineageError, setSelectedLineageError] = useState(false);
+  const detailReq = useRef(0);
+  useEffect(()=>()=>{++detailReq.current;++reqId.current;active.current?.abort()},[]);
   const [selectedLineage, setSelectedLineage] = useState<Lineage | null>(null);
   const [userRules, setUserRules] = useState<SigmaRuleEntry[]>(() => loadUserRules());
 
   // Load a rule into the editor and clear the previous run (so the results/pill reset
   // to idle instead of showing stale matches for a different rule).
+  const cancel=()=>{++reqId.current;active.current?.abort();active.current=null;setRunning(false)};
   const loadRule = (yaml: string) => {
+    cancel();setError("");setGraphSeq(null);ruleRef.current=yaml;
+    ++detailReq.current;
+    ++reqId.current;
+    setRunning(false);
     setRule(yaml);
     setOut(null);
     setSelected(null);
@@ -60,32 +76,43 @@ export function SigmaView(p: Props) {
   const saveCurrent = () => {
     const m = ruleRef.current.match(/^title:\s*(.+)$/m); // default to THIS rule's title
     const name = window.prompt("Save this rule as", (m && m[1].trim()) || out?.title || "My rule");
-    if (name && name.trim()) setUserRules(saveUserRule(name.trim(), ruleRef.current));
+    if (name && name.trim()) {try{setUserRules(saveUserRule(name.trim(), ruleRef.current));setError("")}catch(e){setError(String(e))}}
   };
 
   // Explicit run - Run button or Ctrl/Cmd+Enter (no auto-run, so switching tabs
   // doesn't fire a query). Reads the latest rule via a ref.
   const run = useCallback(() => {
+    if(active.current)return;
+    const abort=new AbortController();active.current=abort;
+    ++detailReq.current;
     const id = ++reqId.current;
-    setRunning(true);
+    setRunning(true);setError("");setOut(null);setGraphSeq(null);
     setSelected(null);
     backend
-      .sigmaRun(ruleRef.current)
-      .then((r) => id === reqId.current && (setOut(r), setRunning(false)))
-      .catch(() => id === reqId.current && setRunning(false));
+      .sigmaRun(ruleRef.current,abort.signal)
+      .then((r) => {if(id===reqId.current)setOut(r)})
+      .catch((e) => {if(id===reqId.current&&!abort.signal.aborted)setError(String(e))})
+      .finally(()=>{if(id===reqId.current){active.current=null;setRunning(false)}});
   }, []);
 
   // Raw JSON + lineage aren't in the row; fetch lazily on expand (as the console does).
-  const fetchDetail = (e: CloudTrailEvent) => {
+  const fetchDetail = useCallback((e: CloudTrailEvent) => {
+    if(!out?.snapshot)return;
+    const id=++detailReq.current;
     setSelectedRaw("");
-    backend.getEventRaw(e.seq).then((raw) => setSelectedRaw(raw)).catch(() => setSelectedRaw(""));
+    setSelectedRawError(false);setSelectedLineageError(false);
+    backend.queryLineageRaw(e.seq,out.snapshot).then(raw=>{if(id===detailReq.current){setSelectedRaw(raw);setSelectedRawError(!raw)}})
+      .catch(()=>{if(id===detailReq.current)setSelectedRawError(true)});
     setSelectedLineage(null);
-    if (e.userIdentity.type === "AssumedRole") {
-      backend.queryLineage(e.seq).then(setSelectedLineage).catch(() => setSelectedLineage(null));
+    if (hasCredentialLineage(e)) {
+      backend.queryLineage(e.seq,out.snapshot).then(lineage=>{if(id===detailReq.current)setSelectedLineage(lineage)})
+        .catch(()=>{if(id===detailReq.current)setSelectedLineageError(true)});
     }
-  };
+  },[out?.snapshot]);
+  const retryDetail=useCallback(()=>{if(selected)fetchDetail(selected)},[selected,fetchDetail]);
   const onRowClick = (e: CloudTrailEvent) => {
     if (selected?.seq === e.seq) {
+      ++detailReq.current;
       setSelected(null);
       setSelectedRaw("");
       setSelectedLineage(null);
@@ -107,14 +134,16 @@ export function SigmaView(p: Props) {
   const events = out?.events ?? [];
 
   const pill: Record<typeof status, string> = {
-    idle: "…",
-    valid: `✓ Valid · ${(out?.matches ?? 0).toLocaleString()} match`,
+    idle: "Not run",
+    valid: `✓ Ran · ${(out?.matches ?? 0).toLocaleString()} matches`,
     unsupported: "⚠ Can’t run yet",
     error: "✗ Invalid",
   };
 
   return (
-    <div className="sigma">
+    <div className="sigma-workbench">
+      <nav className="sg-mode" aria-label="Sigma mode"><button className="btn-ghost" aria-pressed={mode==="single"} onClick={()=>setMode("single")}>Single rule</button><button className="btn-ghost" aria-pressed={mode==="suite"} onClick={()=>{cancel();setMode("suite")}}>Rule suite</button><span>Matches are leads to investigate; they do not establish malicious activity.</span></nav>
+      {mode==="suite"?<SigmaSuite saved={userRules} onOpen={(yaml,result)=>{loadRule(yaml);setOut(result);setMode("single")}}/>:<div className="sigma">
       {/* LEFT - matches */}
       <div className="sg-pane sg-left">
         <div className="sg-head">
@@ -131,6 +160,8 @@ export function SigmaView(p: Props) {
             {() => <ColumnsMenu visibleCols={p.visibleCols} onToggleColumn={p.onToggleColumn} onReorderColumns={p.onReorderColumns} />}
           </Popover>
         </div>
+        {out?.snapshot&&<div className="sg-snapshot">Snapshot through event {out.snapshot.maxSeq.toLocaleString()} · {out.snapshot.capturedAt}</div>}
+        {selected&&out?.explanations[selected.seq]&&<section className="sg-explanations" aria-label="Selection explanations"><strong>Why this event matched</strong><div>{out.explanations[selected.seq].map(reason=><span key={reason.name} className={reason.matched?"matched":"unmatched"}>{reason.matched?"✓":"−"} {reason.name}: {reason.matched?"matched":"did not match"}</span>)}</div><small>Selection results for this event. The rule condition combines these; count thresholds use the full snapshot.</small></section>}
         <div className="sg-body">
           {status === "idle" && (
             <div className="sg-empty">Press <b>Run</b> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) to test the rule.</div>
@@ -156,8 +187,12 @@ export function SigmaView(p: Props) {
                 onReorderColumns={p.onReorderColumns}
                 onNeedMore={() => {}}
                 selectedRaw={selectedRaw}
+                selectedRawError={selectedRawError}
                 selectedLineage={selectedLineage}
-                onOpenLineage={p.onOpenLineage}
+                selectedLineageError={selectedLineageError}
+                onRetryDetail={retryDetail}
+                onOpenLineage={setGraphSeq}
+                selectedSnapshot={out?.snapshot??undefined}
                 isSensitive={p.isSensitive}
                 timeZone={p.timeZone}
               />
@@ -183,7 +218,7 @@ export function SigmaView(p: Props) {
                     {userRules.map((r) => (
                       <div key={r.name} className="menu-item">
                         <button className="menu-item-main" onClick={() => { loadRule(r.yaml); close(); }}>{r.name}</button>
-                        <button className="menu-del" title="Delete" onClick={() => setUserRules(deleteUserRule(r.name))}>✕</button>
+                        <button className="menu-del" title="Delete" onClick={() => {try{setUserRules(deleteUserRule(r.name))}catch(e){setError(String(e))}}}>✕</button>
                       </div>
                     ))}
                     <div className="menu-divider" />
@@ -198,16 +233,18 @@ export function SigmaView(p: Props) {
               </>
             )}
           </Popover>
-          <span className="sg-fname">rule.yml{out?.title ? ` · ${out.title}` : ""}</span>
+          <span className="sg-fname" title={out?.title||"rule.yml"}>{out?.title||"rule.yml"}</span>
           <span className={`sg-pill ${status}`}>{pill[status]}</span>
+          {running&&<button className="btn-ghost" onClick={cancel}>Cancel rule</button>}
           <button className="sg-run" onClick={run} disabled={running} title="Run (Ctrl/Cmd+Enter)">
             {running ? "…" : "▶ Run"}
           </button>
         </div>
         <div className="sg-editor">
-          <CodeEditor value={rule} onChange={setRule} diagnostics={out?.diagnostics ?? []} onSubmit={run} />
+          <CodeEditor value={rule} onChange={(value)=>{if(value!==ruleRef.current)loadRule(value)}} diagnostics={out?.diagnostics ?? []} onSubmit={run} />
         </div>
         <div className="sg-foot">
+          {error&&<div className="sg-diag err" role="alert">{error}</div>}
           {errors.length === 0 && warnings.length === 0 && status === "valid" && <div className="sg-diag ok">Rule compiles cleanly.</div>}
           {errors.map((d, i) => (
             <div key={"e" + i} className="sg-diag err">✗ {d.line ? `line ${d.line}: ` : ""}{d.message}</div>
@@ -223,6 +260,8 @@ export function SigmaView(p: Props) {
           )}
         </div>
       </div>
+    </div>}
+    {graphSeq!=null&&out?.snapshot&&<LineageView seq={graphSeq} initialSnapshot={out.snapshot} onClose={()=>setGraphSeq(null)} onPivot={p.onPivot}/>}
     </div>
   );
 }

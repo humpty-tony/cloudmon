@@ -1,3 +1,4 @@
+import {AliasBadge} from "./AliasBadge";
 import type { CloudTrailEvent, FilterField, Lineage, LineageNode, QueryOp } from "../api/types";
 import { identityGlyph } from "../api/types";
 
@@ -67,7 +68,7 @@ function Node(props: {
     >
       <span className={`lg-glyph ${GLYPH_CLS[props.type] || "lg-other"}`}>{identityGlyph(props.type)}</span>
       <span className="lg-body">
-        <span className="lg-primary">{v.primary}</span>
+        <span className="lg-primary"><span className="lg-primary-text">{v.primary}</span><AliasBadge kind="arn" value={props.arn||props.roleArn}/></span>
         {v.secondary && <span className="lg-secondary">{v.secondary}</span>}
       </span>
       {props.current && <span className="lg-here">this event</span>}
@@ -78,7 +79,7 @@ function Node(props: {
 function Edge({ label }: { label: string }) {
   return (
     <div className={`lg-edge ${label ? "" : "lg-edge--dashed"}`}>
-      <span className="lg-edge-label">{label || "AssumeRole - not in dataset"}</span>
+      <span className="lg-edge-label">{label || "Credential link not established"}</span>
     </div>
   );
 }
@@ -93,9 +94,9 @@ export function LineageGraph({ lineage, current, onPivot, onFullView }: Props) {
   return (
     <div className="lg">
       <div className="lg-head">
-        <span className="lg-title">Role lineage</span>
+        <span className="lg-title">Credential lineage</span>
         <span className={`lg-tag ${lineage.complete ? "ok" : "warn"}`}>
-          {lineage.complete ? "origin resolved" : "chain incomplete"}
+          {lineage.complete ? "principal observed" : (lineage.status === "ambiguous" ? "ambiguous" : "chain incomplete")}
         </span>
         {onFullView && (
           <button className="lg-full" onClick={onFullView} title="Open the full lineage graph">
@@ -105,17 +106,18 @@ export function LineageGraph({ lineage, current, onPivot, onFullView }: Props) {
       </div>
       {lineage.sourceIdentity && (
         <div className="lg-source">
-          sourceIdentity <b>{lineage.sourceIdentity}</b>
+          sourceIdentity <b>{lineage.sourceIdentity}</b><span> · recorded attribute</span>
         </div>
       )}
+      {lineage.reason && <div className="lg-reason">{lineage.reason}</div>}
       <div className="lg-chain">
         {!lineage.complete && (
           <>
             <div className="lg-node lg-node--unknown">
               <span className="lg-glyph lg-other">?</span>
               <span className="lg-body">
-                <span className="lg-primary">unknown caller</span>
-                <span className="lg-secondary">not in dataset - cross-account, out of range, or a service assumption</span>
+                <span className="lg-primary">earlier caller unresolved</span>
+                <span className="lg-secondary">The available evidence does not establish this link.</span>
               </span>
             </div>
             <Edge label="" />
@@ -136,9 +138,10 @@ export function LineageGraph({ lineage, current, onPivot, onFullView }: Props) {
               }}
             />
             <Edge label={edgeLabel(n)} />
+            {n.evidence && <div className="lg-evidence">{n.evidence}</div>}
           </div>
         ))}
-        <Node type="AssumedRole" userName={ui.userName} roleArn={ui.roleArn || ""} sessionName={ui.sessionName || ""} arn={ui.arn} current />
+        <Node type={ui.type} userName={ui.userName} roleArn={ui.roleArn || ""} sessionName={ui.sessionName || ""} arn={ui.arn} current />
       </div>
     </div>
   );

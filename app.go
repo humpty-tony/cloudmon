@@ -16,6 +16,7 @@ import (
 	"cloudmon/internal/config"
 	"cloudmon/internal/ingest"
 	"cloudmon/internal/model"
+	"cloudmon/internal/queryjob"
 	"cloudmon/internal/store"
 
 	"github.com/wailsapp/wails/v2/pkg/menu"
@@ -35,6 +36,7 @@ type App struct {
 	dbErr    error        // set if the evidence database could not be opened
 	dataLock *os.File     // OS lock retained for this process lifetime
 	dbOnce   sync.Once    // guards one-time async initialization of the engine
+	queries  queryjob.Registry
 
 	logMu sync.Mutex // guards the on-disk troubleshooting log
 	logW  *os.File   // cloudmon.log next to the exe (a blank WebView2 leaves no console)
@@ -193,6 +195,64 @@ func (a *App) QueryAggregates(f store.Filter) (store.Aggregates, error) {
 	return a.db.Aggregates(f)
 }
 
+func (a *App) QuerySearch(f store.Filter, requestID string, limit int) (store.SearchResult, error) {
+	if a.ensureDB() == nil {
+		return store.SearchResult{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.SearchResult{}, err
+	}
+	defer done()
+	return a.db.Search(ctx, f, limit)
+}
+
+func (a *App) QueryAggregatesRequest(f store.Filter, requestID string) (store.Aggregates, error) {
+	if a.ensureDB() == nil {
+		return store.Aggregates{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.Aggregates{}, err
+	}
+	defer done()
+	return a.db.AggregatesContext(ctx, f)
+}
+
+func (a *App) CancelQuery(requestID string) { a.queries.Cancel(requestID) }
+
+func (a *App) QuerySnapshotPage(f store.Filter, snapshot store.Snapshot, before int64, limit int) ([]store.Row, error) {
+	if a.ensureDB() == nil {
+		return nil, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.PageSnapshot(a.ctx, f, snapshot, before, limit)
+}
+
+type FilteredExport struct {
+	Path  string `json:"path"`
+	Count int    `json:"count"`
+}
+
+func (a *App) ExportFiltered(f store.Filter, snapshot store.Snapshot, requestID string) (FilteredExport, error) {
+	if a.ensureDB() == nil {
+		return FilteredExport{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return FilteredExport{}, err
+	}
+	defer done()
+	path, err := rt.SaveFileDialog(a.ctx, rt.SaveDialogOptions{Title: "Export all matching events", DefaultFilename: "cloudtrail-matches.json", Filters: []rt.FileFilter{{DisplayName: "JSON (*.json)", Pattern: "*.json"}}})
+	if err != nil || path == "" {
+		return FilteredExport{}, err
+	}
+	count, err := a.db.ExportFile(ctx, f, snapshot, path)
+	if err != nil {
+		return FilteredExport{}, fmt.Errorf("export was not saved: %w", err)
+	}
+	return FilteredExport{Path: path, Count: count}, nil
+}
+
 func (a *App) GetEventRaw(seq int64) (string, error) {
 	if a.ensureDB() == nil {
 		return "", fmt.Errorf("query engine unavailable: %v", a.dbErr)
@@ -223,16 +283,22 @@ func (a *App) QueryLineageGraph(seq int64) (store.LineageTree, error) {
 	return a.db.LineageGraph(seq)
 }
 
-func (a *App) QueryLineageChildren(accessKeyID string) (store.LineageTree, error) {
+func (a *App) QueryLineageChildren(accessKeyID string, snapshot *store.Snapshot) (store.LineageTree, error) {
 	if a.ensureDB() == nil {
 		return store.LineageTree{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	if snapshot != nil {
+		return a.db.LineageChildren(accessKeyID, *snapshot)
 	}
 	return a.db.LineageChildren(accessKeyID)
 }
 
-func (a *App) QueryLineageEvents(accessKeyID string) (store.LineageTree, error) {
+func (a *App) QueryLineageEvents(accessKeyID string, snapshot *store.Snapshot) (store.LineageTree, error) {
 	if a.ensureDB() == nil {
 		return store.LineageTree{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	if snapshot != nil {
+		return a.db.LineageEvents(accessKeyID, *snapshot)
 	}
 	return a.db.LineageEvents(accessKeyID)
 }
@@ -244,6 +310,36 @@ func (a *App) SigmaRun(ruleYAML string) (store.SigmaResult, error) {
 		return store.SigmaResult{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
 	}
 	return a.db.SigmaRun(ruleYAML, 500)
+}
+
+// Sigma requests share the same cancellable registry as search and analysis.
+func (a *App) SigmaRunRequest(ruleYAML, requestID string) (store.SigmaResult, error) {
+	if a.ensureDB() == nil {
+		return store.SigmaResult{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.SigmaResult{}, err
+	}
+	defer done()
+	return a.db.SigmaRunContext(ctx, ruleYAML, 500)
+}
+func (a *App) SigmaSuite(rules []store.SigmaRuleInput, requestID string) (store.SigmaSuiteResult, error) {
+	if a.ensureDB() == nil {
+		return store.SigmaSuiteResult{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.SigmaSuiteResult{}, err
+	}
+	defer done()
+	return a.db.SigmaSuite(ctx, rules)
+}
+func (a *App) QueryLineageSnapshot(seq int64, snapshot store.Snapshot) (store.Lineage, error) {
+	if a.ensureDB() == nil {
+		return store.Lineage{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.Lineage(seq, snapshot)
 }
 
 // RequiredPermissions lists the IAM actions a connection mode needs.
@@ -317,11 +413,11 @@ func (a *App) SelectDumpFile() (string, error) {
 }
 
 // ExportEventsJSON opens a native save dialog and writes the supplied JSON
-// (the frontend serializes the currently-filtered events). Returns the path
+// for the loaded UI rows. ExportFiltered handles the complete search. Returns the path
 // written, or "" if the user cancelled.
 func (a *App) ExportEventsJSON(data string) (string, error) {
 	path, err := rt.SaveFileDialog(a.ctx, rt.SaveDialogOptions{
-		Title:           "Export current selection",
+		Title:           "Export loaded events",
 		DefaultFilename: "cloudtrail-selection.json",
 		Filters: []rt.FileFilter{
 			{DisplayName: "JSON (*.json)", Pattern: "*.json"},
@@ -538,4 +634,67 @@ func (a *App) ApplyCaptureFilter(pattern string) {
 	a.cfg.CapturePattern = pattern
 	a.mu.Unlock()
 	a.Log("info", "capture filter stored (applies on next start)")
+}
+
+func (a *App) QueryLineageRaw(seq int64, snapshot store.Snapshot) (string, error) {
+	if a.ensureDB() == nil {
+		return "", fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.LineageRaw(seq, snapshot)
+}
+
+// Investigate reads surrounding events with explicit, observed relation evidence.
+func (a *App) Investigate(options store.InvestigationOptions, requestID string) (store.Investigation, error) {
+	if a.ensureDB() == nil {
+		return store.Investigation{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.Investigation{}, err
+	}
+	defer done()
+	return a.db.Investigate(ctx, options)
+}
+
+func (a *App) Analyze(options store.AnalysisOptions, requestID string) (store.ActivityAnalysis, error) {
+	if a.ensureDB() == nil {
+		return store.ActivityAnalysis{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.ActivityAnalysis{}, err
+	}
+	defer done()
+	return a.db.Analyze(ctx, options)
+}
+
+func (a *App) Hunt(options store.HuntOptions, requestID string) (store.HuntResult, error) {
+	if a.ensureDB() == nil {
+		return store.HuntResult{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.HuntResult{}, err
+	}
+	defer done()
+	return a.db.Hunt(ctx, options)
+}
+
+func (a *App) QueryLineageGraphSnapshot(seq int64, snapshot store.Snapshot) (store.LineageTree, error) {
+	if a.ensureDB() == nil {
+		return store.LineageTree{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.LineageGraph(seq, snapshot)
+}
+func (a *App) GetEventEvidenceSnapshot(seq int64, offset int, snapshot store.Snapshot) (store.EvidencePage, error) {
+	if a.ensureDB() == nil {
+		return store.EvidencePage{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.EvidenceSnapshot(seq, offset, snapshot)
+}
+func (a *App) GetObservationSnapshot(id int64, snapshot store.Snapshot) (string, error) {
+	if a.ensureDB() == nil {
+		return "", fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.ObservationSnapshot(id, snapshot)
 }

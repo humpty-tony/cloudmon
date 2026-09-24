@@ -73,6 +73,14 @@ jobs:
       - name: Search behavior checks
         working-directory: frontend
         run: npm run check:search
+      - name: Inspector behavior checks
+        working-directory: frontend
+        run: npm run check:inspector
+      - name: Local label behavior checks
+        if: runner.os == 'Linux'
+        working-directory: frontend
+        run: npm run check:labels
+
       - name: Backend checks with real DuckDB
         # Native static links are large; serialize package builds on hosted runners.
         run: go test -p 1 -tags "${{ matrix.tags }}" ./...

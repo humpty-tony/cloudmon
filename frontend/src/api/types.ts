@@ -145,7 +145,20 @@ export interface QueryFilter {
 }
 
 /** Raw aggregate shape returned by the Go engine (App.QueryAggregates). */
+export interface EvidenceSnapshot { generation: string; maxSeq: number; capturedAt: string }
+export type AnalysisDimension = "identityArn" | "roleArn" | "accountId" | "recipientAccountId" | "eventSource" | "eventName" | "sourceIPAddress" | "awsRegion";
+export interface HuntIndicator { kind: "ip" | "cidr" | "key" | "event" | "arn"; value: string }
+export interface HuntOptions { mode: "indicators" | "sequence"; filter: QueryFilter; indicators: HuntIndicator[]; first: QueryExpr | null; second: QueryExpr | null; group: "principal" | "credential"; minutes: number; snapshot: EvidenceSnapshot | null }
+export interface HuntMatch { event: EventRow; indicators: number[] }
+export interface SequencePair { first: EventRow; second: EventRow; deltaMs: number; tiedFirst: number }
+export interface HuntResult { snapshot: EvidenceSnapshot; scanned: number; total: number; limit: number; invalidTimes: number; missingPrincipal: number; indicators: (HuntIndicator & {matches:number})[]; matches: HuntMatch[]; pairs: SequencePair[]; notes: string[] }
+export interface AnalysisEntity { dimension: AnalysisDimension; value: string }
+export interface AnalysisOptions { filter: QueryFilter; dimension: AnalysisDimension; compare: boolean; windowHours: number; entity: AnalysisEntity | null; snapshot: EvidenceSnapshot | null }
+export interface ActivityStats { events: number; errors: number; writes: number; unknownReadOnly: number; credentialIDs: number; invalidTimes: number; firstMs: number | null; lastMs: number | null }
+export interface ActivityGroup { value: string; current: number; previous: number; errors: number; writes: number; totalGroups: number }
+export interface ActivityAnalysis { snapshot: EvidenceSnapshot; scope: ActivityStats; current: ActivityStats; previous: ActivityStats; groups: ActivityGroup[]; totalGroups: number; limit: number; fromMs: number; toMs: number; previousFromMs: number; hasWindow: boolean; breakdowns: Record<string, ActivityGroup[]>; events: EventRow[]; notes: string[] }
 export interface EngineAggregates {
+  snapshot: EvidenceSnapshot;
   total: number;
   stats: { errors: number; principals: number; sources: number; regions: number; minMs: number; maxMs: number };
   facets: Record<string, { value: string; count: number }[]>;
@@ -155,7 +168,7 @@ export interface EngineAggregates {
   histTo: number;
 }
 
-// ---- Assumed-role lineage (mirror internal/store Lineage). ----
+// ---- Credential lineage (mirror internal/store Lineage). ----
 
 export interface LineageNode {
   identityType: string;
@@ -169,11 +182,15 @@ export interface LineageNode {
   viaEvent: string;
   viaTime: string;
   viaSourceIP: string;
+  evidence?: string;
+  evidenceSeqs?: number[];
 }
 export interface Lineage {
   applicable: boolean; // false unless the event is an AssumedRole
-  sourceIdentity: string; // immutable origin if sts:SourceIdentity is set
-  complete: boolean; // reached a real principal (not an unresolved role)
+  sourceIdentity: string; // recorded session attribute
+  complete: boolean; // reached a recorded non-session principal
+  status?: string;
+  reason?: string;
   nodes: LineageNode[]; // origin-first → immediate parent
 }
 
@@ -191,6 +208,7 @@ export interface GraphNode {
   accountId: string;
   accessKeyId: string;
   invokedBy: string; // for AWSService: the calling service
+  identityNote?: string;
   originKind?: string; // sso | service-linked | service - drives a badge
   events: number; // activity count for THIS session key
   childCount: number; // # AssumeRole calls this session made (expandable if > shown)
@@ -212,9 +230,12 @@ export interface GraphEdge {
   viaEvent: string;
   viaTime: string;
   viaIP: string;
+  evidence?: string;
+  evidenceSeqs?: number[];
   crossAccount?: boolean; // caller and role live in different accounts
 }
 export interface LineageTree {
+  snapshot?: EvidenceSnapshot;
   applicable: boolean;
   currentId: string;
   rootId: string;
@@ -240,6 +261,8 @@ export interface SigmaResultRaw {
   matches: number; // dataset-wide match count
   scanned: number; // total events evaluated
   rows: EventRow[];
+  snapshot: EvidenceSnapshot | null;
+  explanations: Record<string, {name:string; matched:boolean}[]>;
 }
 
 /** Map an EventRow (flat) back to the CloudTrailEvent shape the UI components use.
@@ -414,3 +437,23 @@ export interface SourceEvidence {
   format: string; lossy: boolean; observedAt: string; displayed: boolean;
 }
 export interface EvidencePage { total: number; variants: number; observations: SourceEvidence[] }
+
+export function hasCredentialLineage(event: CloudTrailEvent): boolean {
+  return ["AssumedRole", "FederatedUser", "IAMUser", "Root"].includes(event.userIdentity.type);
+}
+
+export interface ResourceReference { arn: string; kind: string; source: string }
+export interface CorrelationReason { kind: string; label: string; value?: string }
+export interface InvestigationOptions { seq: number; eventID: string; minutes: number; relation: string; snapshot: EvidenceSnapshot | null }
+export interface InvestigationResult {
+  snapshot: EvidenceSnapshot;
+  anchor: EventRow;
+  resources: ResourceReference[];
+  resourcesTruncated: boolean;
+  events: {event: EventRow; reasons: CorrelationReason[]; deltaMs: number}[];
+  total: number;
+  limit: number;
+  fromMs: number;
+  toMs: number;
+  notes: string[];
+}
