@@ -55,7 +55,7 @@ def check_symbols(output):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("binary", help="Linux executable to inspect before packaging")
+    parser.add_argument("binary", help="Linux executable extracted from the release archive")
     args = parser.parse_args()
     try:
         output = subprocess.check_output(

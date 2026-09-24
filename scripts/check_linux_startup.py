@@ -46,7 +46,8 @@ def check(executable, output):
                     content = app_log.read_text(errors="replace") if app_log.exists() else ""
                     if "[error]" in content:
                         raise RuntimeError("Application logged an error during native startup:\n" + content)
-                    if windows.returncode == 0 and "crash logging installed" in content and database.is_file():
+                    if (windows.returncode == 0 and "crash logging installed" in content
+                            and "[info] database initialized" in content and database.is_file()):
                         window = windows.stdout.splitlines()[0]
                         break
                     time.sleep(0.25)
