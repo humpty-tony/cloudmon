@@ -60,14 +60,14 @@ jobs:
           gzip -dc "internal/duckdbbin/bin/${{ matrix.engine }}.gz" > "$RUNNER_TEMP/${{ matrix.engine }}"
           chmod +x "$RUNNER_TEMP/${{ matrix.engine }}"
           echo "DUCKDB_BIN=$RUNNER_TEMP/${{ matrix.engine }}" >> "$GITHUB_ENV"
-      - name: Backend checks with real DuckDB
-        run: go test -tags "${{ matrix.tags }}" ./...
       - name: Install frontend
         working-directory: frontend
         run: npm ci
       - name: Frontend production build
         working-directory: frontend
         run: npm run build
+      - name: Backend checks with real DuckDB
+        run: go test -tags "${{ matrix.tags }}" ./...
       - name: Capture setup browser check
         if: runner.os == 'Linux'
         working-directory: frontend

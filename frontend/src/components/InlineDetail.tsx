@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { CloudTrailEvent, FilterField, Lineage, QueryOp } from "../api/types";
 import { eventResult } from "../api/types";
+import { EvidenceModal } from "./EvidenceModal";
 import { RawJsonModal } from "./RawJsonModal";
 import { FieldTree } from "./FieldTree";
 import { LineageGraph } from "./LineageGraph";
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function InlineDetail({ event: e, lineage, onPivot, onOpenLineage }: Props) {
+  const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [rawOpen, setRawOpen] = useState(false);
   const isRole = e.userIdentity.type === "AssumedRole";
 
@@ -51,6 +53,7 @@ export function InlineDetail({ event: e, lineage, onPivot, onOpenLineage }: Prop
         <span className="xd-sub">{e.eventSource}</span>
         <span className={`xd-result ${e.errorCode ? "fail" : "ok"}`}>{eventResult(e)}</span>
         <span className="xd-time">{new Date(e.eventTime).toLocaleString()}</span>
+        <button className="xd-raw-btn" onClick={() => setEvidenceOpen(true)}>Sources & hashes</button>
         <button className="xd-raw-btn" onClick={() => setRawOpen(true)}>
           {"{ }"} Raw JSON
         </button>
@@ -89,6 +92,7 @@ export function InlineDetail({ event: e, lineage, onPivot, onOpenLineage }: Prop
         <pre className="xd-raw">{e.rawJSON}</pre>
       )}
 
+      {evidenceOpen && <EvidenceModal key={e.seq} seq={e.seq} onClose={()=>setEvidenceOpen(false)} />}
       {rawOpen && <RawJsonModal title={`${e.eventName} · ${e.eventID}`} json={e.rawJSON} onClose={() => setRawOpen(false)} />}
     </div>
   );

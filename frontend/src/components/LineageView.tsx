@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { stratify, tree, type HierarchyNode } from "d3-hierarchy";
 import type { FilterField, GraphEdge, GraphNode, LineageTree, QueryOp } from "../api/types";
-import { identityGlyph, prettyJSON } from "../api/types";
+import { identityGlyph } from "../api/types";
 import { backend } from "../api/backend";
 import { logError, logInfo } from "../api/log";
 import { RawJsonModal } from "./RawJsonModal";
@@ -177,7 +177,7 @@ export function LineageView({ seq, onClose, onPivot }: Props) {
 
   const openRaw = useCallback(async (viaSeq: number, title: string) => {
     if (!viaSeq) return;
-    setRaw({ title, json: prettyJSON(await backend.getEventRaw(viaSeq)) });
+    setRaw({ title, json: await backend.getEventRaw(viaSeq) });
   }, []);
 
   const incoming = useMemo(() => {

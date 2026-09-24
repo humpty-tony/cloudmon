@@ -1205,3 +1205,41 @@ body { font-feature-settings: "liga", "calt"; }
 :root[data-density="compact"] { --row-h: 26px; }
 :root[data-density="compact"] .cell { padding-top: 0; padding-bottom: 0; }
 :root[data-density="compact"] .c-time-ms { display: none; }
+
+/* Saved evidence and explicitly retained capture resources. */
+.recovery-card { width: 100%; max-width: 980px; margin-bottom: 22px; padding: 20px; background: var(--bg-1); border: 1px solid var(--acc); border-radius: var(--radius); font-family: var(--sans); color: var(--tx-2); }
+.recovery-heading { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.recovery-heading h2, .evidence-modal h2 { margin: 0; font-size: 18px; color: var(--tx-1); font-weight: 600; }
+.recovery-heading > span { font-size: 11px; color: var(--tx-3); }
+.recovery-counts { margin: 12px 0; font-size: 14px; }
+.recovery-counts strong { color: var(--acc-text); font-size: 20px; }
+.recovery-card p, .capture-status p { font-size: 12px; line-height: 1.6; margin: 8px 0; }
+.recovery-capture { border-top: 1px solid var(--line-struct); margin-top: 14px; padding-top: 12px; }
+.recovery-capture h3 { font-size: 13px; color: var(--tx-1); margin: 0 0 8px; }
+.recovery-identity { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+.recovery-resources { margin: 8px 0; font-size: 12px; }
+.recovery-resources summary { cursor: pointer; color: var(--acc-text); }
+.recovery-resources div { margin-top: 6px; overflow-wrap: anywhere; }
+.recovery-warning { color: var(--sev-warn); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.recovery-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.capture-status { display: flex; align-items: flex-start; gap: 16px; padding: 8px 18px; background: var(--bg-1); border-bottom: 1px solid var(--line-struct); font-family: var(--sans); flex-shrink: 0; color: var(--tx-2); }
+.capture-status > details { flex: 1; min-width: 0; }
+.capture-status > details > summary { cursor: pointer; font-size: 12px; line-height: 28px; }
+.capture-status > details > summary span { color: var(--tx-3); margin-left: 12px; }
+.capture-status .btn-ghost { flex-shrink: 0; }
+.evidence-modal { font-family: var(--sans); }
+.evidence-body { padding: 16px; overflow: auto; color: var(--tx-2); font-size: 12px; line-height: 1.6; }
+.evidence-body > p:first-child { margin-top: 0; }
+.evidence-summary { font-weight: 600; color: var(--tx-1); }
+.evidence-list { display: grid; gap: 10px; margin-top: 14px; }
+.evidence-item { background: var(--bg-0); border: 1px solid var(--line-struct); border-radius: var(--radius); padding: 12px; min-width: 0; }
+.evidence-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.evidence-item-head b { color: var(--tx-1); }
+.evidence-item-head > button { margin-left: auto; }
+.evidence-source { overflow-wrap: anywhere; margin: 6px 0; }
+.evidence-hash { display: block; overflow-wrap: anywhere; font-size: 11px; }
+.evidence-item time { font-size: 11px; color: var(--tx-3); }
+.evidence-original { border-top: 1px solid var(--line-struct); margin-top: 16px; }
+.evidence-original h3 { color: var(--tx-1); font-size: 13px; }
+.evidence-original pre { max-height: 260px; overflow: auto; background: var(--bg-0); padding: 12px; color: var(--tx-1); user-select: text; }
+.evidence-footnote { color: var(--tx-3); margin: 14px 0 0; }

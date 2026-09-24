@@ -80,6 +80,7 @@ export interface TrailStatus {
 /** Resources StartCapture provisioned (for display + teardown). */
 export interface CaptureInfra {
   queueUrl: string;
+  queueName?: string;
   queueArn: string;
   ruleName: string;
   ruleArn: string;
@@ -239,15 +240,6 @@ export interface SigmaResultRaw {
   rows: EventRow[];
 }
 
-/** Re-indent the compact JSON the engine returns, for the detail pane / raw modal. */
-export function prettyJSON(s: string): string {
-  try {
-    return JSON.stringify(JSON.parse(s), null, 2);
-  } catch {
-    return s;
-  }
-}
-
 /** Map an EventRow (flat) back to the CloudTrailEvent shape the UI components use.
  *  rawJSON is empty here - it's fetched lazily on row expand (see App.getEventRaw). */
 export function rowToEvent(r: EventRow): CloudTrailEvent {
@@ -401,3 +393,21 @@ export function truncateArn(arn: string, keepTail = 28): string {
   if (arn.length <= keepTail + 6) return arn;
   return "…" + arn.slice(-keepTail);
 }
+
+export interface SavedCapture {
+  version: number;
+  phase: "provisioning" | "ready" | "cleanup";
+  config: ConnectionConfig;
+  infra: CaptureInfra;
+}
+export interface RecoveryState {
+  evidence: { events: number; observations: number; variantEvents: number; lossy: number };
+  capture: SavedCapture | null;
+  captureError: string;
+  active: boolean;
+}
+export interface SourceEvidence {
+  id: number; sha256: string; source: string; ordinal: number;
+  format: string; lossy: boolean; observedAt: string; displayed: boolean;
+}
+export interface EvidencePage { total: number; variants: number; observations: SourceEvidence[] }

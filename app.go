@@ -32,9 +32,10 @@ type App struct {
 	events []model.CloudTrailEvent
 	cfg    config.ConnectionConfig
 
-	db     *store.Store // DuckDB-backed engine for large dumps
-	dbErr  error        // set if the embedded duckdb could not be extracted
-	dbOnce sync.Once    // guards one-time async extraction of the engine (see ensureDB)
+	db       *store.Store // DuckDB-backed engine for large dumps
+	dbErr    error        // set if the embedded duckdb could not be extracted
+	dataLock *os.File     // OS lock retained for this process lifetime
+	dbOnce   sync.Once    // guards one-time async extraction of the engine (see ensureDB)
 
 	logMu sync.Mutex // guards the on-disk troubleshooting log
 	logW  *os.File   // cloudmon.log next to the exe (a blank WebView2 leaves no console)
@@ -86,11 +87,18 @@ func (a *App) ensureDB() *store.Store {
 			a.dbErr = err
 			return
 		}
-		db := store.New(bin, filepath.Join(dir, "events.duckdb"))
-		if err = db.Open(); err != nil {
+		lock, err := store.LockSession(filepath.Join(dir, "session.lock"))
+		if err != nil {
 			a.dbErr = err
 			return
 		}
+		db := store.New(bin, filepath.Join(dir, "events.duckdb"))
+		if err = db.Open(); err != nil {
+			lock.Close()
+			a.dbErr = err
+			return
+		}
+		a.dataLock = lock
 		a.db = db
 	})
 	return a.db

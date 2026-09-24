@@ -6,6 +6,9 @@
 
 import type {
   AwsIdentity,
+  RecoveryState,
+  SavedCapture,
+  EvidencePage,
   AwsProfile,
   CaptureInfra,
   CloudTrailEvent,
@@ -64,6 +67,10 @@ export interface Backend {
   checkQueue(profile: string, queueUrl: string): Promise<void>; // existing-sqs: reachable + right region + permitted?
   runLoginCommand(command: string): Promise<void>; // run the SSO-login the credential helper suggests
   startCapture(): Promise<CaptureInfra>; // provision rule+queue, start polling; returns the infra
+  resumeCapture(): Promise<CaptureInfra>;
+  getRecoveryState(): Promise<RecoveryState>;
+  getEventEvidence(seq: number, offset: number): Promise<EvidencePage>;
+  getObservation(id: number): Promise<string>;
   stopCapture(): Promise<void>; // stop polling, keep infra
   teardownCapture(): Promise<void>; // remove rule + target + queue
   applyCaptureFilter(pattern: string): Promise<void>;
@@ -181,6 +188,10 @@ class WailsBackend implements Backend {
   startCapture() {
     return this.app.StartCapture() as Promise<CaptureInfra>;
   }
+  resumeCapture() { return this.app.ResumeCapture() as Promise<CaptureInfra>; }
+  getRecoveryState() { return this.app.GetRecoveryState() as Promise<RecoveryState>; }
+  getEventEvidence(seq: number, offset: number) { return this.app.GetEventEvidence(seq, offset) as Promise<EvidencePage>; }
+  getObservation(id: number) { return this.app.GetObservation(id) as Promise<string>; }
   stopCapture() {
     return this.app.StopCapture() as Promise<void>;
   }
@@ -209,7 +220,7 @@ class WailsBackend implements Backend {
     return this.app.IngestText(text) as Promise<number>;
   }
   async ingestNetworkBacklog() {
-    return 0; // real streaming ingests server-side (later); no import
+    return (await this.getRecoveryState()).evidence.events;
   }
   async queryPage(filter: QueryFilter, offset: number, limit: number) {
     const rows = (await this.app.QueryPage(filter, offset, limit)) as EventRow[];
@@ -298,6 +309,9 @@ function applyFilter(events: CloudTrailEvent[], f: QueryFilter): CloudTrailEvent
 class MockBackend implements Backend {
   readonly live = false;
   private feed = new MockFeed();
+  private capture: SavedCapture | null = null;
+  private connection: ConnectionConfig | null = null;
+  private active = false;
   private data: CloudTrailEvent[] = [];
   private mode: ConnectionMode | "" = ""; // tracked from setConnection so startCapture mirrors the real owned flag
 
@@ -306,6 +320,7 @@ class MockBackend implements Backend {
   }
   async setConnection(cfg: ConnectionConfig) {
     this.mode = cfg.mode;
+    this.connection = cfg;
   }
   async listProfiles(): Promise<AwsProfile[]> {
     return [
@@ -329,24 +344,35 @@ class MockBackend implements Backend {
   async checkQueue() {}
   async runLoginCommand() {}
   async startCapture(): Promise<CaptureInfra> {
-    this.feed.start();
-    return {
-      queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/cloudmon-capture-us-east-1",
-      queueArn: "arn:aws:sqs:us-east-1:123456789012:cloudmon-capture-us-east-1",
-      ruleName: "cloudmon-cloudtrail",
-      ruleArn: "arn:aws:events:us-east-1:123456789012:rule/cloudmon-cloudtrail",
-      region: "us-east-1",
-      account: "123456789012",
-      allManagement: true,
-      owned: this.mode !== "existing-sqs",
+    const infra: CaptureInfra = {
+      queueUrl: "https://sqs.us-east-1.amazonaws.com/123456789012/cloudmon-capture-demo",
+      queueName: "cloudmon-capture-demo",
+      queueArn: "arn:aws:sqs:us-east-1:123456789012:cloudmon-capture-demo",
+      ruleName: "cloudmon-cloudtrail-demo",
+      ruleArn: "arn:aws:events:us-east-1:123456789012:rule/cloudmon-cloudtrail-demo",
+      region: "us-east-1", account: "123456789012", allManagement: true, owned: this.mode !== "existing-sqs",
     };
+    this.capture = {version: 1, phase: "ready", config: this.connection!, infra};
+    this.feed.start(); this.active = true;
+    return infra;
   }
-  async stopCapture() {
-    this.feed.stop();
+  async resumeCapture() {
+    if (!this.capture) throw Error("No saved capture");
+    this.feed.start(); this.active = true;
+    return this.capture.infra;
   }
-  async teardownCapture() {
-    this.feed.stop();
+  async getRecoveryState(): Promise<RecoveryState> {
+    return {evidence: {events: this.data.length, observations: this.data.length, variantEvents: 0, lossy: 0}, capture: this.capture, captureError: "", active: this.active};
   }
+  async getEventEvidence(seq: number): Promise<EvidencePage> {
+    const raw = await this.getEventRaw(seq);
+    const digest = await crypto.subtle.digest("SHA-256",new TextEncoder().encode(raw));
+    const sha256 = [...new Uint8Array(digest)].map(b=>b.toString(16).padStart(2,"0")).join("");
+    return {total: 1, variants: 1, observations: [{id: seq, sha256, source: "browser-preview", ordinal: seq, format: "demo-json", lossy: false, observedAt: "", displayed: true}]};
+  }
+  getObservation(id: number) { return this.getEventRaw(id); }
+  async stopCapture() { this.feed.stop(); this.active = false; }
+  async teardownCapture() { this.feed.stop(); this.active = false; this.capture = null; }
   async applyCaptureFilter() {}
   onEvent(cb: EventCb): () => void {
     return this.feed.onEvent((e) => {
@@ -458,23 +484,15 @@ export async function exportEvents(events: CloudTrailEvent[]): Promise<string | 
   // Page rows carry an empty rawJSON (the engine omits it to keep windows light), so
   // fetch the real records from the backend by seq. Without this the export would
   // silently emit the flattened UI object instead of the original CloudTrail record.
-  let raws: string[] = [];
-  if (app?.RawBySeqs) {
-    try {
-      raws = ((await app.RawBySeqs(events.map((e) => e.seq))) as string[]) ?? [];
-    } catch {
-      raws = [];
-    }
+  const raws = app?.RawBySeqs
+    ? await app.RawBySeqs(events.map(e=>e.seq)) as string[]
+    : events.map(e=>e.rawJSON);
+  if (!raws || raws.length !== events.length) throw Error("Some source records are unavailable; refresh before exporting.");
+  for (const raw of raws) {
+    if (!raw) throw Error("A source record is missing; export cancelled.");
+    JSON.parse(raw); // validate only; never re-encode through JavaScript numbers
   }
-  const records = events.map((e, i) => {
-    const raw = raws[i] || e.rawJSON;
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return e; // last resort: the flattened row (mock/browser, or a missing record)
-    }
-  });
-  const json = JSON.stringify({ Records: records }, null, 2);
+  const json = '{"Records":[\n' + raws.join(',\n') + '\n]}';
   if (app?.ExportEventsJSON) {
     return (await app.ExportEventsJSON(json)) as string;
   }
