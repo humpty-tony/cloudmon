@@ -27,7 +27,7 @@ Relationship reasons retain the investigation's qualifications. Shared identifie
 
 ## Limits and failures
 
-An export allows at most 500 retained events, 10,000 source observations and 128 MiB of uncompressed archive entries, including metadata and HTML. Exceeding an export limit fails explicitly; source observations are never silently omitted to make an archive fit.
+An export allows at most 500 retained events, 10,000 source observations and 128 MiB of uncompressed archive entries, including metadata and HTML. Additional safety budgets bound projected context metadata and conservatively estimated source metadata to 8 MiB each before loading/encoding them; the manifest streams its repeated entries. Exceeding an export limit fails explicitly; source observations are never silently omitted to make an archive fit.
 
 **Cancel export** requests cancellation. A native save dialog must still be dismissed manually if it remains open; cancellation is checked before and after that dialog. If a completed save wins the cancellation race, the UI reports its saved path accurately.
 
