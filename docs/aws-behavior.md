@@ -31,4 +31,21 @@ Cleanup checks `RemoveTargets.FailedEntryCount` even on HTTP success and uses th
 - [CloudTrail delivery for S3 events](https://docs.aws.amazon.com/eventbridge/latest/ref/events-ref-s3.html)
 - [Global service events and regional rules](https://docs.aws.amazon.com/eventbridge/latest/userguide/eb-troubleshooting.html)
 
-These references validate API semantics. Tests use fixtures and fake AWS responses; they do not imply a live AWS deployment test. Cross-session evidence persistence and capture recovery are separate follow-up work; this PR retains the existing session database and quit-time cleanup behavior.
+These references validate API semantics. Tests use fixtures and fake AWS responses; they do not imply a live AWS deployment test.
+
+
+## Recovery and evidence identity
+
+The capture journal saves names before provisioning and persists returned handles before polling. On restart, CloudMon reads local state without consuming messages or changing AWS resources. Resume and cleanup reload the original profile and compare its current STS account with the saved caller account. Existing queues are disconnected locally, never deleted. Owned queues can be recovered by name/account when setup stopped before the queue URL was saved.
+
+Cleanup records its intent before deleting anything. Explicit not-found errors allow retrying after a previous successful deletion; denied permissions and partial target-removal failures retain the journal. AWS deletion can take time to propagate. Deleting a queue discards its unread messages. Closing CloudMon only pauses consumption: its retained pipeline can incur charges, and queued messages still expire (SQS defaults to four days unless configured otherwise).
+
+- [GetQueueUrl by name and owner account](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_GetQueueUrl.html)
+- [DeleteQueue message loss, propagation, and not-found errors](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_DeleteQueue.html)
+- [CreateQueue retention defaults](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_CreateQueue.html)
+- [DeleteRule prerequisites and repeated deletion](https://docs.aws.amazon.com/eventbridge/latest/APIReference/API_DeleteRule.html)
+- [GetCallerIdentity](https://docs.aws.amazon.com/STS/latest/APIReference/API_GetCallerIdentity.html)
+
+CloudMon's deduplication policy uses `(recipientAccountId, eventID)` when both are present. Recipient account is not inferred from the actor's account or current AWS credentials. Missing identity falls back to the SHA-256 of the observed source bytes. This is a conservative application policy: `sharedEventID` and addendum references are retained as source fields, not treated as deduplication keys. Every observation remains inspectable; distinct hashes include formatting differences and do not automatically prove a semantic conflict.
+
+- [CloudTrail eventID, recipientAccountId, sharedEventID, and addendum semantics](https://docs.aws.amazon.com/awscloudtrail/latest/userguide/cloudtrail-event-reference-record-contents.html)

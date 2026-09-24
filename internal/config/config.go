@@ -43,6 +43,7 @@ func RequiredPermissions(mode string) []RequiredPermission {
 			{"sqs:CreateQueue", "Create the queue CloudMon polls"},
 			{"sqs:SetQueueAttributes", "Attach the policy allowing EventBridge to deliver"},
 			{"sqs:GetQueueAttributes", "Read queue ARN/attributes for wiring"},
+			{"sqs:GetQueueUrl", "Recover a queue by its saved name after interrupted setup"},
 			{"sqs:ReceiveMessage / DeleteMessage", "Consume events at runtime"},
 			{"sqs:ChangeMessageVisibility", "Keep received messages leased while their local commit is pending"},
 			{"sqs:DeleteQueue", "Delete the queue on teardown (the rule teardown alone would leak it)"},

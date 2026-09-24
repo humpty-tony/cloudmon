@@ -14,6 +14,7 @@ import (
 	ebtypes "github.com/aws/aws-sdk-go-v2/service/eventbridge/types"
 	"github.com/aws/aws-sdk-go-v2/service/sqs"
 	sqstypes "github.com/aws/aws-sdk-go-v2/service/sqs/types"
+	"github.com/aws/smithy-go"
 )
 
 const targetID = "cloudmon-queue"
@@ -52,14 +53,15 @@ func RegionFromQueueURL(u string) string {
 // Infra is the handle to a provisioned Flow A pipeline, returned to the UI and used
 // for teardown.
 type Infra struct {
-	QueueURL string `json:"queueUrl"`
-	QueueArn string `json:"queueArn"`
-	RuleName string `json:"ruleName"`
-	RuleArn  string `json:"ruleArn"`
-	Region   string `json:"region"`
-	Account  string `json:"account"`
-	AllMgmt  bool   `json:"allManagement"`
-	Owned    bool   `json:"owned"` // true = CloudMon created it (safe to tear down); false = the user's existing queue
+	QueueURL  string `json:"queueUrl"`
+	QueueName string `json:"queueName"`
+	QueueArn  string `json:"queueArn"`
+	RuleName  string `json:"ruleName"`
+	RuleArn   string `json:"ruleArn"`
+	Region    string `json:"region"`
+	Account   string `json:"account"`
+	AllMgmt   bool   `json:"allManagement"`
+	Owned     bool   `json:"owned"` // true = CloudMon created it (safe to tear down); false = the user's existing queue
 }
 
 // ProvisionError names the AWS action that failed so the UI can tell the user
@@ -85,30 +87,30 @@ func CheckQueue(ctx context.Context, cfg aws.Config, queueURL string) error {
 	return nil
 }
 
-// Provision creates the SQS queue, its delivery policy, the EventBridge rule (in the
-// all-management-events state by default), and the rule→queue target. On any failure
-// it returns the partially-built Infra so the caller can roll back.
-// randSuffix returns 8 hex chars so each capture provisions uniquely-named resources -
-// a re-deploy (or a still-existing queue from a prior run) can't collide and fail.
-func randSuffix() string {
-	b := make([]byte, 4)
-	if _, err := rand.Read(b); err != nil {
-		return "0"
+// Provision checkpoints the planned names before the first AWS mutation and the
+// returned handles after each creation. A crash or lost API response can then be
+// recovered by name without creating another pipeline.
+func Provision(ctx context.Context, cfg aws.Config, account, region, pattern string, allMgmt bool, checkpoint func(Infra) error) (Infra, error) {
+	if checkpoint == nil {
+		return Infra{}, fmt.Errorf("a durable capture checkpoint is required")
 	}
-	return hex.EncodeToString(b)
-}
-
-func Provision(ctx context.Context, cfg aws.Config, account, region, pattern string, allMgmt bool) (Infra, error) {
-	sfx := randSuffix()
+	random := make([]byte, 8)
+	if _, err := rand.Read(random); err != nil {
+		return Infra{}, err
+	}
+	sfx := hex.EncodeToString(random)
 	names := Names{Queue: "cloudmon-capture-" + region + "-" + sfx, Rule: "cloudmon-cloudtrail-" + sfx}
-	var err error
-	pattern, err = ConstrainManagementPattern(pattern, allMgmt)
+	pattern, err := ConstrainManagementPattern(pattern, allMgmt)
 	if err != nil {
 		return Infra{}, err
 	}
 	sqsc := sqs.NewFromConfig(cfg)
 	ebc := eventbridge.NewFromConfig(cfg)
-	infra := Infra{RuleName: names.Rule, Region: region, Account: account, AllMgmt: allMgmt, Owned: true}
+	infra := Infra{QueueName: names.Queue, RuleName: names.Rule, Region: region, Account: account, AllMgmt: allMgmt, Owned: true}
+
+	if err := checkpoint(infra); err != nil {
+		return infra, fmt.Errorf("save capture plan: %w", err)
+	}
 
 	// 1. Queue.
 	cq, err := sqsc.CreateQueue(ctx, &sqs.CreateQueueInput{QueueName: aws.String(names.Queue)})
@@ -119,6 +121,9 @@ func Provision(ctx context.Context, cfg aws.Config, account, region, pattern str
 		return infra, &ProvisionError{"sqs:CreateQueue", err}
 	}
 	infra.QueueURL = aws.ToString(cq.QueueUrl)
+	if err := checkpoint(infra); err != nil {
+		return infra, err
+	}
 
 	// 2. Real, partition-correct queue ARN (never synthesized).
 	ga, err := sqsc.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
@@ -129,6 +134,12 @@ func Provision(ctx context.Context, cfg aws.Config, account, region, pattern str
 		return infra, &ProvisionError{"sqs:GetQueueAttributes", err}
 	}
 	infra.QueueArn = ga.Attributes[string(sqstypes.QueueAttributeNameQueueArn)]
+	if infra.QueueArn == "" {
+		return infra, fmt.Errorf("sqs:GetQueueAttributes returned no queue ARN")
+	}
+	if err := checkpoint(infra); err != nil {
+		return infra, err
+	}
 
 	// 3. Rule - before the queue policy, so we can use the ARN PutRule returns. That
 	// ARN carries the correct partition (aws / aws-us-gov / aws-cn); synthesizing it
@@ -144,6 +155,9 @@ func Provision(ctx context.Context, cfg aws.Config, account, region, pattern str
 		return infra, &ProvisionError{"events:PutRule", err}
 	}
 	infra.RuleArn = aws.ToString(pr.RuleArn)
+	if err := checkpoint(infra); err != nil {
+		return infra, err
+	}
 
 	// 4. Queue policy - allow EventBridge to deliver, but only from THIS rule.
 	if _, err := sqsc.SetQueueAttributes(ctx, &sqs.SetQueueAttributesInput{
@@ -188,17 +202,33 @@ func Teardown(ctx context.Context, cfg aws.Config, infra Infra) error {
 			Rule: aws.String(infra.RuleName),
 			Ids:  []string{targetID},
 		}); err != nil {
-			errs = append(errs, &ProvisionError{"events:RemoveTargets", err})
+			if !missingResource(err) {
+				errs = append(errs, &ProvisionError{"events:RemoveTargets", err})
+			}
 		} else if out.FailedEntryCount > 0 {
 			errs = append(errs, &ProvisionError{"events:RemoveTargets", fmt.Errorf("%d target removals failed: %v", out.FailedEntryCount, out.FailedEntries)})
 		}
 		if _, err := ebc.DeleteRule(ctx, &eventbridge.DeleteRuleInput{Name: aws.String(infra.RuleName)}); err != nil {
-			errs = append(errs, &ProvisionError{"events:DeleteRule", err})
+			if !missingResource(err) {
+				errs = append(errs, &ProvisionError{"events:DeleteRule", err})
+			}
+		}
+	}
+	if infra.QueueURL == "" && infra.QueueName != "" {
+		out, err := sqsc.GetQueueUrl(ctx, &sqs.GetQueueUrlInput{QueueName: aws.String(infra.QueueName), QueueOwnerAWSAccountId: aws.String(infra.Account)})
+		if err != nil {
+			if !missingResource(err) {
+				errs = append(errs, &ProvisionError{"sqs:GetQueueUrl", err})
+			}
+		} else {
+			infra.QueueURL = aws.ToString(out.QueueUrl)
 		}
 	}
 	if infra.QueueURL != "" {
 		if _, err := sqsc.DeleteQueue(ctx, &sqs.DeleteQueueInput{QueueUrl: aws.String(infra.QueueURL)}); err != nil {
-			errs = append(errs, &ProvisionError{"sqs:DeleteQueue", err})
+			if !missingResource(err) {
+				errs = append(errs, &ProvisionError{"sqs:DeleteQueue", err})
+			}
 		}
 	}
 	return errors.Join(errs...)
@@ -220,4 +250,34 @@ func queuePolicy(queueArn, ruleArn string) string {
 		}},
 	})
 	return string(b)
+}
+
+// Only explicit not-found codes make a retry successful. Access denied or network
+// failures keep the journal intact so a later cleanup can retry.
+func missingResource(err error) bool {
+	var api smithy.APIError
+	if !errors.As(err, &api) {
+		return false
+	}
+	switch api.ErrorCode() {
+	case "ResourceNotFoundException", "QueueDoesNotExist", "AWS.SimpleQueueService.NonExistentQueue":
+		return true
+	}
+	return false
+}
+
+// A named profile can point at a different account after a restart. Re-check STS
+// before resuming message consumption or deleting retained infrastructure.
+func VerifyCaptureAccount(ctx context.Context, cfg aws.Config, infra Infra, profile string) error {
+	if cfg.Region != infra.Region || infra.Account == "" {
+		return fmt.Errorf("capture region or account is missing or inconsistent")
+	}
+	identity, err := VerifyIdentity(ctx, cfg, profile, infra.Region)
+	if err != nil {
+		return err
+	}
+	if identity.Account != infra.Account {
+		return fmt.Errorf("profile %q now authenticates to account %s; saved capture belongs to %s", profile, identity.Account, infra.Account)
+	}
+	return nil
 }

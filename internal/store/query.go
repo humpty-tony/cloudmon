@@ -475,7 +475,7 @@ func (s *Store) Raw(seq int64) (string, error) {
 }
 
 // RawBySeqs returns the raw CloudTrail JSON for each requested seq, in the SAME order
-// as the input (empty string for any seq not found). Page rows deliberately omit `raw`
+// as the input (an error if any seq is missing). Page rows deliberately omit `raw`
 // (see pageCols), so a faithful, re-importable export must pull it from the DB rather
 // than reuse the light window rows. seqs are engine-assigned integers, formatted with
 // strconv, so the IN list is not an injection vector.
@@ -501,7 +501,11 @@ func (s *Store) RawBySeqs(seqs []int64) ([]string, error) {
 		bySeq[r.Seq] = r.Raw
 	}
 	for i, q := range seqs {
-		out[i] = bySeq[q]
+		raw, ok := bySeq[q]
+		if !ok {
+			return nil, fmt.Errorf("event %d is no longer available; refresh before exporting", q)
+		}
+		out[i] = raw
 	}
 	return out, nil
 }

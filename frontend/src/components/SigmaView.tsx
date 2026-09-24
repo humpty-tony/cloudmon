@@ -3,7 +3,6 @@ import { backend, type SigmaOutcome } from "../api/backend";
 import type { ColumnDef } from "../api/columns";
 import type { TimeZonePref } from "../api/settings";
 import type { CloudTrailEvent, FilterField, Lineage, QueryOp } from "../api/types";
-import { prettyJSON } from "../api/types";
 import { CodeEditor } from "./CodeEditor";
 import { EventTable } from "./EventTable";
 import { Popover, ColumnsMenu } from "./Toolbar";
@@ -79,7 +78,7 @@ export function SigmaView(p: Props) {
   // Raw JSON + lineage aren't in the row; fetch lazily on expand (as the console does).
   const fetchDetail = (e: CloudTrailEvent) => {
     setSelectedRaw("");
-    backend.getEventRaw(e.seq).then((raw) => setSelectedRaw(prettyJSON(raw))).catch(() => setSelectedRaw(""));
+    backend.getEventRaw(e.seq).then((raw) => setSelectedRaw(raw)).catch(() => setSelectedRaw(""));
     setSelectedLineage(null);
     if (e.userIdentity.type === "AssumedRole") {
       backend.queryLineage(e.seq).then(setSelectedLineage).catch(() => setSelectedLineage(null));

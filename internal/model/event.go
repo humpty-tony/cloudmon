@@ -38,7 +38,7 @@ type CloudTrailEvent struct {
 	ErrorMessage     string       `json:"errorMessage,omitempty"`
 	RecipientAccount string       `json:"recipientAccountId"`
 
-	// RawJSON is the full, pretty-printed record for the detail pane.
+	// RawJSON is the original JSON record for the detail pane.
 	RawJSON string `json:"rawJSON"`
 }
 
@@ -74,7 +74,7 @@ type ctRecord struct {
 
 // FromRawJSON parses a single CloudTrail record (as delivered by EventBridge or
 // found in an S3 log file) into the normalized CloudTrailEvent. The original
-// bytes are pretty-printed and retained in RawJSON for the detail pane.
+// object bytes are retained without re-encoding for evidence storage.
 func FromRawJSON(raw []byte) (CloudTrailEvent, error) {
 	var r ctRecord
 	if err := json.Unmarshal(raw, &r); err != nil {
@@ -102,10 +102,7 @@ func FromRawJSON(raw []byte) (CloudTrailEvent, error) {
 		RecipientAccount: r.RecipientAccount,
 	}
 
-	if pretty, err := json.MarshalIndent(json.RawMessage(raw), "", "  "); err == nil {
-		e.RawJSON = string(pretty)
-	} else {
-		e.RawJSON = string(raw)
-	}
+	e.RawJSON = string(raw)
+
 	return e, nil
 }

@@ -7,10 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"runtime" // stdlib - GOOS
+	"strings"
 	"sync"
 	"time"
 
 	"cloudmon/internal/awsflow"
+	"cloudmon/internal/capture"
 	"cloudmon/internal/config"
 	"cloudmon/internal/duckdbbin"
 	"cloudmon/internal/ingest"
@@ -30,9 +32,10 @@ type App struct {
 	events []model.CloudTrailEvent
 	cfg    config.ConnectionConfig
 
-	db     *store.Store // DuckDB-backed engine for large dumps
-	dbErr  error        // set if the embedded duckdb could not be extracted
-	dbOnce sync.Once    // guards one-time async extraction of the engine (see ensureDB)
+	db       *store.Store // DuckDB-backed engine for large dumps
+	dbErr    error        // set if the embedded duckdb could not be extracted
+	dataLock *os.File     // OS lock retained for this process lifetime
+	dbOnce   sync.Once    // guards one-time async extraction of the engine (see ensureDB)
 
 	logMu sync.Mutex // guards the on-disk troubleshooting log
 	logW  *os.File   // cloudmon.log next to the exe (a blank WebView2 leaves no console)
@@ -42,9 +45,11 @@ type App struct {
 	capCancel   context.CancelFunc // cancels the running poller
 	capInfra    awsflow.Infra      // resources StartCapture created (for teardown)
 	capActive   bool
-	capDone     chan struct{} // closed only after the poller has exited
-	capProfile  string        // credentials selected when this pipeline was created
-	lifecycleMu sync.Mutex    // serialize start, stop, teardown, and dataset replacement
+	capDone     chan struct{}    // closed only after the poller has exited
+	capLoaded   bool             // guarded by lifecycleMu
+	capSession  *capture.Session // durable checkpoint, guarded by lifecycleMu
+	capProfile  string           // credentials selected when this pipeline was created
+	lifecycleMu sync.Mutex       // serialize start, stop, teardown, and dataset replacement
 }
 
 func NewApp() *App { return &App{} }
@@ -58,7 +63,7 @@ func (a *App) startup(ctx context.Context) {
 	go a.ensureDB()
 }
 
-// ensureDB extracts the embedded DuckDB engine and opens this session's database exactly
+// ensureDB extracts the embedded DuckDB engine and opens the saved evidence database exactly
 // once, then returns it (nil if extraction failed - see dbErr). sync.Once makes the lazy
 // init race-free: startup kicks it off in a goroutine and every query routes through here.
 func (a *App) ensureDB() *store.Store {
@@ -68,9 +73,33 @@ func (a *App) ensureDB() *store.Store {
 			a.dbErr = err
 			return
 		}
-		dbPath := filepath.Join(os.TempDir(), fmt.Sprintf("cloudmon-%d.duckdb", os.Getpid()))
-		_ = os.Remove(dbPath)
-		a.db = store.New(bin, dbPath)
+		root, err := os.UserConfigDir()
+		if err != nil {
+			a.dbErr = err
+			return
+		}
+		dir := filepath.Join(root, "cloudmon", "evidence")
+		if err = os.MkdirAll(dir, 0o700); err != nil {
+			a.dbErr = err
+			return
+		}
+		if err = os.Chmod(dir, 0o700); err != nil {
+			a.dbErr = err
+			return
+		}
+		lock, err := store.LockSession(filepath.Join(dir, "session.lock"))
+		if err != nil {
+			a.dbErr = err
+			return
+		}
+		db := store.New(bin, filepath.Join(dir, "events.duckdb"))
+		if err = db.Open(); err != nil {
+			lock.Close()
+			a.dbErr = err
+			return
+		}
+		a.dataLock = lock
+		a.db = db
 	})
 	return a.db
 }
@@ -119,9 +148,8 @@ func (a *App) IngestFile(path string) (int, error) {
 	return a.db.Ingest(path)
 }
 
-// IngestText writes browser-supplied dump text to a temp file, then ingests it via
-// DuckDB. (Desktop imports should prefer IngestFile with a native path - no bridge
-// transfer - but the file-input flow and the browser preview use this.)
+// IngestText stages browser-supplied records without replacing saved evidence on
+// parse failure. Desktop imports use IngestFile to avoid a large bridge transfer.
 func (a *App) IngestText(text string) (int, error) {
 	a.lifecycleMu.Lock()
 	defer a.lifecycleMu.Unlock()
@@ -129,18 +157,25 @@ func (a *App) IngestText(text string) (int, error) {
 	if a.ensureDB() == nil {
 		return 0, fmt.Errorf("query engine unavailable: %v", a.dbErr)
 	}
-	tmp, err := os.CreateTemp("", "cloudmon-*.json")
-	if err != nil {
-		return 0, err
+	return a.db.IngestReader(strings.NewReader(text), "browser-import")
+}
+
+func (a *App) GetEventEvidence(seq int64, offset int) (store.EvidencePage, error) {
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
+	if a.ensureDB() == nil {
+		return store.EvidencePage{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
 	}
-	name := tmp.Name()
-	defer os.Remove(name)
-	if _, err := tmp.WriteString(text); err != nil {
-		tmp.Close()
-		return 0, err
+	return a.db.Evidence(seq, offset)
+}
+
+func (a *App) GetObservation(id int64) (string, error) {
+	a.lifecycleMu.Lock()
+	defer a.lifecycleMu.Unlock()
+	if a.ensureDB() == nil {
+		return "", fmt.Errorf("query engine unavailable: %v", a.dbErr)
 	}
-	tmp.Close()
-	return a.db.Ingest(name)
+	return a.db.Observation(id)
 }
 
 func (a *App) QueryPage(f store.Filter, offset, limit int) ([]store.Row, error) {
@@ -283,7 +318,7 @@ func (a *App) SelectDumpFile() (string, error) {
 	return rt.OpenFileDialog(a.ctx, rt.OpenDialogOptions{
 		Title: "Select a CloudTrail export",
 		Filters: []rt.FileFilter{
-			{DisplayName: "CloudTrail exports (*.json, *.json.gz, *.csv)", Pattern: "*.json;*.json.gz;*.gz;*.csv"},
+			{DisplayName: "CloudTrail exports (*.json, *.json.gz, *.csv)", Pattern: "*.json;*.jsonl;*.ndjson;*.json.gz;*.gz;*.csv"},
 			{DisplayName: "All files", Pattern: "*.*"},
 		},
 	})
@@ -429,126 +464,16 @@ func (a *App) CheckQueue(profile, queueURL string) error {
 	return awsflow.CheckQueue(a.ctx, cfg, queueURL)
 }
 
-func (a *App) StartCapture() (awsflow.Infra, error) {
-	a.lifecycleMu.Lock()
-	defer a.lifecycleMu.Unlock()
-	if a.ensureDB() == nil {
-		return awsflow.Infra{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
-	}
-	a.capMu.Lock()
-	defer a.capMu.Unlock()
-	if a.capActive {
-		return a.capInfra, nil
-	}
-
-	// Resume path: a prior StopCapture halted the poller but deliberately KEPT the
-	// EventBridge rule + SQS queue in place. Reuse them - restart the poller against
-	// the SAME queue - so events EventBridge delivered into it while paused are drained
-	// on resume. Re-provisioning a fresh queue instead would strand those messages in
-	// the old queue (and leak it): exactly the "paused-out events never load" symptom.
-	if a.capInfra.QueueURL != "" {
-		infra := a.capInfra
-		profile := a.capProfile
-		awscfg, err := awsflow.LoadConfig(a.ctx, profile, infra.Region)
-		if err != nil {
-			return awsflow.Infra{}, err
-		}
-		pctx, cancel := context.WithCancel(context.Background())
-		a.capCancel = cancel
-		a.capActive = true
-		a.capDone = make(chan struct{})
-		poller := awsflow.NewPoller(awscfg, infra.QueueURL, a.onLiveBatch, func(e error) {
-			a.Log("warn", "poll: "+e.Error())
-		})
-		done := a.capDone
-		go func() { defer close(done); poller.Run(pctx) }()
-		a.Log("info", fmt.Sprintf("capture resumed on existing infra - draining queue=%s rule=%s (region=%s account=%s)",
-			infra.QueueURL, infra.RuleName, infra.Region, infra.Account))
-		return infra, nil
-	}
-
-	a.mu.Lock()
-	cfg := a.cfg
-	a.mu.Unlock()
-	region := cfg.Region
-	if region == "" {
-		region = "us-east-1"
-	}
-	allMgmt := !cfg.WriteOnly // default (WriteOnly=false) captures ALL management events
-
-	awscfg, err := awsflow.LoadConfig(a.ctx, cfg.Profile, region)
-	if err != nil {
-		return awsflow.Infra{}, err
-	}
-	id, err := awsflow.VerifyIdentity(a.ctx, awscfg, cfg.Profile, region)
-	if err != nil {
-		return awsflow.Infra{}, err
-	}
-
-	var infra awsflow.Infra
-	if config.Mode(cfg.Mode) == config.ModeExistingSQS {
-		// Existing-queue mode: poll a queue the user already wired to CloudTrail. Provision
-		// nothing, and mark the infra NOT owned so teardown/shutdown never delete a queue we
-		// didn't create.
-		if cfg.QueueURL == "" {
-			return awsflow.Infra{}, fmt.Errorf("no SQS queue URL provided")
-		}
-		// Sign for the queue's OWN region (from the URL), which may differ from the
-		// profile default - otherwise ReceiveMessage hits the wrong endpoint and returns
-		// nothing. Re-load the config for that region when it differs.
-		qRegion := awsflow.RegionFromQueueURL(cfg.QueueURL)
-		if qRegion == "" {
-			return awsflow.Infra{}, fmt.Errorf("couldn't read the queue's region from its URL")
-		}
-		if qRegion != region {
-			if awscfg, err = awsflow.LoadConfig(a.ctx, cfg.Profile, qRegion); err != nil {
-				return awsflow.Infra{}, err
-			}
-		}
-		infra = awsflow.Infra{QueueURL: cfg.QueueURL, Region: qRegion, Account: id.Account, AllMgmt: allMgmt, Owned: false}
-		a.Log("info", fmt.Sprintf("attaching to existing queue=%s (region=%s account=%s) - not owned, will not be torn down", infra.QueueURL, qRegion, id.Account))
-	} else {
-		infra, err = awsflow.Provision(a.ctx, awscfg, id.Account, region, cfg.CapturePattern, allMgmt)
-		if err != nil {
-			a.Log("error", fmt.Sprintf("provision failed: %s - partial resources: queue=%q queueArn=%q rule=%q ruleArn=%q (region=%s account=%s)",
-				err.Error(), infra.QueueURL, infra.QueueArn, infra.RuleName, infra.RuleArn, infra.Region, infra.Account))
-			rollbackCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-			if tdErr := awsflow.Teardown(rollbackCtx, awscfg, infra); tdErr != nil {
-				a.Log("error", fmt.Sprintf("ROLLBACK INCOMPLETE - destroy these MANUALLY: queue=%q rule=%q (region=%s account=%s): %s",
-					infra.QueueURL, infra.RuleName, infra.Region, infra.Account, tdErr.Error()))
-			} else {
-				a.Log("info", "rollback complete - no resources left behind")
-			}
-			return awsflow.Infra{}, err
-		}
-		// Log the exact resource identifiers up front, so manual cleanup is always possible
-		// even if the app later crashes before teardown.
-		a.Log("info", fmt.Sprintf("capture provisioned - queue=%s queueArn=%s rule=%s ruleArn=%s (region=%s account=%s allMgmt=%v)",
-			infra.QueueURL, infra.QueueArn, infra.RuleName, infra.RuleArn, infra.Region, infra.Account, allMgmt))
-	}
-
-	pctx, cancel := context.WithCancel(context.Background())
-	a.capCancel = cancel
-	a.capInfra = infra
-	a.capProfile = cfg.Profile
-	a.capActive = true
-	a.capDone = make(chan struct{})
-	poller := awsflow.NewPoller(awscfg, infra.QueueURL, a.onLiveBatch, func(e error) {
-		a.Log("warn", "poll: "+e.Error())
-	})
-	done := a.capDone
-	go func() { defer close(done); poller.Run(pctx) }()
-	return infra, nil
-}
-
 // onLiveBatch returns only after the database commits. No acknowledged event is
 // parked in an in-memory buffer; the poller retains and retries a failed batch.
 func (a *App) onLiveBatch(ctx context.Context, evs []model.CloudTrailEvent) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	total, err := a.db.AppendEvents(evs)
+	a.capMu.Lock()
+	source := a.capInfra.QueueURL
+	a.capMu.Unlock()
+	total, err := a.db.AppendFrom(evs, source)
 	if err != nil {
 		return err
 	}
@@ -584,48 +509,6 @@ func (a *App) stopCapture() {
 	a.Log("info", "capture stopped (infrastructure kept)")
 }
 
-// TeardownCapture stops polling and removes the EventBridge rule, its target, and the
-// SQS queue that StartCapture created - returning the account to its prior state.
-func (a *App) TeardownCapture() error {
-	a.lifecycleMu.Lock()
-	defer a.lifecycleMu.Unlock()
-	a.stopCapture()
-	a.capMu.Lock()
-	infra := a.capInfra
-	profile := a.capProfile
-	a.capMu.Unlock()
-	if infra.QueueURL == "" && infra.RuleName == "" {
-		return nil
-	}
-	if !infra.Owned {
-		// Existing-queue mode: never delete a queue CloudMon didn't create - just forget it.
-		a.capMu.Lock()
-		a.capInfra = awsflow.Infra{}
-		a.capMu.Unlock()
-		a.Log("info", "detached from existing queue (left in place - not owned by CloudMon)")
-		return nil
-	}
-	// context.Background(), not a.ctx: teardown may run during app shutdown when the
-	// Wails context is already cancelled - cleanup must still complete.
-	tctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	awscfg, err := awsflow.LoadConfig(tctx, profile, infra.Region)
-	if err != nil {
-		return err
-	}
-	a.Log("info", fmt.Sprintf("tearing down - queue=%s rule=%s (region=%s account=%s)", infra.QueueURL, infra.RuleName, infra.Region, infra.Account))
-	if err := awsflow.Teardown(tctx, awscfg, infra); err != nil {
-		a.Log("error", fmt.Sprintf("TEARDOWN FAILED - destroy these MANUALLY: queue=%q rule=%q (region=%s account=%s): %s",
-			infra.QueueURL, infra.RuleName, infra.Region, infra.Account, err.Error()))
-		return err
-	}
-	a.capMu.Lock()
-	a.capInfra = awsflow.Infra{}
-	a.capMu.Unlock()
-	a.Log("info", "capture torn down cleanly")
-	return nil
-}
-
 // RunLoginCommand runs an SSO-login command the credential helper suggested (e.g.
 // `granted sso login …` or `aws sso login --profile …`) with its console window
 // hidden. Called by the connect screen's "run login" affordance. Blocks until the
@@ -642,23 +525,11 @@ func (a *App) RunLoginCommand(command string) error {
 	return nil
 }
 
-// onShutdown runs when the app quits. If CloudMon PROVISIONED the capture, tear it down
-// so the EventBridge rule + SQS queue don't keep running (and billing) after the app is
-// gone. For an existing-queue capture it only stops polling - that queue is the
-// user's and is never touched. Best-effort - failures are logged to cloudmon.log.
+// onShutdown joins the poller. Evidence and the capture journal remain available
+// after restart; infrastructure is removed only by an explicit cleanup action.
 func (a *App) onShutdown(_ context.Context) {
-	a.capMu.Lock()
-	owned := a.capInfra.Owned && (a.capInfra.QueueURL != "" || a.capInfra.RuleName != "")
-	active := a.capActive
-	a.capMu.Unlock()
-	if owned {
-		a.Log("info", "app closing - tearing down live capture infrastructure")
-		if err := a.TeardownCapture(); err != nil {
-			a.Log("error", "shutdown teardown failed - manual cleanup may be needed: "+err.Error())
-		}
-	} else if active {
-		a.StopCapture() // join the poller; nothing to tear down (existing queue)
-	}
+	a.StopCapture()
+	a.Log("info", "app closed; saved evidence and capture resources retained")
 }
 
 // ApplyCaptureFilter stores a custom EventBridge pattern; it takes effect on the next

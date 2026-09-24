@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { AwsIdentity, AwsProfile, ConnectionConfig, ConnectionMode, RequiredPermission, TrailStatus } from "../api/types";
+import type { AwsIdentity, AwsProfile, RecoveryState, ConnectionConfig, ConnectionMode, RequiredPermission, TrailStatus } from "../api/types";
 import { backend } from "../api/backend";
 import { parseDump } from "../api/dumpParser";
+import { RecoveryCard, removalPrompt } from "./RecoveryCard";
 import logo from "../assets/logo.png";
 
 interface Props {
   onConnect: (cfg: ConnectionConfig) => Promise<void>;
+  onRestore: (state: RecoveryState, resume: boolean) => Promise<void>;
 }
 
 interface ModeDef {
@@ -21,7 +23,7 @@ const MODES: ModeDef[] = [
     title: "Create infrastructure",
     blurb:
       "CloudMon builds its own EventBridge rule + SQS queue on the default bus, then streams live CloudTrail events. It never touches your existing trail.",
-    note: "Provisioned in your account · removed cleanly when you tear it down.",
+    note: "Retained after exit until you remove it. AWS charges and queue retention still apply.",
   },
   {
     mode: "existing-sqs",
@@ -35,7 +37,7 @@ const MODES: ModeDef[] = [
     title: "Import a dump",
     blurb:
       "Load a CloudTrail export offline. JSON log files (Records[]) are full-fidelity; CSV from Event History is supported but lossy.",
-    note: "No AWS access needed - everything is read from a local file.",
+    note: "Replaces the saved dataset only after the entire import succeeds. No AWS access needed.",
   },
 ];
 
@@ -66,7 +68,7 @@ function suggestedLogin(err: string | null): string | null {
   return bare ? bare[1].trim() : null;
 }
 
-export function ConnectionScreen({ onConnect }: Props) {
+export function ConnectionScreen({ onConnect, onRestore }: Props) {
   const [selected, setSelected] = useState<ConnectionMode>("create-infra");
   const [perms, setPerms] = useState<RequiredPermission[]>([]);
   const [profiles, setProfiles] = useState<AwsProfile[]>([]);
@@ -92,6 +94,26 @@ export function ConnectionScreen({ onConnect }: Props) {
   const [connectError, setConnectError] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
   const verificationGeneration = useRef(0);
+  const [recovery, setRecovery] = useState<RecoveryState | null>(null);
+  const [recoveryError, setRecoveryError] = useState("");
+  const mounted = useRef(true);
+  const loadRecovery = async () => {
+    try { const state = await backend.getRecoveryState(); if(mounted.current){setRecovery(state);setRecoveryError("")} }
+    catch(e) { if(mounted.current)setRecoveryError(String(e)) }
+  };
+  useEffect(()=>{mounted.current=true;void loadRecovery();return()=>{mounted.current=false}},[]);
+  const restore = async (resume: boolean) => {
+    if(!recovery)return;
+    setConnecting(true);setConnectError(null);
+    try {await onRestore(recovery,resume)} catch(e) {setConnectError(String(e));await loadRecovery()}
+    finally {setConnecting(false)}
+  };
+  const removeSaved = async () => {
+    if(!recovery?.capture || !window.confirm(removalPrompt(recovery.capture)))return;
+    setConnecting(true);setConnectError(null);
+    try {await backend.teardownCapture()} catch(e) {setConnectError(String(e))}
+    finally {await loadRecovery();setConnecting(false)}
+  };
 
   useEffect(() => () => { verificationGeneration.current++; }, []);
 
@@ -265,6 +287,7 @@ export function ConnectionScreen({ onConnect }: Props) {
       });
     } catch (e) {
       setConnectError((e as Error)?.message || String(e));
+      await loadRecovery();
     } finally {
       setConnecting(false);
     }
@@ -290,6 +313,10 @@ export function ConnectionScreen({ onConnect }: Props) {
         <p className="brand-tag">Live CloudTrail investigation. Choose how to connect.</p>
       </div>
 
+      {recovery && <RecoveryCard state={recovery} busy={connecting} onRestore={restore} onRemove={removeSaved} />}
+      {recovery?.capture && connectError && <div className="recovery-card recovery-warning" role="alert">{connectError}</div>}
+      {recoveryError && <div className="recovery-card recovery-warning" role="alert">Could not read saved evidence: {recoveryError}.<button className="btn-ghost" onClick={loadRecovery}>Retry saved session</button></div>}
+      {!recovery && !recoveryError && <p role="status">Checking saved evidence…</p>}
       <div className="mode-grid">
         {MODES.map((m) => (
           <button
@@ -506,7 +533,7 @@ export function ConnectionScreen({ onConnect }: Props) {
               <span>CloudTrail export file</span>
               {backend.live ? (
                 <button type="button" className="btn-ghost" onClick={chooseNative}>
-                  {dumpName ? `Selected: ${dumpName}` : "Choose file or folder…"}
+                  {dumpName ? `Selected: ${dumpName}` : "Choose export file…"}
                 </button>
               ) : (
                 <input className="file-input" type="file" accept=".json,.csv,.ndjson,application/json,text/csv" onChange={onFile} />
@@ -569,11 +596,12 @@ export function ConnectionScreen({ onConnect }: Props) {
         )}
 
         <div className="connect-actions">
-          {connectError && <span className="connect-error">⚠ {connectError}</span>}
+          {connectError && !recovery?.capture && <span className="connect-error">⚠ {connectError}</span>}
+          {needsAws && recovery?.capture && <span className="recovery-warning">Resume or remove the saved capture above before creating another.</span>}
           {needsIdentity && !identity && !connectError && (
             <span style={{ color: "var(--tx-3)", fontSize: 11.5, marginRight: "auto" }}>Verify your identity to continue.</span>
           )}
-          <button className="btn-primary" onClick={connect} disabled={connecting || !identityOK}>
+          <button className="btn-primary" onClick={connect} disabled={connecting || !identityOK || !recovery || !!recoveryError || (needsAws && (!!recovery.capture || !!recovery.captureError))}>
             {connecting ? "Loading…" : selected === "import-dump" ? "Load dump" : selected === "create-infra" ? "Create & capture" : "Connect & capture"}
           </button>
         </div>
