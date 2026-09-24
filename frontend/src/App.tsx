@@ -614,7 +614,7 @@ export default function App() {
   useEffect(() => {
     if (!connected) return;
     const onKey = (e: KeyboardEvent) => {
-      if (settingsOpen || lineageSeq != null) return; // overlays own their keyboard interactions
+      if (settingsOpen || lineageSeq != null || document.querySelector('[aria-modal="true"]')) return; // overlays own their keyboard interactions
       if (uiView !== "console") return; // vim-style shortcuts are console-only (don't hijack the Sigma editor)
       const el = e.target as HTMLElement;
       const typing = el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
