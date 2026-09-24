@@ -97,6 +97,7 @@ The binary is written to `build/bin/`. Run it directly, or use `wails dev` (`mak
 
 ## Usage
 
+- **Analyze activity.** Use **Analysis** for activity rankings, exact entity drilldowns, and comparisons against the preceding equal time window. Results explain scope, missing fields and evidence gaps; original records remain accessible. See [activity analysis](docs/activity-analysis.md).
 - **Import a dump.** Point CloudMon at a CloudTrail JSON/CSV export, an S3 log object, or a folder of logs. No credentials required.
 - **Capture live.** Pick an authenticated AWS profile and region, verify identity, and start. CloudMon provisions an EventBridge rule and SQS queue on your existing trail and streams events. Closing the app pauses consumption and preserves the local evidence and resource handles. Resume explicitly on the next launch, or use **Remove infrastructure** to delete the rule and queue; unread queued messages are lost on removal. AWS charges and queue retention still apply while CloudMon is closed. Needs a trail already logging in that region.
 - **Recover and inspect evidence.** Reopen saved evidence without AWS access. Expand an event and choose **Sources & hashes** to inspect original records, source locations, duplicate observations, and byte variants. Imports replace the dataset only after all input records validate and commit. See [evidence and recovery](docs/evidence-recovery.md).
