@@ -16,7 +16,12 @@ process creation are removed.
 - Event counts and the next event/observation IDs are reconstructed from durable
   tables at open, then updated per successful transaction. A failure invalidates
   the cached counters; they are reconstructed before the next append. Batches no
-  longer rescan existing IDs or repeat index creation.
+  longer rescan existing IDs or repeat index creation. Deduplication uses the
+  existing unique index instead of an anti-join over all saved events. Event IDs
+  remain stable and increasing, but skipped duplicates can leave gaps. New-event insertion uses
+  the event-key unique index to ignore existing identities, replacing an
+  anti-join that otherwise scanned the old event table for every batch. Mixed
+  duplicate/new batches can leave sequence gaps; stored event IDs remain stable.
 - Imports still validate into a private staging file before atomically replacing
   the dataset. Live batches continue using bounded staging and durable commits.
 - Capture cancellation interrupts SQL work. Errors roll back before another
@@ -47,11 +52,11 @@ implementation; the new engine uses the same DuckDB version and workload.
 
 | Store operation | Before p50 / p95 | After p50 / p95 |
 | --- | ---: | ---: |
-| Fetch one raw event | 14.17 / 18.19 ms | 0.39 / 0.46 ms |
-| Fetch 200 event rows | 20.41 / 22.53 ms | 5.80 / 7.34 ms |
-| Facets, statistics, and histogram | 61.01 / 69.96 ms | 9.69 / 11.15 ms |
-| Fetch raw event with concurrent ingestion | 135.05 / 267.48 ms | 0.49 / 0.65 ms |
-| Commit 10 events with concurrent UI queries | 159.15 / 173.60 ms | 8.49 / 15.20 ms |
+| Fetch one raw event | 14.17 / 18.19 ms | 0.41 / 0.58 ms |
+| Fetch 200 event rows | 20.41 / 22.53 ms | 5.87 / 10.00 ms |
+| Facets, statistics, and histogram | 61.01 / 69.96 ms | 8.67 / 9.94 ms |
+| Fetch raw event with concurrent ingestion | 135.05 / 267.48 ms | 0.50 / 0.63 ms |
+| Commit 10 events with concurrent UI queries | 159.15 / 173.60 ms | 9.51 / 14.79 ms |
 
 These timings cover store calls, not WebView rendering. They are a comparison on
 one machine with a small synthetic dataset, not a guarantee for large datasets,
@@ -113,4 +118,6 @@ aggregate response can still observe different commits during capture.
 - [Connection lifetime and concurrency](https://duckdb.org/docs/current/clients/go/connecting)
 - [DuckDB concurrency model](https://duckdb.org/docs/current/connect/concurrency)
 - [Native toolchains, including Windows UCRT64](https://duckdb.org/docs/current/clients/go/troubleshoot)
+- [Conflict handling and inserted-row IDs](https://duckdb.org/docs/current/sql/statements/insert)
+- [Conflict handling and inserted-row IDs](https://duckdb.org/docs/current/sql/statements/insert)
 - [Pinned driver source](https://github.com/duckdb/duckdb-go/tree/v2.10505.0)

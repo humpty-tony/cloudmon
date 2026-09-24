@@ -213,13 +213,45 @@ func (s *Store) commitStageContext(parent context.Context, path string, replace 
 		if err != nil {
 			return err
 		}
-		inserted, err := tx.ExecContext(ctx, `INSERT INTO events SELECT ?+row_number() OVER (ORDER BY json_extract_string(r,'$.eventTime'), eventKey) AS seq,`+eventCols+`,eventKey,sha256 AS evidenceHash FROM (SELECT raw AS r,eventKey,sha256 FROM incoming QUALIFY row_number() OVER (PARTITION BY eventKey ORDER BY position)=1) AS candidates WHERE NOT EXISTS (SELECT 1 FROM events WHERE events.eventKey=candidates.eventKey)`, s.counts.seq)
-		if err != nil {
-			return err
-		}
-		insertedCount, err := inserted.RowsAffected()
-		if err != nil {
-			return err
+		insertSQL := `INSERT INTO events SELECT ?+row_number() OVER (ORDER BY json_extract_string(r,'$.eventTime'), eventKey) AS seq,` + eventCols + `,eventKey,sha256 AS evidenceHash FROM (SELECT raw AS r,eventKey,sha256 FROM incoming QUALIFY row_number() OVER (PARTITION BY eventKey ORDER BY position)=1) AS candidates`
+		var insertedCount int64
+		if replace {
+			// The replacement table is empty. Avoid materializing a RETURNING
+			// row per event for potentially multi-gigabyte imports.
+			inserted, err := tx.ExecContext(ctx, insertSQL, int64(0))
+			if err != nil {
+				return err
+			}
+			insertedCount, err = inserted.RowsAffected()
+			if err != nil {
+				return err
+			}
+			s.counts.seq = insertedCount
+		} else {
+			// Let the existing unique index check only this batch. NOT EXISTS
+			// produced a whole-table anti-join scan on every append.
+			rows, err := tx.QueryContext(ctx, insertSQL+" ON CONFLICT (eventKey) DO NOTHING RETURNING seq", s.counts.seq)
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var seq int64
+				if err := rows.Scan(&seq); err != nil {
+					return err
+				}
+				insertedCount++
+				s.counts.seq = max(s.counts.seq, seq)
+			}
+			if err := rows.Err(); err != nil {
+				return err
+			}
+			if err := rows.Close(); err != nil {
+				return err
+			}
+			// Skipped candidates can leave sequence gaps. Only actual inserted
+			// IDs advance the counter, so mixed duplicate/new batches and a
+			// later reopen can never reuse an existing event ID.
 		}
 		if replace {
 			if _, err := tx.ExecContext(ctx, `INSERT INTO app_state VALUES ('datasetImportedAt',?) ON CONFLICT (key) DO UPDATE SET value=excluded.value`, time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
@@ -232,7 +264,6 @@ func (s *Store) commitStageContext(parent context.Context, path string, replace 
 		// write invalidates these values if COMMIT fails. No reader uses them.
 		s.counts.observation += observedCount
 		s.counts.events += insertedCount
-		s.counts.seq += insertedCount
 		total = int(s.counts.events)
 		return nil
 	})

@@ -125,6 +125,35 @@ func TestAppendEventsDedupesByEventID(t *testing.T) {
 	if len(rows) != 1 || rows[0].N != 1 {
 		t.Fatalf("rows for dup1 = %+v, want exactly 1", rows)
 	}
+	// A skipped duplicate may leave a sequence gap. Advancing by the inserted
+	// count instead of the actual highest ID would reuse that ID next time.
+	e3 := liveEvent(t, `{"eventID":"new3","eventName":"Third","eventTime":"2025-03-01T00:02:00Z"}`)
+	if n, err := s.AppendEvents([]model.CloudTrailEvent{e1, e2, e3}); err != nil || n != 3 {
+		t.Fatalf("mixed redelivery: %d %v", n, err)
+	}
+	before, err := s.Page(Filter{}, 0, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	s = openTestStore(t, s.dbPath)
+	e4 := liveEvent(t, `{"eventID":"new4","eventName":"Fourth","eventTime":"2025-03-01T00:03:00Z"}`)
+	if n, err := s.AppendEvents([]model.CloudTrailEvent{e2, e4}); err != nil || n != 4 {
+		t.Fatalf("mixed redelivery after reopen: %d %v", n, err)
+	}
+	page, err := s.Page(Filter{}, 0, 10)
+	if err != nil || len(page) != 4 || page[0].Seq <= before[0].Seq {
+		t.Fatalf("IDs after reopen: %+v %v", page, err)
+	}
+	seen := map[int64]bool{}
+	for _, row := range page {
+		if seen[row.Seq] {
+			t.Fatalf("reused event ID %d", row.Seq)
+		}
+		seen[row.Seq] = true
+	}
 }
 
 func TestAppendRejectsInvalidBatchWithoutPartialInsert(t *testing.T) {
