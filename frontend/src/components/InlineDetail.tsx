@@ -1,7 +1,7 @@
 import {PinComparisonButton} from "./EvidenceComparison";
 import { InvestigationView } from "./InvestigationView";
 import { memo, useState } from "react";
-import type { CloudTrailEvent, FilterField, Lineage, QueryOp } from "../api/types";
+import type { CloudTrailEvent, EvidenceSnapshot, FilterField, Lineage, QueryOp } from "../api/types";
 import { eventResult, hasCredentialLineage } from "../api/types";
 import { EvidenceModal } from "./EvidenceModal";
 import { RawJsonModal } from "./RawJsonModal";
@@ -10,6 +10,7 @@ import { LineageGraph } from "./LineageGraph";
 
 interface Props {
   event: CloudTrailEvent;
+  snapshot?:EvidenceSnapshot;
   rawJSON: string;
   fieldHeight: number;
   lineageError?: boolean;
@@ -19,7 +20,7 @@ interface Props {
   onOpenLineage?: (seq: number) => void; // open the full lineage graph view
 }
 
-export const InlineDetail = memo(function InlineDetail({ event: e, rawJSON, fieldHeight, lineage, lineageError, onRetry, onPivot, onOpenLineage }: Props) {
+export const InlineDetail = memo(function InlineDetail({ event: e, snapshot, rawJSON, fieldHeight, lineage, lineageError, onRetry, onPivot, onOpenLineage }: Props) {
   const [investigating, setInvestigating] = useState(false);
   const [evidenceOpen, setEvidenceOpen] = useState(false);
   const [rawOpen, setRawOpen] = useState(false);
@@ -61,8 +62,8 @@ export const InlineDetail = memo(function InlineDetail({ event: e, rawJSON, fiel
         <FieldTree json={rawJSON} height={fieldHeight} onPivot={onPivot} />
       </>}
 
-      {investigating && <InvestigationView event={e} onClose={()=>setInvestigating(false)} />}
-      {evidenceOpen && <EvidenceModal key={e.seq} seq={e.seq} onClose={()=>setEvidenceOpen(false)} />}
+      {investigating && <InvestigationView event={e} initialSnapshot={snapshot} onClose={()=>setInvestigating(false)} />}
+      {evidenceOpen && <EvidenceModal key={e.seq} seq={e.seq} snapshot={snapshot} onClose={()=>setEvidenceOpen(false)} />}
       {rawOpen && <RawJsonModal title={`${e.eventName} · ${e.eventID}`} json={rawJSON} onClose={() => setRawOpen(false)} />}
     </div>
   );

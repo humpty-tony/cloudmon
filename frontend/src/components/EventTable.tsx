@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { CloudTrailEvent, FilterField, Lineage, QueryOp } from "../api/types";
+import type { CloudTrailEvent, EvidenceSnapshot, FilterField, Lineage, QueryOp } from "../api/types";
 import { filterFieldValue, eventUser, identityGlyph, truncateArn } from "../api/types";
 import type { ColumnDef } from "../api/columns";
 import type { TimeZonePref } from "../api/settings";
@@ -22,6 +22,7 @@ interface Props {
   onResizeColumn: (key: string, px: number) => void;
   onReorderColumns?: (from: string, to: string) => void; // drag a header onto another to reorder
   onNeedMore?: () => void; // scrolled near the bottom of the loaded window
+  selectedSnapshot?:EvidenceSnapshot;
   selectedRaw?: string; // lazily-fetched raw JSON for the expanded row ("" = loading)
   selectedRawError?: boolean; // the raw fetch failed (show an error instead of "loading" forever)
   selectedLineage?: Lineage | null; // assumed-role ancestry for the expanded row
@@ -95,6 +96,7 @@ export function EventTable({
   onResizeColumn,
   onReorderColumns,
   onNeedMore,
+  selectedSnapshot,
   selectedRaw,
   selectedRawError,
   selectedLineage,
@@ -342,7 +344,7 @@ export function EventTable({
                   <div className="row-expand">
                     <div className="row-expand-pin" style={{ width: viewportW || undefined }}>
                       {selectedRaw ? (
-                        <InlineDetail key={e.seq} event={e} rawJSON={selectedRaw} fieldHeight={Math.max(84,Math.min(392,viewportH-160))} lineage={selectedLineage} lineageError={selectedLineageError} onRetry={onRetryDetail} onPivot={onPivot} onOpenLineage={onOpenLineage} />
+                        <InlineDetail key={e.seq} event={e} snapshot={selectedSnapshot} rawJSON={selectedRaw} fieldHeight={Math.max(84,Math.min(392,viewportH-160))} lineage={selectedLineage} lineageError={selectedLineageError} onRetry={onRetryDetail} onPivot={onPivot} onOpenLineage={onOpenLineage} />
                       ) : selectedRawError ? (
                         <div className="xd-loading" role="alert">Could not load this event. <button className="btn-ghost" onClick={onRetryDetail}>Retry event</button></div>
                       ) : (

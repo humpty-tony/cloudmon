@@ -312,6 +312,36 @@ func (a *App) SigmaRun(ruleYAML string) (store.SigmaResult, error) {
 	return a.db.SigmaRun(ruleYAML, 500)
 }
 
+// Sigma requests share the same cancellable registry as search and analysis.
+func (a *App) SigmaRunRequest(ruleYAML, requestID string) (store.SigmaResult, error) {
+	if a.ensureDB() == nil {
+		return store.SigmaResult{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.SigmaResult{}, err
+	}
+	defer done()
+	return a.db.SigmaRunContext(ctx, ruleYAML, 500)
+}
+func (a *App) SigmaSuite(rules []store.SigmaRuleInput, requestID string) (store.SigmaSuiteResult, error) {
+	if a.ensureDB() == nil {
+		return store.SigmaSuiteResult{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	ctx, done, err := a.queries.Begin(a.ctx, requestID)
+	if err != nil {
+		return store.SigmaSuiteResult{}, err
+	}
+	defer done()
+	return a.db.SigmaSuite(ctx, rules)
+}
+func (a *App) QueryLineageSnapshot(seq int64, snapshot store.Snapshot) (store.Lineage, error) {
+	if a.ensureDB() == nil {
+		return store.Lineage{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.Lineage(seq, snapshot)
+}
+
 // RequiredPermissions lists the IAM actions a connection mode needs.
 func (a *App) RequiredPermissions(mode string) []config.RequiredPermission {
 	return config.RequiredPermissions(mode)
@@ -648,4 +678,23 @@ func (a *App) Hunt(options store.HuntOptions, requestID string) (store.HuntResul
 	}
 	defer done()
 	return a.db.Hunt(ctx, options)
+}
+
+func (a *App) QueryLineageGraphSnapshot(seq int64, snapshot store.Snapshot) (store.LineageTree, error) {
+	if a.ensureDB() == nil {
+		return store.LineageTree{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.LineageGraph(seq, snapshot)
+}
+func (a *App) GetEventEvidenceSnapshot(seq int64, offset int, snapshot store.Snapshot) (store.EvidencePage, error) {
+	if a.ensureDB() == nil {
+		return store.EvidencePage{}, fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.EvidenceSnapshot(seq, offset, snapshot)
+}
+func (a *App) GetObservationSnapshot(id int64, snapshot store.Snapshot) (string, error) {
+	if a.ensureDB() == nil {
+		return "", fmt.Errorf("query engine unavailable: %v", a.dbErr)
+	}
+	return a.db.ObservationSnapshot(id, snapshot)
 }

@@ -761,9 +761,13 @@ func (s *Store) lineageRead(snapshot *Snapshot, fn func(*lineageReader) error) (
 	})
 	return snap, err
 }
-func (s *Store) LineageGraph(seq int64) (LineageTree, error) {
+func (s *Store) LineageGraph(seq int64, snapshots ...Snapshot) (LineageTree, error) {
+	var requested *Snapshot
+	if len(snapshots) > 0 {
+		requested = &snapshots[0]
+	}
 	var tree LineageTree
-	snap, err := s.lineageRead(nil, func(r *lineageReader) error {
+	snap, err := s.lineageRead(requested, func(r *lineageReader) error {
 		var err error
 		tree, err = r.LineageGraph(seq)
 		tree.Notes = append(tree.Notes, uniqNonEmpty(r.notes)...)

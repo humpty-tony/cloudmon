@@ -9,6 +9,7 @@ import { RawJsonModal } from "./RawJsonModal";
 
 interface Props {
   seq: number;
+  initialSnapshot?:EvidenceSnapshot;
   onClose: () => void;
   onPivot: (field: FilterField, value: string, op: QueryOp) => void;
 }
@@ -58,7 +59,7 @@ function pivotOf(n: GraphNode): [FilterField, string] | null {
   return null;
 }
 
-export function LineageView({ seq, onClose, onPivot }: Props) {
+export function LineageView({ seq, initialSnapshot, onClose, onPivot }: Props) {
   const [nodes, setNodes] = useState<Map<string, GraphNode>>(new Map());
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [meta, setMeta] = useState<{ currentId: string; rootId: string; notes: string[] }>({ currentId: "", rootId: "", notes: [] });
@@ -88,7 +89,7 @@ export function LineageView({ seq, onClose, onPivot }: Props) {
     didCenter.current = false;
     setSelected(null);
     backend
-      .queryLineageGraph(seq)
+      .queryLineageGraph(seq,initialSnapshot)
       .then((t) => {
         if (request !== generation.current) return;
         snapshotRef.current = t.snapshot;
@@ -102,7 +103,7 @@ export function LineageView({ seq, onClose, onPivot }: Props) {
       .catch((e) => { if(request===generation.current){setError(String(e?.message || e));logError(`lineage graph load failed seq=${seq}: ${e?.message || e}`)} })
       .finally(() => {if(request===generation.current)setLoading(false)});
     return () => { generation.current++; };
-  }, [seq, retry]);
+  }, [seq, retry,initialSnapshot]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && !raw && onClose();

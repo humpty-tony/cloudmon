@@ -58,5 +58,8 @@ func registerEvidenceFunctions(ctx context.Context, db *sql.DB) error {
 		return err
 	}
 	defer conn.Close()
-	return duckdb.RegisterScalarUDF(conn, "cloudmon_ip_match", &evidenceScalar{config: duckdb.ScalarFuncConfig{InputTypeInfos: []duckdb.TypeInfo{text, text}, ResultTypeInfo: boolean}, run: matchNetwork})
+	if err = duckdb.RegisterScalarUDF(conn, "cloudmon_ip_match", &evidenceScalar{config: duckdb.ScalarFuncConfig{InputTypeInfos: []duckdb.TypeInfo{text, text}, ResultTypeInfo: boolean}, run: matchNetwork}); err != nil {
+		return err
+	}
+	return duckdb.RegisterScalarUDF(conn, "cloudmon_numeric_match", &evidenceScalar{config: duckdb.ScalarFuncConfig{InputTypeInfos: []duckdb.TypeInfo{text, text, text, text}, ResultTypeInfo: boolean}, run: matchExactNumber})
 }
