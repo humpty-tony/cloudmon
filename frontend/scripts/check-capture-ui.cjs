@@ -31,6 +31,29 @@ async function checkModalFocus(page,dialog) {
  await page.keyboard.press('Tab');
  assert.ok(await actions.first().evaluate(el=>document.activeElement===el),'Tab escaped the event inspector');
 }
+async function workbenchLayout(page) {
+ return page.locator('.workbench-results .etbody').evaluate(table=>({
+  scrollTop:table.scrollTop,
+  width:table.clientWidth,
+  height:table.clientHeight,
+  rows:[...table.querySelectorAll('.rowwrap')].map(row=>{
+   const rect=row.getBoundingClientRect();
+   return {index:row.dataset.index,top:rect.top,height:rect.height};
+  }),
+ }));
+}
+async function checkWorkbenchFits(page) {
+ const bounds=await page.evaluate(()=>{
+  const panes=['.workbench-body','.workbench-results','.workbench-inspector'].map(selector=>{
+   const element=document.querySelector(selector),rect=element?.getBoundingClientRect();
+   return {selector,exists:!!element,inside:!!rect&&rect.left>=0&&rect.top>=0&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1,
+    width:rect?.width,height:rect?.height};
+  });
+  return {panes,pageFits:document.documentElement.scrollWidth<=innerWidth};
+ });
+ assert.ok(bounds.pageFits&&bounds.panes.every(p=>p.exists&&p.inside&&p.width>100&&p.height>100),`Workbench panes spill outside the window: ${JSON.stringify(bounds)}`);
+ assert.equal(await page.locator('.workbench-results .row-expand').count(),0,'Workbench rendered an inline expansion');
+}
 async function checkStatusBar(page, expected='↑ 1 new event') {
  // Flush resize/paint work and the badge entrance animation on the test clock.
  await page.clock.runFor(300);
@@ -313,6 +336,79 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('button',{name:'↑ 1,000,000 new events',exact:true}).click();
   await page.locator('.sb-mode.live').waitFor();
   assert.equal(await page.locator('.newpill').count(),0,'explicit Follow did not clear pending arrivals');
+  // Workbench reserves its inspector width: selecting evidence must not move or
+  // resize the event rows, and the two scrollable panes operate independently.
+  await page.goto('http://127.0.0.1:5181/?recovery');
+  await page.evaluate(()=>{
+    const state=window.captureTest;state.emit(120);
+    for(const row of state.rows)state.rawBySeq[row.seq]=JSON.stringify({
+      eventID:row.eventID,eventName:row.eventName,eventTime:row.eventTime,
+      requestParameters:{items:Array.from({length:150},(_,i)=>({resourceId:`resource-${i}`,state:'active'}))},
+    });
+  });
+  await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
+  const workbenchTable=page.locator('.workbench-results .etbody');
+  const workbenchInspector=page.locator('.workbench-inspector');
+  await page.locator('.row').getByText('LiveEvent120',{exact:true}).waitFor();
+  await page.clock.runFor(100);
+  const unselectedLayout=await workbenchLayout(page);
+  await page.locator('.row').getByText('LiveEvent120',{exact:true}).click();
+  await workbenchInspector.getByRole('region',{name:'Event fields',exact:true}).getByText('live-120',{exact:true}).waitFor();
+  await page.clock.runFor(100);
+  assert.deepEqual(await workbenchLayout(page),unselectedLayout,'Selecting an event moved the event table');
+  await page.locator('.row--selected').click();
+  await workbenchInspector.getByRole('button',{name:'Close inspector',exact:true}).waitFor();
+  assert.equal(await page.locator('.row--selected').count(),1,'Clicking the selected row closed its inspector');
+  const workbenchParses=await page.evaluate(()=>window.captureTest.inspectorLoads);
+  await workbenchTable.focus();
+  await page.keyboard.press('ArrowDown');
+  await workbenchInspector.getByRole('region',{name:'Event fields',exact:true}).getByText('live-119',{exact:true}).waitFor();
+  await page.keyboard.press('ArrowUp');
+  await workbenchInspector.getByRole('region',{name:'Event fields',exact:true}).getByText('live-120',{exact:true}).waitFor();
+  await page.clock.runFor(100);
+  assert.deepEqual(await workbenchLayout(page),unselectedLayout,'Keyboard selection moved visible rows');
+  assert.ok(await page.evaluate(()=>window.captureTest.inspectorLoads)>workbenchParses,'Keyboard selection left old inspector evidence');
+  // Navigation keys inside an inspector control must not select another event.
+  await workbenchInspector.getByRole('tab',{name:'Fields',exact:true}).focus();
+  await page.keyboard.press('ArrowDown');
+  assert.ok((await page.locator('.row--selected').textContent()).includes('LiveEvent120'));
+  const workbenchFields=workbenchInspector.getByRole('region',{name:'Event fields',exact:true});
+  await workbenchFields.getByRole('button',{name:/requestParameters/}).click();
+  await workbenchFields.getByRole('button',{name:/items/}).click();
+  await page.clock.runFor(100);
+  const tableScrollBefore=await workbenchTable.evaluate(el=>el.scrollTop);
+  await workbenchFields.evaluate(el=>{el.scrollTop=el.scrollHeight});
+  await page.clock.runFor(100);
+  const inspectorScroll=await workbenchFields.evaluate(el=>el.scrollTop);
+  assert.ok(inspectorScroll>0,'Inspector fields did not have their own scroll area');
+  assert.equal(await workbenchTable.evaluate(el=>el.scrollTop),tableScrollBefore,'Scrolling fields moved the event list');
+  await workbenchTable.evaluate(el=>{el.scrollTop=320});
+  await page.clock.runFor(100);
+  assert.equal(await workbenchFields.evaluate(el=>el.scrollTop),inspectorScroll,'Scrolling events moved the inspector');
+  assert.equal(await workbenchTable.evaluate(el=>el.scrollTop),320,'Event list did not scroll independently');
+  const retainedSelection=await page.evaluate(()=>window.captureTest.inspectorLoads);
+  await page.clock.runFor(500);
+  assert.equal(await page.evaluate(()=>window.captureTest.inspectorLoads),retainedSelection,'Scrolling reparsed selected evidence');
+  await workbenchTable.evaluate(el=>{el.scrollTop=0});
+  await workbenchFields.evaluate(el=>{el.scrollTop=0});
+  const workbenchTheme=await page.evaluate(()=>document.documentElement.dataset.theme);
+  for(const theme of ['graphite','light']) {
+    await page.evaluate(theme=>{document.documentElement.dataset.theme=theme},theme);
+    for(const width of [1440,960]) {
+      await page.setViewportSize({width,height:720});
+      await page.clock.runFor(100);
+      await checkWorkbenchFits(page);
+      await page.screenshot({path:path.join(output,`workbench-${theme}-${width}.png`),fullPage:true});
+    }
+  }
+  await page.evaluate(theme=>{if(theme===undefined)delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=theme},workbenchTheme);
+  const beforeClose=await workbenchLayout(page);
+  await workbenchInspector.getByRole('button',{name:'Close inspector',exact:true}).click();
+  await page.clock.runFor(100);
+  assert.equal(await page.locator('.row--selected').count(),0,'Close inspector left a selected event');
+  assert.deepEqual(await workbenchLayout(page),beforeClose,'Closing the inspector changed event-row geometry');
+  await checkWorkbenchFits(page);
+  await page.setViewportSize({width:1440,height:1000});
   // Invalid draft syntax must never replace an applied search. A failed engine
   // request must keep older evidence explicitly labelled until a successful retry.
   await page.goto('http://127.0.0.1:5181/?recovery');
@@ -380,7 +476,13 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.clock.runFor(100);
   await page.screenshot({path:path.join(output,'inspector-large.png'),fullPage:true});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
-  await page.getByRole('button',{name:'{ } Raw JSON',exact:true}).click();
+  await page.getByRole('tab',{name:'Original JSON',exact:true}).click();
+  const inlineOriginal=page.getByRole('tabpanel',{name:'Original JSON',exact:true});
+  assert.ok((await inlineOriginal.locator('pre').textContent()).includes('9007199254740993'));
+  assert.ok((await inlineOriginal.locator('pre').textContent()).length<=32769,'Workbench mounted the complete large source');
+  await inlineOriginal.getByRole('button',{name:'Next text segment',exact:true}).click();
+  await inlineOriginal.getByText('Segment 2 of',{exact:false}).waitFor();
+  await inlineOriginal.getByRole('button',{name:'Open full JSON',exact:true}).click();
   const rawDialog=page.getByRole('dialog',{name:'Raw JSON',exact:true});
   assert.ok((await rawDialog.locator('pre').textContent()).includes('9007199254740993'));
   assert.ok((await rawDialog.locator('pre').textContent()).length<=32769);
@@ -391,7 +493,12 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.screenshot({path:path.join(output,'inspector-raw.png'),fullPage:true});
   await page.keyboard.press('Escape');
   await rawDialog.waitFor({state:'hidden'});
+  await page.getByRole('tab',{name:'Fields',exact:true}).click();
   await fields.waitFor({state:'visible'});
+  await fields.evaluate(el=>{el.scrollTop=el.scrollHeight});
+  await page.clock.runFor(100);
+  await fields.getByText('51–100 of 20,000',{exact:true}).waitFor();
+  assert.equal(await page.evaluate(()=>window.captureTest.inspectorLoads),parsedOnce,'Switching inspector tabs reparsed the original event');
   // Late details must not replace a different event; failures have an explicit retry.
   await page.goto('http://127.0.0.1:5181/?recovery');
   await page.evaluate(()=>{
@@ -401,7 +508,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   });
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.locator('.row').getByText('RunInstances',{exact:true}).click();
-  await page.getByText('Loading event…',{exact:true}).waitFor();
+  await page.getByText('Loading original event…',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>typeof window.captureTest.resolveRaw),'function','delayed detail request was not started');
   await page.locator('.etbody').evaluate(el=>{el.scrollTop=0});
   await page.clock.runFor(100);
@@ -410,12 +517,15 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.evaluate(()=>window.captureTest.resolveRaw());
   await page.clock.runFor(100);
   assert.equal(await fields.getByText('saved-1',{exact:true}).count(),0,'late response replaced selected evidence');
+  await page.getByRole('tab',{name:'Lineage',exact:true}).click();
   await page.getByRole('button',{name:'Retry lineage',exact:true}).waitFor();
   await page.evaluate(()=>{window.captureTest.failLineage=false});
   await page.getByRole('button',{name:'Retry lineage',exact:true}).click();
+  await page.getByRole('button',{name:'Retry lineage',exact:true}).waitFor({state:'hidden'});
+  await page.getByRole('tab',{name:'Fields',exact:true}).click();
   await fields.getByText('second-event',{exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'Retry lineage',exact:true}).count(),0);
-  await page.locator('.row').getByText('LiveEvent2',{exact:true}).click();
+  await page.getByRole('button',{name:'Close inspector',exact:true}).click();
   await page.evaluate(()=>{window.captureTest.failRaw=true});
   await page.locator('.row').getByText('LiveEvent2',{exact:true}).click();
   await page.getByRole('button',{name:'Retry event',exact:true}).waitFor();
@@ -468,6 +578,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   });
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.locator('.row').getByText('RunInstances',{exact:true}).click();
+  await page.getByRole('tab',{name:'Lineage',exact:true}).click();
   await page.getByText('principal observed',{exact:true}).waitFor();
   await page.getByRole('button',{name:'⤢ View full lineage',exact:true}).click();
   await page.locator('.lgv-error').getByText('Graph query unavailable',{exact:false}).waitFor();
@@ -822,16 +933,17 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.screenshot({path:path.join(output,'labels-settings.png'),fullPage:true});
   assert.ok(await page.locator('.settings-modal').evaluate(el=>el.scrollWidth<=el.clientWidth),'label editor overflowed');
   await page.locator('.settings-head .icon-btn').click();
-  await page.locator('.c-ident .alias-badge').getByText('Prod audit role',{exact:true}).waitFor();
+  await page.locator('.workbench-action-meta .alias-badge').getByText('Prod audit role',{exact:true}).waitFor();
   await accountField.getByText('Production account',{exact:true}).waitFor();
+  await page.getByRole('tab',{name:'Lineage',exact:true}).click();
   const lineageLabel=page.locator('.lg-node--current .alias-badge');
   await lineageLabel.getByText('Prod audit role',{exact:true}).waitFor();
   assert.ok(await lineageLabel.evaluate(el=>{const badge=el.getBoundingClientRect(),node=el.closest('.lg-node').getBoundingClientRect();return badge.width>0&&badge.left>=node.left&&badge.right<=node.right}),'lineage label is clipped');
-  assert.equal(await page.evaluate(()=>window.captureTest.inspectorLoads),parsedBeforeLabels,'label changes reparsed an expanded event');
-  await page.getByRole('button',{name:'{ } Raw JSON',exact:true}).click();
-  const labeledOriginal=await page.getByRole('dialog',{name:'Raw JSON',exact:true}).locator('pre').textContent();
+  assert.equal(await page.evaluate(()=>window.captureTest.inspectorLoads),parsedBeforeLabels,'label changes reparsed an inspected event');
+  await page.getByRole('tab',{name:'Original JSON',exact:true}).click();
+  const labeledOriginal=await page.getByRole('tabpanel',{name:'Original JSON',exact:true}).locator('pre').textContent();
   assert.ok(labeledOriginal.includes(labeledArn));assert.ok(!labeledOriginal.includes('Prod audit role')&&!labeledOriginal.includes('Production account')&&!labeledOriginal.includes('VPN egress'));
-  await page.keyboard.press('Escape');
+  await page.getByRole('tab',{name:'Fields',exact:true}).click();
   await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:path.join(output,'labels-inspector.png'),fullPage:true});
   const searchesBeforeLabelPivot=await page.evaluate(()=>window.captureTest.searchCalls.length);
