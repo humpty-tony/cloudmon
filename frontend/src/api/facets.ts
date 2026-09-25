@@ -23,14 +23,14 @@ export interface FacetFieldDef {
 }
 
 export const FACET_VALUE_LIMIT = 25;
-export const DEFAULT_FACET_FIELDS: FilterField[] = ["eventSource", "userName", "result"];
+export const DEFAULT_FACET_FIELDS: FilterField[] = ["eventSource", "userName", "sourceIPAddress", "result"];
 export const FACET_FIELDS: FacetFieldDef[] = [
   { field: "eventSource", label: "Service" },
   { field: "userName", label: "User / issuer name" },
+  { field: "sourceIPAddress", label: "Source IP" },
   { field: "result", label: "Result" },
   { field: "accountId", label: "Account" },
   { field: "awsRegion", label: "Region" },
-  { field: "sourceIPAddress", label: "Source address" },
   { field: "eventName", label: "Event name" },
   { field: "errorCode", label: "Error code" },
   { field: "roleArn", label: "Role ARN" },

@@ -8,7 +8,7 @@ Ship implementation first. Reuse existing engines and checks; perform a narrow t
 
 ## Unique tasks, in integration order
 
-- [ ] **AR-1 — Compact facets.** Four useful default groups; per-value distribution bars; one count-scope label; searchable returned values and exact literal filters; per-group metadata disclosure; selected missing/excluded values stay removable. Owned by facet worker: `FacetSidebar.tsx`, `facet-sidebar.css`, `api/facets.ts` only.
+- [x] **AR-1 — Compact facets.** Four useful default groups; per-value distribution bars; one count-scope label; searchable returned values and exact literal filters; per-group metadata disclosure; selected missing/excluded values stay removable. Owned by facet worker: `FacetSidebar.tsx`, `facet-sidebar.css`, `api/facets.ts` only.
 - [x] **AR-2 — Workbench composition.** Tight search/source/scope chrome, full-height facet rail, event results and collapsible histogram above the grid (not above inspector), retained optional activity summary. Parent-owned App/workbench/toolbar composition.
 - [ ] **AR-3 — Event grid and navigation.** Recorded target/resource summary in normal bounded row transport; useful default columns; previous/next inspector actions. Preserve row virtualization, custom columns and exact source retrieval. Parent-owned row projection/model/grid/presets; coordinate optional inspector navigation props with AR-4.
 - [ ] **AR-4 — Meaning-first inspector.** Deterministic outcome headline, concise actor/session, recorded target, origin, contextual lineage action, evidence disclosure. Exact Fields/Original and existing safety/compatibility retained. Inspector worker owns `EventOverview.tsx`, `EventInspector.tsx`, `event-inspector.css`, optional new `api/eventPresentation.ts`.
@@ -25,4 +25,5 @@ Ship implementation first. Reuse existing engines and checks; perform a narrow t
 
 ## Progress log
 
-- Planning: tasks separated; two non-overlapping workers (facets and inspector), parent owns shared integration. Production implementation underway; no task checked complete yet.
+- AR-2 committed as `4b3d721`; build passed.
+- AR-1 integrated: four compact groups, scoped bars, literal selections and progressive metadata. Worker facet contracts and focused browser smoke passed; parent combined build and diff check passed. Final actual-shell screenshots remain AR-7.
