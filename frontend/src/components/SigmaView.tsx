@@ -1,3 +1,4 @@
+import {WorkspaceActivity, useWorkspaceActive} from "./WorkspaceActivity";
 import { SigmaSuite } from "./SigmaSuite";
 import { LineageView } from "./LineageView";
 import { hasCredentialLineage } from "../api/types";
@@ -8,6 +9,7 @@ import type { TimeZonePref } from "../api/settings";
 import type { CloudTrailEvent, FilterField, Lineage, QueryOp } from "../api/types";
 import { CodeEditor } from "./CodeEditor";
 import { EventTable } from "./EventTable";
+import { EventInspector } from "./EventInspector";
 import { Popover, ColumnsMenu } from "./Toolbar";
 import { BUNDLED_RULES, deleteUserRule, loadUserRules, saveUserRule, type SigmaRuleEntry } from "../api/sigmaRules";
 
@@ -21,7 +23,7 @@ detection:
   condition: selection
 level: high`;
 
-interface Props {
+export interface SigmaViewProps {
   columns: ColumnDef[];
   visibleCols: string[];
   colWidths: Record<string, number>;
@@ -35,7 +37,8 @@ interface Props {
   onOpenLineage: (seq: number) => void;
 }
 
-export function SigmaView(p: Props) {
+export function SigmaView(p: SigmaViewProps) {
+  const workspaceActive = useWorkspaceActive();
   const [rule, setRule] = useState(STARTER);
   const [out, setOut] = useState<SigmaOutcome | null>(null);
   const [running, setRunning] = useState(false);
@@ -142,8 +145,10 @@ export function SigmaView(p: Props) {
 
   return (
     <div className="sigma-workbench">
-      <nav className="sg-mode" aria-label="Sigma mode"><button className="btn-ghost" aria-pressed={mode==="single"} onClick={()=>setMode("single")}>Single rule</button><button className="btn-ghost" aria-pressed={mode==="suite"} onClick={()=>{cancel();setMode("suite")}}>Rule suite</button><span>Matches are leads to investigate; they do not establish malicious activity.</span></nav>
-      {mode==="suite"?<SigmaSuite saved={userRules} onOpen={(yaml,result)=>{loadRule(yaml);setOut(result);setMode("single")}}/>:<div className="sigma">
+      <div className="sg-snapshot">Scope: all loaded evidence. Workbench filters are not applied; the Sigma engine evaluates the full snapshot. Use rule conditions to narrow matches.</div>
+      <div className="sg-mode"><button className="btn-ghost" onClick={()=>setMode(mode==="single"?"suite":"single")}>{mode==="single"?"Rule suite":"Rule editor"}</button><span>Matches are leads to investigate; they do not establish malicious activity.</span></div>
+      <WorkspaceActivity.Provider value={workspaceActive && mode==="suite"}><div className="sg-suite-container" hidden={mode!=="suite"} style={{display:mode==="suite"?"flex":"none",flex:1,minHeight:0}}><SigmaSuite saved={userRules} onOpen={(yaml,result)=>{loadRule(yaml);setOut(result);setMode("single")}}/></div></WorkspaceActivity.Provider>
+      <WorkspaceActivity.Provider value={workspaceActive && mode==="single"}><div className="sigma" hidden={mode!=="single"} style={mode==="single"?undefined:{display:"none"}}>
       {/* LEFT - matches */}
       <div className="sg-pane sg-left">
         <div className="sg-head">
@@ -171,6 +176,7 @@ export function SigmaView(p: Props) {
           {status === "valid" && events.length > 0 && (
             <>
               <EventTable
+                detailMode="external"
                 events={events}
                 columns={p.columns}
                 colWidths={p.colWidths}
@@ -202,6 +208,7 @@ export function SigmaView(p: Props) {
             </>
           )}
         </div>
+        {selected&&<EventInspector event={selected} snapshot={out?.snapshot??undefined} rawJSON={selectedRaw} rawError={selectedRawError} lineage={selectedLineage} lineageError={selectedLineageError} onRetry={retryDetail} onPivot={p.onPivot} onOpenLineage={setGraphSeq} onClose={()=>{++detailReq.current;setSelected(null)}} timeZone={p.timeZone}/>}
       </div>
 
       <div className="sg-divider" />
@@ -260,8 +267,8 @@ export function SigmaView(p: Props) {
           )}
         </div>
       </div>
-    </div>}
-    {graphSeq!=null&&out?.snapshot&&<LineageView seq={graphSeq} initialSnapshot={out.snapshot} onClose={()=>setGraphSeq(null)} onPivot={p.onPivot}/>}
+    </div>
+    {graphSeq!=null&&out?.snapshot&&<LineageView seq={graphSeq} initialSnapshot={out.snapshot} onClose={()=>setGraphSeq(null)} onPivot={p.onPivot}/>}</WorkspaceActivity.Provider>
     </div>
   );
 }

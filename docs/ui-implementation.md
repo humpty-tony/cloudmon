@@ -4,12 +4,14 @@
 
 ## Current checkpoint
 
+**Shipping-first correction:** finish and commit the remaining implementation. Use one build plus focused changed-workflow smoke checks; no new agents, repeated audit matrices or full-suite loops. Outstanding full-integration validation remains explicitly deferred, not silently claimed.
+
 - Main checkout: `/home/humpty/projects/cloudmon`
 - Active implementation branch: `feat/vector-workbench`
 - Verified baseline/design commit: `d6953e5` — `docs(ui): preserve Vector roadmap and visual reference`
 - Original production baseline: `a4afbf3`
 - User authorized real implementation and incremental commits. No push or merge has been requested.
-- **Pass 1 (visible Vector integration) is implemented and locally verified.** Navigation (`ea490a0`) and truthful facets (`8cb90ca`) are committed. The checkpoint containing this update integrates the full-width grid, compact chrome and bottom context/lineage dock, with tab continuity and issuance-lifetime regressions. **This is not full-product acceptance.** Consolidated Hunt, in-grid summary/around and unified source controls remain pending, followed by the final integrated verification pass.
+- **Pass 1 (visible Vector integration) is implemented and locally verified.** Navigation (`ea490a0`) and truthful facets (`8cb90ca`) are committed. The checkpoint containing this update integrates the full-width grid, compact chrome and bottom context/lineage dock, with tab continuity and issuance-lifetime regressions. **This is not full-product acceptance.** Hunt is now integrated with its focused checks passing. In-grid summary/around and unified source controls remain pending, followed by one bounded final integration pass.
 - Tested navigation implementation checkpoint: `ea490a0` — `feat(ui): preserve review state across workspace navigation`. Parent working tree was clean after this commit; the component worktrees retain separate unfinished work.
 - Committed regressions: `frontend/scripts/check-vector-workbench.cjs` and `frontend/scripts/check-workspace-overlays.cjs`, both wired into Linux CI. Remote CI has not been run.
 - Do not discard, reset, or overwrite this work when resuming. Inspect `git status` and the diff first.
@@ -84,7 +86,7 @@ The browser baseline includes capture bridge fixtures, not real AWS provisioning
 
 ### Exact next action
 
-**Latest checkpoint:** the real Workbench now has a compact six-column grid and bottom Context/Fields/Original dock; navigation, facets and inspector integration checks pass. No agents are running. **Next: pass 2**, reusing the preserved Hunt implementation and saved-Hunt repair, then integrating the existing summary/around and source workflows. Inspect actual deltas first; combine nested mode activity with parent activity and preserve saved-definition identity. **Pass 3** is the final integrated verification/fix pass. No new mockups, worker fan-out or repeated component review cycles. The dispatch paragraphs below are historical, not live ownership.
+**Latest checkpoint:** the real Workbench now has a compact six-column grid and bottom Context/Fields/Original dock; navigation, facets and inspector integration checks pass. No agents are running. **Next: finish pass 2**, integrating the existing summary/around and source workflows. Hunt and its saved-selection fix are now integrated and checked; do not reimplement or rerun its completed checks. Inspect actual deltas first; combine nested mode activity with parent activity and preserve saved-definition identity. **Pass 3** is the final integrated verification/fix pass. No new mockups, worker fan-out or repeated component review cycles. The dispatch paragraphs below are historical, not live ownership.
 
 The interrupted fix/audit/reviews resumed in batch `deleg_afac83f6` (worker IDs below). Verify their current status after any reset rather than assuming they remain live. On delivery, inspect/apply only the overlay fix delta, rerun its regressions and navigation/build checks, resolve UX findings, and obtain fresh code review before committing implementation. The three component patches are complete in isolated worktrees and parent-rerun checks pass, but independent reviewers rejected uncovered edge cases. Targeted fixes and integration are pending; current ownership/findings are recorded in `ui-reviews/component-verification.md`. Do not reimplement the old query-draft fix or restart finished component implementation.
 
@@ -137,13 +139,16 @@ The current secondary Hunt bar and contextual Analysis return control are transi
 - [ ] Keep neighbor inspection and temporary original-evidence previews separate from the anchor.
 - [ ] Verify return scope, draft, selection, and scroll; review and commit.
 
-## Phase 5 — consolidated Hunt (isolated checks verified; not integrated)
+## Phase 5 — consolidated Hunt (integrated; build and focused checks pass)
 
 - [x] Implement/test one HuntWorkspace with Indicators, Rules, and Sequences in the isolated Hunt worktree.
 - [x] Parent rerun verifies draft/result retention across modes and hidden destination switches in the isolated fixture; activation/portal integration remains pending.
 - [x] Parent rerun: nine Hunt check groups cover saved routing/scope, cancellation/snapshots, diagnostics, suites, shared inspection and layout; isolated build passes.
-- [ ] Integrate with the parent using existing SigmaView props plus the current review filter.
-- [ ] Review, run relevant existing/new checks, and commit.
+- [x] Integrate one HuntWorkspace into the parent; Indicators, Rules and Sequences retain separate drafts/results, with explicit scope and shared inspection.
+- [x] Preserve the parent overlay repairs during the three-way integration. Nested modes combine parent activity with mode visibility, including the rule editor/suite split.
+- [x] Fix cross-mode saved-definition selection so Update/Rename/Delete target the loaded definition; the preserved wrong-target regression passes.
+- [x] Run `npm run build` and `npm run check:hunt-workspace` successfully: the existing nine workspace groups plus the saved-selection regression. No additional review loop or full-suite/native rerun.
+- [ ] Migrate legacy whole-App test selectors for the consolidated tabs/shared inspector during the final bounded integration pass; those older scripts were not rerun for this slice.
 
 ## Phase 6 — source control and utilities (not started)
 
@@ -166,7 +171,7 @@ The current secondary Hunt bar and contextual Analysis return control are transi
 
 ## Parallel-work handoff
 
-The three implementation workers completed in `deleg_0274768f`. The parent verified each patch equals its worktree index, contains only owned files, and applies cleanly to the main checkout; checks were rerun independently. **Historical dispatch:** facets are now integrated/committed (`8cb90ca`), and the lower inspector is integrated in this checkpoint; Hunt still awaits integration. Patch digests, parent-run commands and evidence boundaries are recorded in `ui-reviews/component-verification.md`. **Do not restart completed implementation after a reset.** Independent reviews were interrupted by provider limits, resumed, and returned rejection findings. Targeted fix workers were stopped; their preserved deltas remain on disk without active ownership; see `ui-reviews/component-verification.md`.
+The three implementation workers completed in `deleg_0274768f`. The parent verified each patch equals its worktree index, contains only owned files, and applies cleanly to the main checkout; checks were rerun independently. **Historical dispatch:** facets are now integrated/committed (`8cb90ca`), and the lower inspector is integrated in this checkpoint; Hunt is now integrated with build/workspace/saved-selection checks passing. Patch digests, parent-run commands and evidence boundaries are recorded in `ui-reviews/component-verification.md`. **Do not restart completed implementation after a reset.** Independent reviews were interrupted by provider limits, resumed, and returned rejection findings. Targeted fix workers were stopped; their preserved deltas remain on disk without active ownership; see `ui-reviews/component-verification.md`.
 
 ### Facets
 

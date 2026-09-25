@@ -8,6 +8,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "check:capture-ui": "node scripts/check-capture-ui.cjs",
+    "check:hunt-workspace": "node scripts/check-hunt-workspace.mjs && node scripts/check-hunt-saved-selection.mjs",
     "check:workbench": "node scripts/check-vector-workbench.cjs",
     "check:vector-layout": "node scripts/check-vector-layout.mjs",
     "check:inspector-dock": "node scripts/check-inspector-dock.mjs",

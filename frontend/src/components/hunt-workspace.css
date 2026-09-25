@@ -1,0 +1,94 @@
+.hunt-workspace { display:flex; flex-direction:column; flex:1; min-width:0; min-height:0; color:var(--tx-1); background:var(--bg-0); }
+.hw-toolbar { display:flex; align-items:center; gap:16px; padding:8px 16px; flex:none; border-bottom:1px solid var(--line-struct); background:var(--bg-1); }
+.hw-toolbar [role="tablist"] { display:flex; border:1px solid var(--border-fn); border-radius:3px; overflow:hidden; }
+.hw-toolbar [role="tab"] { border:0; border-right:1px solid var(--border-fn); background:transparent; color:var(--tx-2); padding:7px 14px; font:inherit; font-size:12px; cursor:pointer; }
+.hw-toolbar [role="tab"]:last-child { border-right:0; }
+.hw-toolbar [aria-selected="true"] { color:var(--acc-text); background:var(--acc-sel); }
+.hw-toolbar > span { margin-left:auto; color:var(--tx-3); font-size:12px; }
+.hw-panel { display:flex; flex:1; min-height:0; min-width:0; }
+.hunt-workspace [hidden] { display:none !important; }
+
+/* Independent scrolling authoring rail and bounded result/inspection dock. */
+.hunt-workspace .hunt-view { display:grid; grid-template-columns:330px minmax(0,1fr); padding:0; overflow:hidden; }
+.hunt-workspace .hunt-author { padding:14px 16px; overflow:auto; min-width:0; min-height:0; border-right:1px solid var(--line-struct); background:var(--bg-1); }
+.hunt-workspace .analysis-heading { margin:0 0 14px; gap:8px; }
+.hunt-workspace .analysis-heading > div { min-width:0; }
+.hunt-workspace .analysis-heading h1 { margin:0; font-size:14px; letter-spacing:0; }
+.hunt-workspace .analysis-heading button { font-size:12px; padding:6px 10px; }
+.hunt-workspace .analysis-controls { display:flex; flex-direction:column; align-items:stretch; padding:10px 0; gap:10px; border:0; border-radius:0; background:transparent; }
+.hunt-workspace .analysis-controls label { flex-wrap:wrap; justify-content:space-between; min-width:0; }
+.hunt-workspace .analysis-controls select { max-width:100%; font-size:12px; padding:6px; }
+.hunt-workspace .hunt-input { margin:12px 0; line-height:1.55; }
+.hunt-workspace .hunt-input textarea { height:200px; min-height:120px; max-height:380px; background:var(--bg-0); padding:10px; }
+.hunt-workspace .hunt-input input { padding:9px; }
+.hunt-workspace .hunt-sequence-controls { display:block; }
+.hunt-workspace .hunt-sequence-step { display:flex; align-items:center; gap:6px; }
+.hunt-workspace .hunt-sequence-step .hunt-input { flex:1; min-width:0; }
+.hunt-workspace .hunt-sequence-step > button { padding:6px; font-size:11px; }
+.hunt-workspace .hunt-sequence-actions { display:flex; align-items:center; gap:8px; font-size:11px; color:var(--tx-2); }
+.hunt-workspace .hunt-sequence-rules { font-size:12px; line-height:1.6; color:var(--tx-2); }
+.hunt-workspace .saved-hunts { margin:0 0 8px; padding:9px 0; border:0; border-top:1px solid var(--line-struct); border-bottom:1px solid var(--line-struct); border-radius:0; background:transparent; }
+.hunt-workspace .saved-hunts summary { font-size:12px; }
+.hunt-workspace .saved-hunt-controls { display:flex; flex-direction:column; align-items:stretch; gap:8px; }
+.hunt-workspace .saved-hunt-controls label { min-width:0; width:100%; }
+.hunt-workspace .saved-hunt-controls select,.hunt-workspace .saved-hunt-controls input { width:100%; min-width:0; }
+.hunt-workspace .saved-hunt-actions { gap:6px; }
+.hunt-workspace .saved-hunt-scope { display:block; padding:8px 0; }
+.hunt-workspace .saved-hunt-scope pre { max-width:100%; max-height:180px; overflow:auto; font-size:11px; }
+.hunt-workspace .hunt-output { display:flex; flex-direction:column; min-width:0; min-height:0; overflow:hidden; }
+.hunt-workspace .analysis-result-head { margin:0; padding:10px 14px; border-bottom:1px solid var(--line-struct); font-size:12px; flex:none; }
+.hunt-workspace .analysis-result-head strong { min-width:0; }
+.hunt-workspace .analysis-notice { margin:0; padding:8px 14px; font-size:12px; flex:none; }
+.hunt-workspace .hunt-counts,.hunt-workspace .analysis-notes { margin:0; padding:7px 14px; font-size:12px; flex:none; max-height:140px; overflow:auto; }
+.hunt-workspace .hunt-output > .analysis-scope { margin:0; padding:6px 14px; flex:none; font-size:11px; border-top:1px solid var(--line-struct); }
+.hunt-workspace .hunt-results { display:flex; flex-direction:column; flex:1; min-height:0; border:0; border-radius:0; }
+.hunt-workspace .hunt-list { flex:1; height:auto; min-height:120px; background:var(--bg-0); }
+.hunt-workspace .hunt-card { display:grid; grid-template-columns:minmax(160px,1fr) minmax(220px,1.4fr); grid-template-rows:1fr 1fr; gap:4px 12px; padding:9px 14px; }
+.hunt-workspace .hunt-card > strong { font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.hunt-workspace .hunt-card > time { font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; grid-row:2; }
+.hunt-workspace .hunt-card > span { grid-column:2; grid-row:1; }
+.hunt-workspace .hunt-card > small { grid-column:2; grid-row:2; }
+.hunt-workspace .hunt-inspection { display:flex; flex-direction:column; flex:none; min-height:0; border-top:1px solid var(--border-fn); }
+.hunt-workspace .hunt-match-context { display:flex; align-items:center; flex-wrap:wrap; gap:5px 12px; padding:8px 14px; font-size:11px; background:var(--bg-1); max-height:110px; overflow:auto; }
+.hunt-workspace .hunt-match-context > span { color:var(--tx-2); }
+.hunt-workspace .hunt-step-picks { display:flex; flex-wrap:wrap; gap:5px; width:100%; }
+.hunt-workspace .hunt-step-picks [aria-pressed="true"] { background:var(--acc-sel); color:var(--acc-text); }
+
+/* Scoped dock styling keeps the shared inspector implementation untouched. */
+.hunt-workspace .event-inspector { width:100%; height:290px; flex:none; display:grid; grid-template-columns:minmax(230px,.85fr) minmax(0,1.8fr); grid-template-rows:auto auto minmax(0,1fr); border-left:0; border-top:1px solid var(--line-struct); }
+.hunt-workspace .event-inspector .ei-head { grid-column:1; grid-row:1; padding:10px 14px 6px; }
+.hunt-workspace .event-inspector .ei-eyebrow { display:none; }
+.hunt-workspace .event-inspector .ei-heading h2 { margin:0; font-size:13px; }
+.hunt-workspace .event-inspector .ei-context { grid-column:1; grid-row:2/4; padding:6px 14px 10px; overflow:auto; }
+.hunt-workspace .event-inspector .ei-actions { grid-column:2; grid-row:1; padding:6px 12px; align-items:center; border-left:1px solid var(--line-struct); }
+.hunt-workspace .event-inspector .ei-actions button { padding:6px 8px; }
+.hunt-workspace .event-inspector .ei-tabs { grid-column:2; grid-row:2; gap:16px; padding:0 12px; border-left:1px solid var(--line-struct); }
+.hunt-workspace .event-inspector .ei-tabs button { padding:8px 0; font-size:12px; }
+.hunt-workspace .event-inspector .ei-panel { grid-column:2; grid-row:3; padding:8px 12px; border-left:1px solid var(--line-struct); }
+.hunt-workspace .event-inspector .ei-summary { grid-template-columns:58px minmax(0,1fr); gap:8px; }
+
+/* Rules uses the same author-left, matches-right hierarchy. */
+.hunt-workspace .sigma { display:flex; min-height:0; min-width:0; flex:1; }
+.hunt-workspace .sg-right { order:-1; width:360px; flex:none; border-right:1px solid var(--line-struct); }
+.hunt-workspace .sg-left { flex:1; min-width:0; }
+.hunt-workspace .sg-divider { display:none; }
+.hunt-workspace .sg-mode { padding:5px 14px; background:var(--bg-1); }
+.hunt-workspace .sg-head,.hunt-workspace .sg-ed-head { padding:7px 12px; }
+.hunt-workspace .sg-explanations { padding:6px 12px; max-height:100px; }
+.hunt-workspace .sg-explanations > div { display:inline-flex; margin:4px 8px; }
+.hunt-workspace .sg-explanations small { display:block; }
+.hunt-workspace .sg-foot { max-height:200px; overflow:auto; }
+.hunt-workspace .sigma-suite { grid-template-columns:360px minmax(0,1fr); }
+.hunt-workspace .sg-suite-pick,.hunt-workspace .sg-suite-results { padding:14px; }
+.hunt-workspace .sg-suite-pick { display:flex; flex-direction:column; overflow:hidden; }
+.hunt-workspace .sg-suite-pick > p,.hunt-workspace .sg-suite-heading,.hunt-workspace .sg-suite-actions { flex:none; }
+.hunt-workspace .sg-suite-choices { flex:1; min-height:0; overflow:auto; }
+@media(max-height:850px) {
+  .hunt-workspace .event-inspector { height:250px; }
+  .hunt-workspace .hunt-input textarea { height:180px; }
+}
+@media(max-width:1300px) {
+  .hunt-workspace .hunt-view { grid-template-columns:310px minmax(0,1fr); }
+  .hunt-workspace .sg-right { width:340px; }
+  .hunt-workspace .sigma-suite { grid-template-columns:340px minmax(0,1fr); }
+}

@@ -1,11 +1,12 @@
 import {useEffect,useState,useSyncExternalStore} from "react";
 import {savedHunts,MAX_SAVED_HUNTS,type HuntConfig,type SavedHunt} from "../api/savedHunts";
 
-interface Props {config:HuntConfig;validation:string;busy:boolean;onLoad:(hunt:SavedHunt)=>void}
+interface Props {config:HuntConfig;validation:string;busy:boolean;onLoad:(hunt:SavedHunt)=>void;loaded?:{hunt:SavedHunt}}
 
-export function SavedHuntsPanel({config,validation,busy,onLoad}:Props) {
+export function SavedHuntsPanel({config,validation,busy,onLoad,loaded}:Props) {
   const saved=useSyncExternalStore(savedHunts.subscribe,savedHunts.getSnapshot,savedHunts.getSnapshot);
   const [id,setID]=useState(""),[name,setName]=useState(""),[error,setError]=useState(""),[notice,setNotice]=useState("");
+  useEffect(()=>{if(loaded){setID(loaded.hunt.id);setName(loaded.hunt.name);setError("");setNotice(`Loaded “${loaded.hunt.name}”. Press Run hunt to search.`)}},[loaded]);
   const chosen=saved.items.find(item=>item.id===id);
   useEffect(()=>{if(id&&!chosen){setID("");setName("")}},[id,chosen]);
   const perform=(action:()=>void,message:string)=>{

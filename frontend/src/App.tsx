@@ -37,9 +37,8 @@ import { HelpModal } from "./components/HelpModal";
 import { DEFAULT_THEME } from "./api/themes";
 import { TitleBar } from "./components/TitleBar";
 import { LineageView } from "./components/LineageView";
-import { SigmaView } from "./components/SigmaView";
+import { HuntWorkspace } from "./components/HuntWorkspace";
 import { AnalysisView } from "./components/AnalysisView";
-import { HuntView } from "./components/HuntView";
 import { SettingsModal } from "./components/SettingsModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { installCrashLogging } from "./api/log";
@@ -790,20 +789,15 @@ export default function App() {
         onSettings={() => setSettingsOpen(true)}
       />
       <ComparisonBar />
-      {connected && (uiView === "hunts" || uiView === "sigma") && <nav className="hunt-modebar" aria-label="Hunt modes">
-        <button className={`tb-btn ${uiView === "hunts" ? "active" : ""}`} onClick={() => selectView("hunts")}>Indicators &amp; sequences</button>
-        <button className={`tb-btn ${uiView === "sigma" ? "active" : ""}`} onClick={() => selectView("sigma")}>Rules</button>
-      </nav>}
       {connected && uiView === "analysis" && <div className="context-modebar"><button className="tb-btn" onClick={() => selectView("console")}>← Back to logs</button><span>Activity analysis · Workbench context</span></div>}
       {exportNotice && <div className="search-notice" role="status"><span>{exportNotice}</span>
         {exporting ? <button className="btn-ghost" onClick={()=>exportAbort.current?.abort()}>Cancel export</button>
           : <button className="btn-ghost" onClick={()=>setExportNotice("")}>Dismiss</button>}
       </div>}
       {!connected && <ConnectionScreen onConnect={connect} onRestore={restoreDataset} />}
-      {connected && visitedViews.includes("hunts") && <WorkspaceActivity.Provider value={uiView === "hunts"}><div className="workspace-page" hidden={uiView !== "hunts"}><HuntView filter={filter}/></div></WorkspaceActivity.Provider>}
       {connected && visitedViews.includes("analysis") && <WorkspaceActivity.Provider value={uiView === "analysis"}><div className="workspace-page" hidden={uiView !== "analysis"}><AnalysisView filter={filter}/></div></WorkspaceActivity.Provider>}
-      {connected && visitedViews.includes("sigma") && <WorkspaceActivity.Provider value={uiView === "sigma"}><div className="workspace-page" hidden={uiView !== "sigma"}>
-        <SigmaView
+      {connected && visitedViews.includes("hunts") && <WorkspaceActivity.Provider value={uiView === "hunts"}><div className="workspace-page" hidden={uiView !== "hunts"}>
+        <HuntWorkspace filter={filter}
           columns={columns}
           visibleCols={visibleCols}
           colWidths={colWidths}
