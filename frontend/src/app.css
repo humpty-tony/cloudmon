@@ -1434,6 +1434,9 @@ body { font-feature-settings: "liga", "calt"; }
 .alias-form label { display:flex; flex-direction:column; gap:6px; min-width:0; }
 .alias-form label:nth-child(3),.alias-actions { grid-column:1 / -1; }
 .alias-form input,.alias-form select { width:100%; min-width:0; box-sizing:border-box; padding:8px; color:var(--tx-1); background:var(--bg-0); border:1px solid var(--border-fn); border-radius:4px; font:var(--fs-label) var(--mono); }
+/* Normalize native GTK/WebKit selects to the same compact text-field geometry. */
+.alias-form input,.alias-form select { height:34px; line-height:18px; padding:7px 8px; }
+.alias-form select { appearance:none; -webkit-appearance:none; padding-right:28px; background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' fill='none' stroke='%23949fae' stroke-width='1.5'/%3E%3C/svg%3E"); background-repeat:no-repeat; background-position:right 8px center; }
 .alias-form :disabled { opacity:.65; }
 .alias-actions,.alias-pagination,.alias-list-head { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
 .alias-list-head { margin:15px 0; }

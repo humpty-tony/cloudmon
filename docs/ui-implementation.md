@@ -6,6 +6,13 @@
 
 **ACTIVE PLAN:** [Approved analyst-review tasks](analyst-review-tasks.md). The user approved the new mock and authorized shipping it in separately committed slices. Two narrow workers own facets and inspector; parent owns shared integration. Older pass numbering below is historical. Shipping first, focused checks only, one final integration pass.
 
+### Native overlay correction
+
+- [x] Sources body collapse reproduced/fixed in native WebKitGTK (32px → 601px at 1280×800); scoped content-sized flex basis preserves scroll/focus behavior.
+- [x] Personal-label identifier dropdown normalized to the adjacent input's 34px height, preserving native keyboard selection.
+- [x] Native renderer/Chromium regression checks, actual-App layout smoke and production Wails rebuild passed. Evidence: `ui-reviews/native-overlay-fixes.md`.
+- Running capture was not interrupted or restarted. Native file-chooser/import acceptance remains separate below.
+
 ### Native build checkpoint
 
 - [x] Real Linux production executable built at `build/bin/cloudmon`; generated Wails bindings synchronized.
