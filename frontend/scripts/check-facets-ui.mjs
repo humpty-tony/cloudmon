@@ -57,17 +57,21 @@ try {
   }
   createRoot(node).render(React.createElement(Harness));
  },{records:fixture.records,aliases:fixture.aliases});
- const groups=page.locator('.facet-group');
+ const groups=page.locator('.facet-group:not([hidden])');
  await page.locator('.facets').waitFor();
- assert.deepEqual(await groups.locator('.facet-group-label').allTextContents(),['Service','User / issuer name','Result']);
+ assert.deepEqual(await groups.locator('.facet-group-label').allTextContents(),['Service','User / issuer name','Source IP','Result']);
  assert.match(await page.locator('.facets').innerText(),/Applied query/);
+ await groups.nth(0).locator('.facet-details-toggle').click();
+ await groups.nth(1).locator('.facet-details-toggle').click();
  assert.match(await groups.nth(0).innerText(),/38\s*\/\s*40/);
  assert.match(await groups.nth(1).innerText(),/userName/);
  assert.match(await groups.nth(1).innerText(),/Normalized/);
- assert.equal(await groups.nth(1).locator('.facet-presence').getAttribute('title'),'30 events with a normalized user / issuer name / 40 matching events');
+ assert.match(await groups.nth(1).locator('.facet-presence').innerText(),/30 \/ 40 events with a normalized user \/ issuer name/);
  assert.equal(await groups.nth(1).locator('.facet-missing .facet-row').getAttribute('title'),'No nonempty userIdentity.userName or sessionIssuer.userName');
- assert.match(await groups.nth(1).innerText(),/25 of 30/);
+ assert.match(await groups.nth(1).innerText(),/25 returned \/ 30 distinct/);
  assert.equal(await groups.nth(1).locator(".facet-missing .facet-count").innerText(),"10");
+ await groups.nth(0).locator('.facet-details-toggle').click();
+ await groups.nth(1).locator('.facet-details-toggle').click();
  await fs.mkdir(new URL('../test-results/facets/',import.meta.url),{recursive:true});
  for(const [width,height] of [[1280,800],[1440,960]]){
   await page.setViewportSize({width,height});
@@ -77,9 +81,10 @@ try {
   await page.screenshot({path:new URL(`../test-results/facets/default-${width}.png`,import.meta.url).pathname});
  }
  const add = page.getByLabel('Add facet');
- assert.deepEqual(await add.locator('option').evaluateAll(options=>options.filter(o=>o.value).map(o=>o.value)),['accountId','awsRegion','sourceIPAddress','eventName','errorCode','roleArn','identityType']);
+ assert.deepEqual(await add.locator('option').evaluateAll(options=>options.filter(o=>o.value).map(o=>o.value)),['accountId','awsRegion','eventName','errorCode','roleArn','identityType']);
  await add.selectOption('errorCode');
  const errorGroup=page.locator('.facet-group[data-field="errorCode"]');
+ await errorGroup.locator('.facet-details-toggle').click();
  assert.match(await errorGroup.innerText(),/8\s*\/\s*40/);
  await errorGroup.getByRole('button',{name:'Include missing / empty',exact:true}).click();
  assert.equal(await page.evaluate(()=>window.facetHarness.events.length),32);
@@ -89,13 +94,13 @@ try {
  await errorGroup.getByRole('button',{name:'Exclude AccessDenied',exact:true}).click();
  assert.equal(await page.evaluate(()=>window.facetHarness.events.length),33);
  assert.equal(await errorGroup.getByRole('button',{name:'Exclude AccessDenied',exact:true}).getAttribute('aria-pressed'),'true');
- assert.match(await errorGroup.innerText(),/Count unavailable/);
+ assert.ok(await errorGroup.getByLabel('Count unavailable',{exact:true}).count()>0);
  await errorGroup.getByRole('button',{name:'Clear Error code',exact:true}).click();
  assert.equal(await page.evaluate(()=>window.facetHarness.events.length),40);
  await errorGroup.getByRole('button',{name:'Remove Error code facet',exact:true}).click();
- assert.equal(await errorGroup.count(),0);
+ assert.equal(await errorGroup.isVisible(),false);
  const identityGroup = page.locator('.facet-group[data-field="userName"]');
- await identityGroup.locator('.facet-search summary').click();
+ await identityGroup.locator('.facet-details-toggle').click();
  const search = identityGroup.getByLabel('Find returned User / issuer name values');
  assert.match(await identityGroup.innerText(),/userIdentity\.userName, falling back to sessionIssuer\.userName/);
  assert.match(await identityGroup.innerText(),/Same names group together/);
@@ -113,10 +118,10 @@ try {
   const activeSearch=identityGroup.locator('.facet-value-search');
   assert.equal(await activeSearch.isVisible(),true,'active value search must be visible after rail collapse/reopen even with Find closed');
   assert.match(await activeSearch.innerText(),/Value search: operator-03/);
-  assert.match(await activeSearch.innerText(),/returned values only/);
+  assert.match(await page.locator('.facet-search-scope').innerText(),/returned values only/);
   const clearSearch=identityGroup.getByRole('button',{name:'Clear User / issuer name value search',exact:true});
   assert.equal(await clearSearch.isVisible(),true);
-  assert.match(await identityGroup.locator('.facet-search summary').innerText(),/Top 25 of 30/);
+  assert.match(await identityGroup.locator('.facet-search').innerText(),/25 returned \/ 30 distinct/);
   assert.equal(await page.evaluate(()=>window.facetHarness.events.length),40);
   assert.deepEqual(await page.evaluate(()=>window.facetHarness.terms),[]);
   await page.screenshot({path:new URL(`../test-results/facets/active-search-${width}.png`,import.meta.url).pathname});
@@ -132,7 +137,6 @@ try {
   assert.equal(await identityGroup.locator('.facet-row:not(.facet-missing .facet-row) .facet-include').count(),3);
   assert.equal(await page.evaluate(()=>window.facetHarness.events.length),40);
   assert.deepEqual(await page.evaluate(()=>window.facetHarness.terms),[]);
-  await identityGroup.locator('.facet-search summary').click();
  }
  await search.fill('session*?"quoted"\\suffix');
  assert.match(await identityGroup.innerText(),/Search only the returned values/);
@@ -153,13 +157,14 @@ try {
  assert.deepEqual(await page.evaluate(()=>window.facetHarness.events),['facet-01']);
  await page.getByRole('button',{name:'Clear facet selections',exact:true}).click();
  await identityGroup.getByLabel('Wrap full User / issuer name values').uncheck();
- await identityGroup.locator('.facet-search summary').click();
+ await identityGroup.locator('.facet-details-toggle').click();
  await page.getByRole('button',{name:'Collapse facets',exact:true}).click();
  assert.equal(await page.getByLabel('Facets collapsed').count(),1);
  await page.getByRole('button',{name:'Expand facets',exact:true}).click();
  await page.evaluate(()=>window.facetHarness.setLegacy(true));
- await page.getByText('Presence unavailable',{exact:true}).first().waitFor();
- assert.match(await identityGroup.innerText(),/Missing count unavailable/);
+ await identityGroup.locator('.facet-details-toggle').click();
+ await identityGroup.getByText('Presence unavailable.',{exact:false}).waitFor();
+ assert.match(await identityGroup.innerText(),/Missing count, distinct count and completeness unavailable/);
  assert.doesNotMatch(await identityGroup.innerText(),/999|30 \/ 40 present/);
  await page.evaluate(async records=>{
   const {parseDump}=await import('/src/api/dumpParser.ts');
@@ -167,8 +172,8 @@ try {
   window.facetHarness.setData(parseDump(JSON.stringify(records)));
  },identityFixture.records);
  await identityGroup.getByRole('button',{name:'AdminRole',exact:true}).waitFor();
- assert.equal(await identityGroup.locator('.facet-presence').innerText(),'4/5');
- assert.equal(await identityGroup.locator('.facet-presence').getAttribute('title'),'4 events with a normalized user / issuer name / 5 matching events');
+ assert.match(await identityGroup.locator('.facet-presence').innerText(),/4 \/ 5/);
+ assert.match(await identityGroup.locator('.facet-presence').innerText(),/events with a normalized user \/ issuer name/);
  assert.equal(await identityGroup.locator('.facet-missing .facet-count').innerText(),'1');
  const sameName=identityGroup.getByRole('button',{name:'AdminRole',exact:true});
  assert.equal(await sameName.locator('..').locator('.facet-count').innerText(),'3');

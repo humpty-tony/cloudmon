@@ -15,7 +15,7 @@ try {
   const page=await browser.newPage({viewport:{width,height}}), errors=[];
   page.on('pageerror',e=>errors.push(String(e)));
   page.setDefaultTimeout(5000);
-  const matches=async count=>page.waitForFunction(n=>document.querySelector('.workbench-list-heading strong')?.textContent===`${n} matches`,count);
+  const matches=async count=>page.waitForFunction(n=>document.querySelector('.workbench-list-heading strong')?.textContent===`${n} events`,count);
   await page.goto('http://127.0.0.1:5197');
   assert.equal(await page.evaluate(()=>Boolean(window.go)),false,'No native or cloud bridge allowed');
   await page.getByRole('button',{name:/Import a dump/}).click();
@@ -25,8 +25,8 @@ try {
   const rail=page.getByRole('complementary',{name:'Facets',exact:true});
   const group=field=>rail.locator(`.facet-group[data-field="${field}"]`);
   const identity=group('userName');
-  assert.deepEqual(await rail.locator('.facet-group-label').allTextContents(),['Service','User / issuer name','Result']);
-  assert.equal(await identity.locator('.facet-presence').innerText(),'30/40');
+  assert.deepEqual(await rail.locator('.facet-group:not([hidden]) .facet-group-label').allTextContents(),['Service','User / issuer name','Source IP','Result']);
+  assert.match(await identity.locator('.facet-presence').textContent(),/30 \/ 40/);
   // Excluded values disappear from applied-query aggregates but must remain
   // visible/removable in the real App, not just in a component harness.
   await rail.getByLabel('Add facet').selectOption('errorCode');
@@ -40,7 +40,7 @@ try {
   await error.getByRole('button',{name:'Remove Error code facet',exact:true}).click();
   // Collapse must retain added groups, local value search and wrap choices.
   await rail.getByLabel('Add facet').selectOption('accountId');
-  await identity.locator('.facet-search summary').click();
+  await identity.locator('.facet-details-toggle').click();
   await identity.getByLabel('Find returned User / issuer name values').fill('operator-03');
   await identity.getByLabel('Wrap full User / issuer name values').check();
   await page.getByRole('button',{name:'Collapse facets',exact:true}).click();
@@ -53,10 +53,9 @@ try {
   await identity.getByRole('button',{name:'Clear User / issuer name value search',exact:true}).click();
   await matches(40);
   await group('accountId').getByRole('button',{name:'Remove Account facet',exact:true}).click();
-  await identity.locator('.facet-search summary').click();
   await identity.getByLabel('Wrap full User / issuer name values').uncheck();
-  await identity.locator('.facet-search summary').click();
-  // Check actual allocated space: all three defaults visible without scrolling,
+  await identity.locator('.facet-details-toggle').click();
+  // Check actual allocated space: all four defaults visible without scrolling,
   // no page overflow, and the rail cannot overlap the event grid.
   const geometry=await page.evaluate(()=>{
    const rail=document.querySelector('.facet-selector'), list=rail.querySelector('.facets-scroll');
@@ -75,7 +74,7 @@ try {
   await identity.getByRole('button',{name:'Exclude operator-03',exact:true}).click();
   await matches(expected-1);
   // The remaining sparse record has no service; its derived Result is present.
-  await group('result').getByRole('button',{name:'Success',exact:true}).click();
+  await group('result').getByRole('button',{name:'No error recorded',exact:true}).click();
   await page.locator('.qbar-input').fill('eventName=unapplied');
   await rail.getByRole('button',{name:'Clear facet selections',exact:true}).click();
   await matches(expected);
@@ -86,7 +85,7 @@ try {
   await matches(40);
   await rail.locator('.facets-scroll').evaluate(e=>{e.scrollTop=0});
   await page.locator('.workbench-results .row .c-time').first().click();
-  await page.locator('.ei-heading h2').waitFor();
+  await page.locator('.ei-review-intro h2').waitFor();
   await page.screenshot({path:fileURLToPath(new URL(`integrated-${width}.png`,output))});
   assert.deepEqual(errors,[]);
   console.log(`PASS ${width}x${height}: real import/aggregate scope; removable exclusions; retained facet choices/search; rail geometry; event inspection`);

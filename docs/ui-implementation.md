@@ -6,7 +6,15 @@
 
 **ACTIVE PLAN:** [Approved analyst-review tasks](analyst-review-tasks.md). The user approved the new mock and authorized shipping it in separately committed slices. Two narrow workers own facets and inspector; parent owns shared integration. Older pass numbering below is historical. Shipping first, focused checks only, one final integration pass.
 
-### Latest correction: right-hand SOC/IR event review
+### Analyst-review shipping checkpoint
+
+- [x] AR-1 through AR-6 implemented and separately committed; see `analyst-review-tasks.md` for hashes and scopes.
+- [x] AR-7 bounded integration complete: TypeScript/Vite build, facet contracts/component/actual-App checks, native target search/investigation check and actual-App review/context/Sources smoke at both desktop sizes.
+- [x] Bounded critical UX check repaired contextual return-scroll drift and Sources Tab escape. Main, context and Sources screenshots inspected.
+- [x] Task checkboxes synchronized. No active worker remains. No push or merge authorized/performed.
+- Evidence and explicit limitations: `ui-reviews/analyst-review-shipping.md`. Older broad harnesses and full native/live-cloud/cross-platform acceptance are not claimed. Historical checkpoints below describe earlier layouts and validation, not new pending implementation slices.
+
+### Previous correction: right-hand SOC/IR event review
 
 - [x] Replace the Workbench bottom dock with a vertical right-hand inspector; clearing selection returns that width to the event grid.
 - [x] Default to Overview: outcome/error, account/region/source, recorded resources/request targets, actor/session/MFA when recorded, user agent and evidence identifiers. Fields and exact Original JSON remain available.
