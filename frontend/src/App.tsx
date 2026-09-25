@@ -21,8 +21,9 @@ import { compileQuery } from "./api/queryLang";
 import { buildFilter } from "./api/searchFilter";
 import { fmtClock, fmtStamp } from "./api/time";
 import { QUERY_FIELDS } from "./api/types";
-import { CaptureDescription, removalPrompt } from "./components/RecoveryCard";
+import { removalPrompt } from "./components/RecoveryCard";
 import { ConnectionScreen } from "./components/ConnectionScreen";
+import {SourcesPanel} from "./components/SourcesPanel";
 import { Toolbar } from "./components/Toolbar";
 import { WorkspaceActivity } from "./components/WorkspaceActivity";
 import { QueryBar } from "./components/QueryBar";
@@ -134,6 +135,7 @@ export default function App() {
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
   const [selectedSnapshot, setSelectedSnapshot] = useState<EvidenceSnapshot | null>(null);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
   const [reviewScope, setReviewScope] = useState<ReviewContextScope | null>(null);
   const browseSelection = useRef<{event: CloudTrailEvent | null; snapshot: EvidenceSnapshot | null; cursor: number} | null>(null);
   const [cursorSeq, setCursorSeq] = useState(-1); // anchored to event identity, not row position
@@ -276,6 +278,7 @@ export default function App() {
   };
   const connect = async (cfg: ConnectionConfig) => {
     if (cfg.mode === "import-dump") {
+      if (!backend.live) await backend.stopCapture();
       cfg.dumpPath ? await backend.ingestPath(cfg.dumpPath) : await backend.ingestText(cfg.dumpText);
     } else {
       await backend.setConnection(cfg);
@@ -783,8 +786,17 @@ export default function App() {
     finally { exportAbort.current=null;setExporting(false); }
   };
 
+  const sourcesRecovery = useCallback((state: RecoveryState) => {setSavedCapture(state.capture);setCapturing(state.active);}, []);
+  const restoreSource = async (state: RecoveryState, resume: boolean) => {
+    if (!connected) return restoreDataset(state, resume);
+    if (resume && !state.active) await backend.resumeCapture();
+    else if (!resume && state.active) await backend.stopCapture();
+    sourcesRecovery(await backend.getRecoveryState());
+  };
+
   const commands: Command[] = useMemo(
     () => [
+      { id: "sources", label: "Open Sources…", run: () => setSourcesOpen(true) },
       { id: "cap", label: capturing ? "Pause capture" : "Resume capture", hint: "", run: toggleCapture },
       ...(capInfra ? [{ id: "teardown", label: capInfra.owned ? "Remove capture infrastructure…" : "Disconnect queue…", run: teardownCapture }] : []),
       { id: "follow", label: follow ? "Stop following tail" : "Follow live tail", run: () => (follow ? setFollow(false) : repin()) },
@@ -815,6 +827,7 @@ export default function App() {
         view={uiView}
         onView={selectView}
         onOpenDataset={openDataset}
+        onSources={() => setSourcesOpen(true)}
         onExport={exportSelection}
         onHelp={(t) => setHelp({ open: true, tab: t })}
         onSettings={() => setSettingsOpen(true)}
@@ -886,10 +899,7 @@ export default function App() {
         <div className="workbench-main">
 
 
-      {savedCapture && <div className="capture-status">
-        <details><summary>{capturing ? "Capture running" : savedCapture.phase === "ready" ? "Capture paused" : "Capture needs cleanup"} · {savedCapture.infra.account} · {savedCapture.infra.region} <span>Resources retained after exit</span></summary><CaptureDescription capture={savedCapture} /></details>
-        <button className="btn-ghost" disabled={captureBusy} onClick={teardownCapture}>{savedCapture.infra.owned ? "Remove infrastructure…" : "Disconnect queue…"}</button>
-      </div>}
+      {savedCapture && <div className="capture-status"><span>{capturing ? "Capture running" : savedCapture.phase === "ready" ? "Capture paused" : "Capture needs cleanup"} · {savedCapture.infra.account} · {savedCapture.infra.region}</span><button className="btn-ghost" onClick={() => setSourcesOpen(true)}>Manage Sources</button></div>}
 
       <div className="workbench-body">
         <WorkspaceActivity.Provider value={uiView === "console" && !reviewScope}>
@@ -978,6 +988,9 @@ export default function App() {
         onRepin={repin}
       />}
       </main></WorkspaceActivity.Provider>}
+      {sourcesOpen && <SourcesPanel capturing={capturing}
+        onPause={async () => {await backend.stopCapture(); sourcesRecovery(await backend.getRecoveryState());}}
+        onConnect={connect} onRestore={restoreSource} onRecovery={sourcesRecovery} onClose={() => setSourcesOpen(false)} />}
       {lineageSeq != null && (
         <WorkspaceActivity.Provider value={uiView === "console"}>
         <ErrorBoundary label="Lineage view" onReset={() => setLineageSeq(null)}>

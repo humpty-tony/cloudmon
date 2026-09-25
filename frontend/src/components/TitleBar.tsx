@@ -10,13 +10,14 @@ interface Props {
   view: "console" | "sigma" | "analysis" | "hunts";
   onView: (v: "console" | "sigma" | "analysis" | "hunts") => void;
   onOpenDataset: () => void;
+  onSources: () => void;
   onExport: () => void;
   onExportMatches: () => void;
   onHelp: (tab: string) => void;
   onSettings: () => void;
 }
 
-export function TitleBar({ connected, sourceLabel, canExport, canExportMatches, view, onView, onOpenDataset, onExport, onExportMatches, onHelp, onSettings }: Props) {
+export function TitleBar({ connected, sourceLabel, canExport, canExportMatches, view, onView, onOpenDataset, onSources, onExport, onExportMatches, onHelp, onSettings }: Props) {
   const [menu, setMenu] = useState<null | "file" | "help">(null);
   const close = () => setMenu(null);
   const run = (fn: () => void) => () => {
@@ -101,6 +102,7 @@ export function TitleBar({ connected, sourceLabel, canExport, canExportMatches, 
         </div>
       )}
 
+      <button className="tbar-menubtn tbar-sources" aria-haspopup="dialog" onClick={onSources}>Sources</button>
       {sourceLabel && <span className="tbar-source" title={sourceLabel}>{sourceLabel}</span>}
       <div className="tbar-drag" />
 

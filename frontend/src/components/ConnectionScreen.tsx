@@ -6,6 +6,11 @@ import { RecoveryCard, removalPrompt } from "./RecoveryCard";
 import logo from "../assets/logo.png";
 
 interface Props {
+  embedded?: boolean;
+  initialMode?: ConnectionMode;
+  refresh?: number;
+  onBusyChange?: (busy: boolean) => void;
+  onRecovery?: (state: RecoveryState) => void;
   onConnect: (cfg: ConnectionConfig) => Promise<void>;
   onRestore: (state: RecoveryState, resume: boolean) => Promise<void>;
 }
@@ -68,8 +73,8 @@ function suggestedLogin(err: string | null): string | null {
   return bare ? bare[1].trim() : null;
 }
 
-export function ConnectionScreen({ onConnect, onRestore }: Props) {
-  const [selected, setSelected] = useState<ConnectionMode>("create-infra");
+export function ConnectionScreen({ onConnect, onRestore, embedded = false, initialMode = "create-infra", refresh = 0, onBusyChange, onRecovery }: Props) {
+  const [selected, setSelected] = useState<ConnectionMode>(initialMode);
   const [perms, setPerms] = useState<RequiredPermission[]>([]);
   const [profiles, setProfiles] = useState<AwsProfile[]>([]);
   const [region, setRegion] = useState("us-east-1");
@@ -98,10 +103,11 @@ export function ConnectionScreen({ onConnect, onRestore }: Props) {
   const [recoveryError, setRecoveryError] = useState("");
   const mounted = useRef(true);
   const loadRecovery = async () => {
-    try { const state = await backend.getRecoveryState(); if(mounted.current){setRecovery(state);setRecoveryError("")} }
+    try { const state = await backend.getRecoveryState(); if(mounted.current){setRecovery(state);setRecoveryError("");onRecovery?.(state)} }
     catch(e) { if(mounted.current)setRecoveryError(String(e)) }
   };
-  useEffect(()=>{mounted.current=true;void loadRecovery();return()=>{mounted.current=false}},[]);
+  useEffect(()=>{mounted.current=true;void loadRecovery();return()=>{mounted.current=false}},[refresh]);
+  useEffect(() => {onBusyChange?.(connecting || loginBusy);}, [connecting, loginBusy, onBusyChange]);
   const restore = async (resume: boolean) => {
     if(!recovery)return;
     setConnecting(true);setConnectError(null);
@@ -304,8 +310,8 @@ export function ConnectionScreen({ onConnect, onRestore }: Props) {
   };
 
   return (
-    <div className="connect">
-      <div className="connect-head">
+    <div className={`connect ${embedded ? "connect--embedded" : ""}`}>
+      <div className="connect-head" hidden={embedded}>
         <div className="brand">
           <img className="brand-mark" src={logo} alt="" />
           <span className="brand-name">CloudMon</span>
@@ -322,6 +328,7 @@ export function ConnectionScreen({ onConnect, onRestore }: Props) {
           <button
             key={m.mode}
             className={`mode-card ${selected === m.mode ? "selected" : ""}`}
+            disabled={connecting}
             onClick={() => setSelected(m.mode)}
           >
             <div className="mode-card-head">
