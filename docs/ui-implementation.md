@@ -10,8 +10,8 @@
 - Original production baseline: `a4afbf3`
 - User authorized real implementation and incremental commits. No push or merge has been requested.
 - **Navigation repair is applied to the parent checkout and targeted checks pass.** Repeated scroll/visible-row retention, portal/request deactivation and Source evidence focus containment have regressions. This is a tested local progress checkpoint, **not final UX acceptance**. Facets, lower dock, consolidated Hunt, summary/around and source-control integration remain unfinished.
-- Uncommitted implementation files: `frontend/src/App.tsx`, `frontend/src/components/TitleBar.tsx`, `frontend/src/components/EventTable.tsx`, and `frontend/src/workbench.css`. Test/CI wiring also changes `frontend/package.json`, `frontend/scripts/check-capture-ui.cjs`, and `.github/workflows/build.yml`.
-- New test currently on disk but not committed: `frontend/scripts/check-vector-workbench.cjs`.
+- Tested navigation implementation checkpoint: `ea490a0` — `feat(ui): preserve review state across workspace navigation`. Parent working tree was clean after this commit; the component worktrees retain separate unfinished work.
+- Committed regressions: `frontend/scripts/check-vector-workbench.cjs` and `frontend/scripts/check-workspace-overlays.cjs`, both wired into Linux CI. Remote CI has not been run.
 - Do not discard, reset, or overwrite this work when resuming. Inspect `git status` and the diff first.
 
 ## Checklist rules
@@ -80,7 +80,7 @@ The browser baseline includes capture bridge fixtures, not real AWS provisioning
 - [x] Reproduce Source evidence focus escape (Tab 2, both sizes), then fix and verify forward/backward containment from the loaded source, background inertness, Escape focus return and cleanup.
 - [x] Re-run overlay checks, inspector checks, capture UI and build successfully on the parent checkout; add overlay command to CI.
 - [ ] Perform the next bounded independent integrated review; the initial pre-fix reviews remain historical failures, not approval of this revised tree.
-- [ ] Commit the verified shell/retention slice and record its hash here.
+- [x] Commit tested local navigation/retention progress as `ea490a0`; final integrated review/UX acceptance remains unchecked.
 
 ### Exact next action
 
