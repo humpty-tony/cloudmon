@@ -135,7 +135,7 @@ function SelectedInspector({ event: e, layout = "side", snapshot, rawJSON, rawLo
       </dl>
       {e.errorMessage && <p className="ei-error-message" title={`${e.errorCode || "Error"}: ${e.errorMessage}`}>{e.errorMessage}</p>}
     </div>;
-  const aroundAction = <button className="ei-investigate" disabled={!onInvestigate && !snapshot} title={`Around selected event: ${e.eventName} · ${e.eventID}`} onClick={() => onInvestigate ? handOff(() => onInvestigate(e, snapshot)) : setDialog("investigate")}>{dock || review || onInvestigate ? "Around this event" : "Investigate"}{review && <span aria-hidden="true"> →</span>}</button>;
+  const aroundAction = <button className="ei-investigate" disabled={!snapshot} title={`Around selected event: ${e.eventName} · ${e.eventID}`} onClick={() => onInvestigate ? handOff(() => onInvestigate(e, snapshot)) : setDialog("investigate")}>{dock || review || onInvestigate ? "Around this event" : "Investigate"}{review && <span aria-hidden="true"> →</span>}</button>;
   const evidenceActions = <>
     <button disabled={!snapshot} title={`Sources / versions for selected event: ${e.eventName} · ${e.eventID}`} onClick={() => { setSourceSeq(e.seq); setDialog("sources"); }}>Sources &amp; hashes</button>
     <span className="ei-comparison">{hasRaw ? <PinComparisonButton event={e} json={rawJSON} /> : <button disabled title="Load the original record before pinning">Pin comparison</button>}</span>

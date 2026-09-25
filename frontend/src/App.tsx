@@ -29,6 +29,7 @@ import { QueryBar } from "./components/QueryBar";
 import { FacetSidebar } from "./components/FacetSidebar";
 import { HistogramStrip } from "./components/HistogramStrip";
 import { EventInspector } from "./components/EventInspector";
+import {ReviewContext, REVIEW_RELATIONS, type ReviewContextScope} from "./components/ReviewContext";
 import "./workbench.css";
 import { EventTable } from "./components/EventTable";
 import { StatusBar } from "./components/StatusBar";
@@ -133,6 +134,8 @@ export default function App() {
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
   const [selectedSnapshot, setSelectedSnapshot] = useState<EvidenceSnapshot | null>(null);
+  const [reviewScope, setReviewScope] = useState<ReviewContextScope | null>(null);
+  const browseSelection = useRef<{event: CloudTrailEvent | null; snapshot: EvidenceSnapshot | null; cursor: number} | null>(null);
   const [cursorSeq, setCursorSeq] = useState(-1); // anchored to event identity, not row position
   const [follow, setFollow] = useState(true);
   const [newCount, setNewCount] = useState(0);
@@ -266,6 +269,7 @@ export default function App() {
     streamVersion.current++;
     setConfig(cfg);setDatasetTotal(total);setSavedCapture(capture);setCapturing(active);
     setEvents([]);setTerms([]);setQueryText("");closeInspector();setCursorSeq(-1);setFollow(active);
+    setReviewScope(null);browseSelection.current=null;setSummaryOpen(false);
     // Retain view state within a dataset, never across a source replacement.
     setDatasetSession(n => n + 1);setUiView("console");setVisitedViews(["console"]);setLineageSeq(null);
     setRefreshTick(n=>n+1);setConnected(true);maximizeWindow();
@@ -626,6 +630,28 @@ export default function App() {
     fetchDetail(e);
   }, [selected?.seq, fetchDetail]);
 
+  const beginContext = (event: CloudTrailEvent, snapshot?: EvidenceSnapshot, relation = "all") => {
+    if (!snapshot) return;
+    if (!reviewScope) browseSelection.current = {event: selected, snapshot: selectedSnapshot, cursor: cursorSeq};
+    setFollow(false);
+    setReviewScope({anchor: event, snapshot, relation, minutes: 2});
+  };
+  const endContext = () => {
+    setReviewScope(null);
+    const previous = browseSelection.current; browseSelection.current = null;
+    if (previous) {
+      setSelected(previous.event); setCursorSeq(previous.cursor);
+      if (previous.event) fetchDetail(previous.event, previous.snapshot ?? undefined); else closeInspector();
+    }
+  };
+  const inspectContext = (event: CloudTrailEvent, snapshot: EvidenceSnapshot) => {
+    setSelected(event);setCursorSeq(event.seq);fetchDetail(event, snapshot);
+  };
+  const reviewPivot = (field: FilterField, value: string, op: QueryOp) => {
+    if (reviewScope) endContext();
+    pivot(field, value, op);
+  };
+
   // ---- keyboard ----
   useEffect(() => {
     if (!connected) return;
@@ -635,6 +661,7 @@ export default function App() {
       const el = e.target as HTMLElement;
       const typing = el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        if (reviewScope) return;
         e.preventDefault();
         setPaletteOpen((v) => !v);
         return;
@@ -655,6 +682,7 @@ export default function App() {
       // modifier combos - Ctrl+F, Cmd+F, Ctrl+G, Ctrl+J … belong to the
       // browser/OS, not to the pivot/move keys.
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (reviewScope) return;
       const d = cursorIndex;
       const moveTo = (nd: number) => {
         const ev = rowAtDisplay(nd);
@@ -695,7 +723,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, lineageSeq, uiView, handleRowClick, closeInspector, cursorIndex]);
+  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, lineageSeq, uiView, handleRowClick, closeInspector, cursorIndex, reviewScope]);
 
   const toggleCapture = async () => {
     if(captureBusy)return;
@@ -781,8 +809,8 @@ export default function App() {
       <TitleBar
         connected={connected}
         sourceLabel={connected ? (capInfra ? `${capInfra.account} · ${capInfra.region}` : config?.mode === "import-dump" ? "Imported CloudTrail evidence" : "CloudTrail activity") : undefined}
-        canExport={uiView === "console" && events.length > 0}
-        canExportMatches={uiView === "console" && !exporting && !querying && !queryFailure && resultsFilter.current === filter && !!agg.snapshot}
+        canExport={uiView === "console" && !reviewScope && events.length > 0}
+        canExportMatches={uiView === "console" && !reviewScope && !exporting && !querying && !queryFailure && resultsFilter.current === filter && !!agg.snapshot}
         onExportMatches={exportMatches}
         view={uiView}
         onView={selectView}
@@ -815,7 +843,7 @@ export default function App() {
         />
       </div></WorkspaceActivity.Provider>}
       {connected && <WorkspaceActivity.Provider value={uiView === "console"}><main key={datasetSession} className="workbench-page" hidden={uiView !== "console"}>
-      <div className="workbench-search">
+      <fieldset className="workbench-search" disabled={!!reviewScope}>
         <QueryBar terms={terms} queryText={queryText} error={compiled.error} inputRef={queryInputRef}
           onQueryChange={setQueryText} onRemove={removeQ} onClear={clearQ} />
       <Toolbar compact
@@ -848,10 +876,13 @@ export default function App() {
         onTimeRange={applyTimeRange}
         onClearTime={clearTime}
       />
-      </div>
-      <div className={`workbench-session ${sidebarCollapsed ? "workbench-session--no-filters" : ""}`}>
-        <FacetSidebar facets={facets} collapsed={sidebarCollapsed} activeValues={activeValues} activeExcludes={activeExcludes}
-          onToggleCollapse={() => setSidebarCollapsed(v => !v)} onPick={pivot} />
+      </fieldset>
+      <div className={`workbench-session ${sidebarCollapsed && !reviewScope ? "workbench-session--no-filters" : ""}`}>
+        <div className="workbench-facet-slot">
+          <div className="workbench-facet-holder" hidden={!!reviewScope}><FacetSidebar facets={facets} collapsed={sidebarCollapsed} activeValues={activeValues} activeExcludes={activeExcludes}
+            onToggleCollapse={() => setSidebarCollapsed(v => !v)} onPick={pivot} /></div>
+          {reviewScope && <aside className="review-context-facets" aria-label="Context relationships"><h3>Related activity</h3><p>±{reviewScope.minutes} min · full snapshot</p>{REVIEW_RELATIONS.map(([relation,label]) => <button key={relation} aria-pressed={reviewScope.relation === relation} onClick={() => setReviewScope({...reviewScope, relation})}>{label}</button>)}<p>Counts appear in the results after querying. Browsing facets are retained for your return.</p></aside>}
+        </div>
         <div className="workbench-main">
 
 
@@ -861,7 +892,8 @@ export default function App() {
       </div>}
 
       <div className="workbench-body">
-        <section className="workbench-results" aria-label="Event results">
+        <WorkspaceActivity.Provider value={uiView === "console" && !reviewScope}>
+        <section className="workbench-results" aria-label="Event results" hidden={!!reviewScope}>
           <div className="workbench-list-heading">
             <strong>{agg.total.toLocaleString()} events</strong>
             <span>{stats.errors.toLocaleString()} errors · {stats.principals.toLocaleString()} principals</span>
@@ -890,8 +922,8 @@ export default function App() {
             columns={columns}
             colWidths={colWidths}
             rowHeight={presetKey === "workbench" ? Math.max(rowH, 42) : rowH}
-            selected={selected}
-            cursorSeq={cursorSeq}
+            selected={reviewScope ? browseSelection.current?.event ?? null : selected}
+            cursorSeq={reviewScope ? browseSelection.current?.cursor ?? -1 : cursorSeq}
             follow={follow}
             onSelect={handleRowClick}
             onCursor={setCursorSeq}
@@ -910,18 +942,29 @@ export default function App() {
           />
           <div className="workbench-list-footer">↑ ↓ Inspect events · / Search · {events.length.toLocaleString()} loaded</div>
         </section>
+        </WorkspaceActivity.Provider>
+        {reviewScope && <ReviewContext scope={reviewScope} onChange={setReviewScope} onClose={endContext} onInspect={inspectContext} tableProps={{
+          detailMode: "external", compact: presetKey === "workbench", columns, colWidths, rowHeight: Math.max(rowH,42), selected, cursorSeq,
+          onCursor: setCursorSeq, onPivot: reviewPivot, onResizeColumn: resizeColumn, onReorderColumns: moveColumn,
+          onRetryDetail: retryDetail, onOpenLineage: setLineageSeq, isSensitive: isSensitiveFn, timeZone,
+        }}/>}
         <EventInspector layout="review" event={selected} snapshot={selectedSnapshot ?? undefined} rawJSON={selectedRaw}
           rawLoading={!!selected && !selectedRaw && !selectedRawErr}
           rawError={selectedRawErr ? "Could not load this event." : undefined}
           lineage={selectedLineage} lineageLoading={!!selected && hasCredentialLineage(selected) && !selectedLineage && !selectedLineageError}
-          lineageError={selectedLineageError} onRetry={retryDetail} onPivot={pivot}
+          lineageError={selectedLineageError} onRetry={retryDetail} onPivot={reviewPivot}
+          onInvestigate={(event,snapshot) => beginContext(event,snapshot)}
           onPrevious={() => openAt(cursorIndex-1)} onNext={() => openAt(cursorIndex+1)}
-          canPrevious={cursorIndex>0} canNext={cursorIndex>=0 && cursorIndex<events.length-1}
+          canPrevious={!reviewScope && cursorIndex>0} canNext={!reviewScope && cursorIndex>=0 && cursorIndex<events.length-1}
+          reviewContext={selected && selectedSnapshot ? <section className="review-related" aria-label="Related activity"><h3>Related activity</h3>
+            {REVIEW_RELATIONS.filter(([relation]) => relation !== "all").map(([relation,label]) => <button key={relation} onClick={() => beginContext(selected,selectedSnapshot,relation)}>{label}<span>→</span></button>)}
+            <small>Query ±2 min in the selected snapshot · not just loaded rows</small>
+          </section> : undefined}
           onOpenLineage={setLineageSeq} onClose={closeInspector} timeZone={timeZone} />
       </div>
         </div>
       </div>
-      <StatusBar
+      {reviewScope ? <div className="review-context-status">Contextual activity · fixed evidence snapshot · browsing filters retained</div> : <StatusBar
         streaming={!captureBusy && (savedCapture?.phase === "ready" || (!savedCapture && config?.mode !== "import-dump"))}
         following={follow}
         live={backend.live}
@@ -933,7 +976,7 @@ export default function App() {
         source={capInfra ? `sqs · ${capInfra.region} · ${capInfra.account}` : undefined}
         loading={querying}
         onRepin={repin}
-      />
+      />}
       </main></WorkspaceActivity.Provider>}
       {lineageSeq != null && (
         <WorkspaceActivity.Provider value={uiView === "console"}>
@@ -944,7 +987,7 @@ export default function App() {
             initialSnapshot={uiView === "console" && lineageSeq === selected?.seq ? selectedSnapshot ?? undefined : undefined}
             onClose={() => setLineageSeq(null)}
             onPivot={(f, v, o) => {
-              pivot(f, v, o);
+              reviewPivot(f, v, o);
               setLineageSeq(null);
             }}
           />

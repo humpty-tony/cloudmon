@@ -5,7 +5,7 @@
 .hunt-modebar>span,.context-modebar>span{color:var(--tx-2);font-size:12px}
 .app--workbench{--workbench-filter-width:215px}
 .tbar-source{min-width:0;max-width:32vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--tx-2);margin-left:18px}
-.workbench-search{display:flex;align-items:flex-start;gap:10px;padding:7px 12px;background:var(--bg-1);border-bottom:1px solid var(--line-struct);flex:none;min-width:0}
+.workbench-search{border:0;margin:0;min-inline-size:0;display:flex;align-items:flex-start;gap:10px;padding:7px 12px;background:var(--bg-1);border-bottom:1px solid var(--line-struct);flex:none;min-width:0}
 .workbench-search .qbar-wrap{min-width:180px;flex:1;border:0;padding:0;background:transparent}
 .workbench-search .qbar{min-height:33px;border-radius:3px;box-shadow:none}
 .workbench-search .qbar-input{min-width:0;font-size:12px}
@@ -23,7 +23,25 @@
 .review-lenses .tb-btn{text-align:left;min-height:30px}
 .workbench-session{display:grid;grid-template-columns:var(--workbench-filter-width) minmax(0,1fr);flex:1;min-height:0;overflow:hidden}
 .workbench-session--no-filters{grid-template-columns:40px minmax(0,1fr)}
-.workbench-session>.facets{width:auto;min-width:0;border:0;border-right:1px solid var(--line-struct);border-radius:0;background:var(--bg-0);box-shadow:none}
+.workbench-facet-holder>.facets{width:auto;min-width:0;border:0;border-right:1px solid var(--line-struct);border-radius:0;background:var(--bg-0);box-shadow:none}
+.workbench-facet-slot,.workbench-facet-holder{display:flex;flex-direction:column;min-height:0;min-width:0;height:100%}
+.workbench-facet-holder>.facets{flex:1}
+.workbench-facet-holder[hidden],.workbench-results[hidden]{display:none}
+.workbench-search:disabled{opacity:.65}
+.review-context-facets{padding:10px 12px;overflow:auto;border-right:1px solid var(--line-struct);height:100%}
+.review-context-facets h3{font-size:12px;margin:4px 0 10px}
+.review-context-facets p{font-size:10px;color:var(--tx-3);line-height:1.5}
+.review-context-facets button{display:block;width:100%;text-align:left;border:0;border-radius:3px;padding:8px 6px;color:var(--tx-2);background:transparent;font-size:11px;cursor:pointer}
+.review-context-facets button[aria-pressed="true"]{background:var(--acc-sel);color:var(--acc-text)}
+.review-context-controls{display:flex;align-items:center;gap:12px;padding:8px 12px;font-size:11px;border-bottom:1px solid var(--line-row)}
+.review-context-controls span{font-size:10px;color:var(--tx-2)}
+.review-context-controls select{background:var(--bg-0);color:var(--tx-1);border:1px solid var(--line-struct);border-radius:3px;padding:4px}
+.review-context-notes{font-size:10px;color:var(--tx-2);padding:7px 12px;max-height:110px;overflow:auto;border-bottom:1px solid var(--line-row)}
+.review-related{padding:10px 0;border-bottom:1px solid var(--line-struct)}
+.review-related h3{font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--tx-3);margin:0 0 5px}
+.review-related button{display:flex;justify-content:space-between;width:100%;padding:7px 0;background:none;border:0;border-bottom:1px solid var(--line-row);color:var(--tx-2);text-align:left;font-size:11px;cursor:pointer}
+.review-related button:hover,.review-related button span{color:var(--acc-text)}
+.review-related small{display:block;font-size:9px;color:var(--tx-3);margin-top:6px;line-height:1.5}
 .workbench-main{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden}
 .workbench-body{display:grid;grid-template-columns:minmax(0,1fr) clamp(360px,27vw,400px);grid-template-rows:minmax(0,1fr);flex:1;min-height:0;overflow:hidden}
 .workbench-body>.event-inspector{width:100%}
