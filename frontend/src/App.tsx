@@ -24,6 +24,7 @@ import { QUERY_FIELDS } from "./api/types";
 import { CaptureDescription, removalPrompt } from "./components/RecoveryCard";
 import { ConnectionScreen } from "./components/ConnectionScreen";
 import { Toolbar } from "./components/Toolbar";
+import { WorkspaceActivity } from "./components/WorkspaceActivity";
 import { QueryBar } from "./components/QueryBar";
 import { FacetSidebar } from "./components/FacetSidebar";
 import { HistogramStrip } from "./components/HistogramStrip";
@@ -97,6 +98,7 @@ const save = (k: string, v: unknown) => {
 
 export default function App() {
   const [connected, setConnected] = useState(false);
+  const [datasetSession, setDatasetSession] = useState(0);
   const [config, setConfig] = useState<ConnectionConfig | null>(null);
   const [events, setEvents] = useState<CloudTrailEvent[]>([]); // loaded window, oldest-first (the table flips to newest-on-top)
   const [datasetTotal, setDatasetTotal] = useState(0); // total ingested events (unfiltered)
@@ -146,6 +148,11 @@ export default function App() {
   const [help, setHelp] = useState<{ open: boolean; tab: string }>({ open: false, tab: "getting-started" });
   const [theme, setTheme] = useState<string>(() => load("theme", DEFAULT_THEME));
   const [uiView, setUiView] = useState<"console" | "sigma" | "analysis" | "hunts">("console");
+  const [visitedViews, setVisitedViews] = useState<typeof uiView[]>(["console"]);
+  const selectView = useCallback((view: typeof uiView) => {
+    setUiView(view);
+    setVisitedViews(previous => previous.includes(view) ? previous : [...previous, view]);
+  }, []);
   // ---- user settings (config menu) ----
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sensitiveOverride, setSensitiveOverride] = useState<SensitiveOverride>(() => {
@@ -254,6 +261,8 @@ export default function App() {
     streamVersion.current++;
     setConfig(cfg);setDatasetTotal(total);setSavedCapture(capture);setCapturing(active);
     setEvents([]);setTerms([]);setQueryText("");closeInspector();setCursorSeq(-1);setFollow(active);
+    // Retain view state within a dataset, never across a source replacement.
+    setDatasetSession(n => n + 1);setUiView("console");setVisitedViews(["console"]);setLineageSeq(null);
     setRefreshTick(n=>n+1);setConnected(true);maximizeWindow();
   };
   const connect = async (cfg: ConnectionConfig) => {
@@ -764,20 +773,26 @@ export default function App() {
         canExportMatches={uiView === "console" && !exporting && !querying && !queryFailure && resultsFilter.current === filter && !!agg.snapshot}
         onExportMatches={exportMatches}
         view={uiView}
-        onView={setUiView}
+        onView={selectView}
         onOpenDataset={openDataset}
         onExport={exportSelection}
         onHelp={(t) => setHelp({ open: true, tab: t })}
         onSettings={() => setSettingsOpen(true)}
       />
       <ComparisonBar />
+      {connected && (uiView === "hunts" || uiView === "sigma") && <nav className="hunt-modebar" aria-label="Hunt modes">
+        <button className={`tb-btn ${uiView === "hunts" ? "active" : ""}`} onClick={() => selectView("hunts")}>Indicators &amp; sequences</button>
+        <button className={`tb-btn ${uiView === "sigma" ? "active" : ""}`} onClick={() => selectView("sigma")}>Rules</button>
+      </nav>}
+      {connected && uiView === "analysis" && <div className="context-modebar"><button className="tb-btn" onClick={() => selectView("console")}>← Back to logs</button><span>Activity analysis · Workbench context</span></div>}
       {exportNotice && <div className="search-notice" role="status"><span>{exportNotice}</span>
         {exporting ? <button className="btn-ghost" onClick={()=>exportAbort.current?.abort()}>Cancel export</button>
           : <button className="btn-ghost" onClick={()=>setExportNotice("")}>Dismiss</button>}
       </div>}
-      {!connected ? (
-        <ConnectionScreen onConnect={connect} onRestore={restoreDataset} />
-      ) : uiView === "hunts" ? <HuntView filter={filter}/> : uiView === "analysis" ? <AnalysisView filter={filter}/> : uiView === "sigma" ? (
+      {!connected && <ConnectionScreen onConnect={connect} onRestore={restoreDataset} />}
+      {connected && visitedViews.includes("hunts") && <WorkspaceActivity.Provider value={uiView === "hunts"}><div className="workspace-page" hidden={uiView !== "hunts"}><HuntView filter={filter}/></div></WorkspaceActivity.Provider>}
+      {connected && visitedViews.includes("analysis") && <WorkspaceActivity.Provider value={uiView === "analysis"}><div className="workspace-page" hidden={uiView !== "analysis"}><AnalysisView filter={filter}/></div></WorkspaceActivity.Provider>}
+      {connected && visitedViews.includes("sigma") && <WorkspaceActivity.Provider value={uiView === "sigma"}><div className="workspace-page" hidden={uiView !== "sigma"}>
         <SigmaView
           columns={columns}
           visibleCols={visibleCols}
@@ -791,8 +806,8 @@ export default function App() {
           onPivot={pivot}
           onOpenLineage={setLineageSeq}
         />
-      ) : (
-      <>
+      </div></WorkspaceActivity.Provider>}
+      {connected && <WorkspaceActivity.Provider value={uiView === "console"}><main key={datasetSession} className="workbench-page" hidden={uiView !== "console"}>
       <div className="workbench-context">
         <div><h1>Event workbench</h1><span>{capInfra ? `${capInfra.account} · ${capInfra.region}` : config?.mode === "import-dump" ? "Imported evidence" : "CloudTrail activity"}</span></div>
         <span className="workbench-scope">{datasetTotal.toLocaleString()} recorded events · {backend.live ? "Local evidence" : "Browser preview"}</span>
@@ -835,6 +850,7 @@ export default function App() {
         <div className="workbench-search-tools">
           <button className={`tb-btn ${!sidebarCollapsed ? "active" : ""}`} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(v => !v)}>Filters</button>
           <button className={`tb-btn ${!histCollapsed ? "active" : ""}`} aria-expanded={!histCollapsed} onClick={() => setHistCollapsed(v => !v)}>Histogram</button>
+          <button className="tb-btn" onClick={() => selectView("analysis")}>Summarize</button>
         </div>
         <QueryBar terms={terms} queryText={queryText} error={compiled.error} inputRef={queryInputRef}
           onQueryChange={setQueryText} onRemove={removeQ} onClear={clearQ} />
@@ -908,9 +924,9 @@ export default function App() {
         loading={querying}
         onRepin={repin}
       />
-      </>
-      )}
+      </main></WorkspaceActivity.Provider>}
       {lineageSeq != null && (
+        <WorkspaceActivity.Provider value={uiView === "console"}>
         <ErrorBoundary label="Lineage view" onReset={() => setLineageSeq(null)}>
           <LineageView
             seq={lineageSeq}
@@ -922,6 +938,7 @@ export default function App() {
             }}
           />
         </ErrorBoundary>
+        </WorkspaceActivity.Provider>
       )}
       <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
       <HelpModal

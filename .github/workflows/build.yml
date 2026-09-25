@@ -134,6 +134,12 @@ jobs:
         run: |
           npx playwright install --with-deps chromium --only-shell
           npm run check:capture-ui
+      - name: Workbench navigation and state retention checks
+        if: runner.os == 'Linux'
+        working-directory: frontend
+        run: |
+          npm run check:workbench
+          npm run check:workspace-overlays
       - name: UI interaction performance checks
         if: runner.os == 'Linux'
         working-directory: frontend
@@ -146,6 +152,7 @@ jobs:
           path: |
             frontend/test-results/capture/*.png
             frontend/test-results/performance/*
+            frontend/test-results/vector-workbench/*.png
           if-no-files-found: warn
           retention-days: 7
       - name: Install Wails

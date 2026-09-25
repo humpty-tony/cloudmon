@@ -844,7 +844,8 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   // Sigma does not reuse validity after edits; requests cancel and suites share a snapshot.
   await page.goto('http://127.0.0.1:5181/?recovery');
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
-  await page.getByRole('button',{name:'⬡ Sigma',exact:true}).click();
+  await page.getByRole('button',{name:'Hunt',exact:true}).click();
+   await page.getByRole('button',{name:'Rules',exact:true}).click();
   await page.getByRole('button',{name:'▶ Run',exact:true}).click();
   await page.locator('.sg-pill.valid').getByText('✓ Ran · 1 matches',{exact:true}).waitFor();
   await page.locator('.sigma .row').getByText('RunInstances',{exact:true}).click();
@@ -900,7 +901,8 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('alert').getByText('Error: Suite storage unavailable',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
   // Manual analysis, snapshot drilldown, stale settings, raw evidence and cancellation.
-  await page.getByRole('button',{name:'Analysis',exact:true}).click();
+  await page.getByRole('button',{name:'Workbench',exact:true}).click();
+   await page.getByRole('button',{name:'Summarize',exact:true}).click();
   await page.getByLabel('Compare previous window',{exact:true}).check();
   await page.getByRole('button',{name:'Run analysis',exact:true}).click();
   await page.getByText('New in compared window',{exact:true}).waitFor();
@@ -917,7 +919,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByText('New in compared window',{exact:true}).waitFor();
   await page.setViewportSize({width:960,height:720});
   await page.screenshot({path:path.join(output,'analysis-hunts.png'),fullPage:true});
-  assert.ok(await page.locator('.analysis-view').evaluate(el=>el.scrollWidth<=el.clientWidth),'analysis content overflows');
+  assert.ok(await page.locator('.analysis-view:visible').evaluate(el=>el.scrollWidth<=el.clientWidth),'analysis content overflows');
   await page.getByRole('combobox',{name:'Analysis dimension',exact:true}).click();
   await checkThemedList(page,'Analysis dimension');
   await page.screenshot({path:path.join(output,'analysis-group-by.png'),fullPage:true});
@@ -934,7 +936,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('button',{name:'Run analysis',exact:true}).click();
   await page.getByText('Service overview',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
-  await page.getByRole('button',{name:'Hunts',exact:true}).click();
+  await page.getByRole('button',{name:'Hunt',exact:true}).click();
   assert.ok(await page.getByRole('button',{name:'Run hunt',exact:true}).isDisabled());
   await page.getByLabel('Typed indicators',{exact:true}).fill('ip 192.0.2.1\narn arn:aws:s3:::evidence-bucket/audit/events.json');
   await page.getByRole('button',{name:'Run hunt',exact:true}).click();
@@ -1036,7 +1038,8 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('button',{name:'Remove label VPN egress',exact:true}).click();
   assert.equal(await page.locator('.alias-entry').getByText('VPN egress',{exact:true}).count(),0);
   await page.locator('.settings-head .icon-btn').click();
-  await page.getByRole('button',{name:'Analysis',exact:true}).click();
+  await page.getByRole('button',{name:'Workbench',exact:true}).click();
+   await page.getByRole('button',{name:'Summarize',exact:true}).click();
   await page.getByRole('button',{name:'Run analysis',exact:true}).click();
   const labeledEntity=page.locator('.analysis-entity').filter({hasText:labeledArn});
   await labeledEntity.getByText('Prod audit role',{exact:true}).waitFor();
@@ -1054,7 +1057,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.clock.runFor(500);
   await page.waitForFunction(()=>window.captureTest.searchCalls.at(-1)?.expr?.t==='and');
   const originalHuntScope=await page.evaluate(()=>window.captureTest.searchCalls.at(-1));
-  await page.getByRole('button',{name:'Hunts',exact:true}).click();
+  await page.getByRole('button',{name:'Hunt',exact:true}).click();
   await page.getByLabel('Use console filters',{exact:true}).check();
   const originalHuntIndicators='ip 192.0.2.1\narn arn:aws:s3:::evidence-bucket/audit/events.json';
   const revisedHuntIndicators='ip 198.51.100.10\narn arn:aws:s3:::evidence-bucket/audit/events.json';
@@ -1077,7 +1080,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.clock.runFor(500);
   await page.waitForFunction(()=>window.captureTest.searchCalls.at(-1)?.expr?.value==='eu-west-1');
   const currentHuntScope=await page.evaluate(()=>window.captureTest.searchCalls.at(-1));
-  await page.getByRole('button',{name:'Hunts',exact:true}).click();
+  await page.getByRole('button',{name:'Hunt',exact:true}).click();
   await page.locator('summary').filter({hasText:/^Saved hunts \(1\)$/}).click();
   await page.getByLabel('Saved hunt',{exact:true}).selectOption(savedHunt.id);
   assert.equal(await page.getByLabel('Typed indicators',{exact:true}).inputValue(),'','selecting a saved hunt silently replaced the draft');
@@ -1160,7 +1163,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   },orderedNames);
   await seedOrderedEvents();
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
-  await page.getByRole('button',{name:'Hunts',exact:true}).click();
+  await page.getByRole('button',{name:'Hunt',exact:true}).click();
   await page.getByLabel('Hunt type',{exact:true}).selectOption('sequence');
   for(const label of ['A','B'])assert.ok(await page.getByRole('button',{name:`Remove step ${label}`,exact:true}).isDisabled(),'the minimum sequence can lose a step');
   await page.getByLabel('Step A search',{exact:true}).fill(orderedQueries[0]);
@@ -1197,7 +1200,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.reload();
   await seedOrderedEvents();
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
-  await page.getByRole('button',{name:'Hunts',exact:true}).click();
+  await page.getByRole('button',{name:'Hunt',exact:true}).click();
   await page.locator('summary').filter({hasText:/^Saved hunts \(1\)$/}).click();
   await page.getByLabel('Saved hunt',{exact:true}).selectOption(orderedSaved.id);
   await page.getByRole('button',{name:'Load hunt',exact:true}).click();

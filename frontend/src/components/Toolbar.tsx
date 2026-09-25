@@ -1,5 +1,6 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useWorkspaceActive } from "./WorkspaceActivity";
 import { COLUMNS, COLUMN_BY_KEY } from "../api/columns";
 import type { Preset } from "../api/presets";
 
@@ -66,6 +67,8 @@ export function Popover({
   children: (close: () => void) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const workspaceActive = useWorkspaceActive();
+  useLayoutEffect(() => { if (!workspaceActive) setOpen(false); }, [workspaceActive]);
   const btnRef = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState<Pos>({ top: 0, left: 0 });
 
@@ -82,7 +85,7 @@ export function Popover({
       <button ref={btnRef} className={`tb-btn ${open || active ? "active" : ""}`} onClick={() => setOpen((v) => !v)}>
         {label} <span className="caret">▾</span>
       </button>
-      {open &&
+      {open && workspaceActive &&
         createPortal(
           <>
             <div className="pop-backdrop" onClick={close} />

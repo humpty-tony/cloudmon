@@ -8,6 +8,8 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "check:capture-ui": "node scripts/check-capture-ui.cjs",
+    "check:workbench": "node scripts/check-vector-workbench.cjs",
+    "check:workspace-overlays": "node scripts/check-workspace-overlays.cjs",
     "check:search": "node scripts/check-search.mjs",
     "check:inspector": "node scripts/check-inspector.mjs",
     "check:labels": "node scripts/check-aliases.mjs",

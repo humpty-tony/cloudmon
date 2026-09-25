@@ -6,6 +6,7 @@ import { filterFieldValue, eventUser, identityGlyph, truncateArn } from "../api/
 import type { ColumnDef } from "../api/columns";
 import type { TimeZonePref } from "../api/settings";
 import { InlineDetail } from "./InlineDetail";
+import { useWorkspaceActive } from "./WorkspaceActivity";
 
 interface Props {
   detailMode?: "inline" | "external";
@@ -223,12 +224,16 @@ export const EventTable = memo(function EventTable({
   const getItemKey = useCallback((index: number) => events[index].seq, [events]);
   const getScrollElement = useCallback(() => parentRef.current, []);
   const estimateSize = useCallback(() => rowHeight, [rowHeight]);
+  const workspaceActive = useWorkspaceActive();
   const rowVirtualizer = useVirtualizer({
     count: n,
     getScrollElement,
     estimateSize,
     overscan: 10,
     getItemKey,
+    // display:none reports zero-height rows. Keep their measured sizes so the
+    // same scroll offset still identifies the same events when returning.
+    useCachedMeasurements: !workspaceActive,
   });
 
   useEffect(() => {
@@ -309,7 +314,10 @@ export const EventTable = memo(function EventTable({
   const virtualItems = rowVirtualizer.getVirtualItems();
   const totalSize = rowVirtualizer.getTotalSize();
   const padTop = virtualItems.length ? virtualItems[0].start : 0;
-  const padBottom = virtualItems.length ? totalSize - virtualItems[virtualItems.length - 1].end : 0;
+  // A hidden retained workspace has no virtual range. Keep its full spacer so
+  // restoring the pane cannot clamp the native scroll offset to zero before
+  // ResizeObserver repopulates the visible rows.
+  const padBottom = virtualItems.length ? totalSize - virtualItems[virtualItems.length - 1].end : totalSize;
 
   return (
     <div className={`etable ${compact ? "etable--compact" : ""}`} role="table" aria-label="CloudTrail events" aria-rowcount={n}>

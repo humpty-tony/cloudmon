@@ -60,7 +60,17 @@ The resumed UX audit and component reviewers finished; the overall batch `deleg_
 
 These are review reports requiring regression/fix verification, not claims that fixes have landed. Read the consolidated final review summaries when delivered for any additional suggestions or qualifications.
 
-## Current fix ownership
+## Navigation repair applied
+
+The parent verified the exported overlay delta matches its worktree, applied it cleanly, and ran `node scripts/check-workspace-overlays.cjs`, `npm run check:workbench`, and `npm run build` successfully. The stronger Workbench test checks ten repeated returns per viewport/dwell combination, exact visible sequences and scrollTop 1040.
+
+The remaining Source evidence focus defect was then reproduced on the parent at both sizes (`Source evidence focus escaped on Tab 2`), fixed locally, and verified GREEN. The new regression checks Tab/Shift+Tab from the programmatically focused source body, inert background, Escape focus restoration and background cleanup. The entire overlay suite, existing inspector checks, capture UI and build pass after that fix. No fresh independent UX approval or remote CI is claimed. This is a local tested progress checkpoint.
+
+No subagent remains active. Do not restart stopped fixers automatically; their partial deltas are preserved. Inspector-local issuance/competing-dialog ownership and Hunt nested-mode activation are separate, still-pending integration work.
+
+## Historical fix ownership
+
+**Usage correction:** the user requested substantially lower usage. Stop requests were sent to the facet, inspector and saved-Hunt fix workers below; preserve their partial changes and do not restart them automatically. Only the navigation fix worker is retained, with instructions to finish a bounded patch/handoff. Continue serially with targeted checks and brief updates, not another review fan-out.
 
 - Navigation/portal/request and repeated-scroll work: `sa-0-8d7493ae`, `deleg_afac83f6`, worktree `vector-overlays`; expected fix-only patch `cloudmon-vector-overlays.patch` and handoff `cloudmon-vector-overlays-review.md` in Hermes scratch.
 - Facet truthfulness and hidden search: `sa-0-b1e11917`, `deleg_22f6499f`, worktree `vector-facets`; expected `cloudmon-vector-facets-fix.patch` and `cloudmon-vector-facets-fix-handoff.md`.

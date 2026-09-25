@@ -7,6 +7,7 @@ import { identityGlyph } from "../api/types";
 import { backend } from "../api/backend";
 import { logError, logInfo } from "../api/log";
 import { LineageEventModal } from "./LineageEventModal";
+import { WorkspaceOverlay } from "./WorkspaceActivity";
 
 interface Props {
   seq: number;
@@ -60,7 +61,11 @@ function pivotOf(n: GraphNode): [FilterField, string] | null {
   return null;
 }
 
-export function LineageView({ seq, initialSnapshot, onClose, onPivot }: Props) {
+export function LineageView(props: Props) {
+  return <WorkspaceOverlay onClose={props.onClose}><LineageContent {...props}/></WorkspaceOverlay>;
+}
+
+function LineageContent({ seq, initialSnapshot, onClose, onPivot }: Props) {
   const [nodes, setNodes] = useState<Map<string, GraphNode>>(new Map());
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [meta, setMeta] = useState<{ currentId: string; rootId: string; notes: string[] }>({ currentId: "", rootId: "", notes: [] });

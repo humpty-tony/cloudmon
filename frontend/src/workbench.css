@@ -1,4 +1,8 @@
 /* Workbench: stable panes, quiet chrome, no row expansion or layout animations. */
+.workspace-page, .workbench-page { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; overflow: hidden; }
+.workspace-page[hidden], .workbench-page[hidden] { display: none; }
+.hunt-modebar, .context-modebar { display: flex; align-items: center; gap: 10px; flex: none; min-height: 40px; padding: 4px 16px; background: var(--bg-1); border-bottom: 1px solid var(--line-struct); }
+.context-modebar > span { color: var(--tx-2); font-size: 12px; }
 .app--workbench { --workbench-filter-width: 180px; --workbench-inspector-width: clamp(340px, 29vw, 420px); }
 .workbench-context { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 14px 18px 9px; flex: none; background: var(--bg-1); }
 .workbench-context > div { display: flex; align-items: baseline; gap: 14px; min-width: 0; }

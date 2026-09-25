@@ -9,7 +9,7 @@
 - Verified baseline/design commit: `d6953e5` — `docs(ui): preserve Vector roadmap and visual reference`
 - Original production baseline: `a4afbf3`
 - User authorized real implementation and incremental commits. No push or merge has been requested.
-- **Current implementation is incomplete. Automated navigation checks are GREEN, but independent code review rejected the slice for a hidden-workspace portal/request-ownership regression. The completed UX audit also rejected repeated-scroll/focus behavior; targeted fixes are in progress. No implementation commit or UX acceptance yet. Bottom-dock, facet and Hunt integration remain unfinished.**
+- **Navigation repair is applied to the parent checkout and targeted checks pass.** Repeated scroll/visible-row retention, portal/request deactivation and Source evidence focus containment have regressions. This is a tested local progress checkpoint, **not final UX acceptance**. Facets, lower dock, consolidated Hunt, summary/around and source-control integration remain unfinished.
 - Uncommitted implementation files: `frontend/src/App.tsx`, `frontend/src/components/TitleBar.tsx`, `frontend/src/components/EventTable.tsx`, and `frontend/src/workbench.css`. Test/CI wiring also changes `frontend/package.json`, `frontend/scripts/check-capture-ui.cjs`, and `.github/workflows/build.yml`.
 - New test currently on disk but not committed: `frontend/scripts/check-vector-workbench.cjs`.
 - Do not discard, reset, or overwrite this work when resuming. Inspect `git status` and the diff first.
@@ -75,11 +75,16 @@ The browser baseline includes capture bridge fixtures, not real AWS provisioning
 - [ ] Integrate the lower-dock inspector and compact Vector layout.
 - [x] Adapt existing capture UI navigation selectors and restrict the analysis layout assertion to the visible retained view; original assertions remain in place.
 - [x] Run the production build and existing capture, performance, search, inspector, labels, and saved-hunt checks successfully for the navigation slice.
-- [ ] Reproduce and fix the independent review blocker: Columns/body-portaled dialogs must not leak from hidden workspaces; pending original-record requests must not open stale dialogs after leaving or leaving/returning. Preserve retained drafts/results.
-- [ ] Perform independent code re-review and adversarial UX review at both target sizes; the initial code review failed.
+- [x] Apply and parent-verify the overlay/request fix: inactive popovers/dialogs unmount, late Hunt/Analysis requests are invalidated across leave/return, and drafts/results remain retained.
+- [x] Parent-verify repeated navigation at both sizes/dwell timings: ten cycles retain scrollTop 1040 and exact visible event sequences, source identity and draft.
+- [x] Reproduce Source evidence focus escape (Tab 2, both sizes), then fix and verify forward/backward containment from the loaded source, background inertness, Escape focus return and cleanup.
+- [x] Re-run overlay checks, inspector checks, capture UI and build successfully on the parent checkout; add overlay command to CI.
+- [ ] Perform the next bounded independent integrated review; the initial pre-fix reviews remain historical failures, not approval of this revised tree.
 - [ ] Commit the verified shell/retention slice and record its hash here.
 
 ### Exact next action
+
+**Latest checkpoint:** navigation repairs and Source evidence focus fix are now in the parent tree and tested. Extra fix workers were stopped for usage efficiency; no worker remains active. Continue serially from preserved component deltas—do not restart a fan-out. Reconcile facet labels/search first, then dock/Hunt activation and saved-target fixes. The paragraph below records the earlier dispatch rather than live ownership.
 
 The interrupted fix/audit/reviews resumed in batch `deleg_afac83f6` (worker IDs below). Verify their current status after any reset rather than assuming they remain live. On delivery, inspect/apply only the overlay fix delta, rerun its regressions and navigation/build checks, resolve UX findings, and obtain fresh code review before committing implementation. The three component patches are complete in isolated worktrees and parent-rerun checks pass, but independent reviewers rejected uncovered edge cases. Targeted fixes and integration are pending; current ownership/findings are recorded in `ui-reviews/component-verification.md`. Do not reimplement the old query-draft fix or restart finished component implementation.
 
@@ -92,6 +97,8 @@ npm run check:workbench
 Verified at both desktop sizes: two primary destinations; retained unapplied query, selected event, inspector mode, table scroll and Hunt draft; replacing the source starts a clean Workbench session. Query draft loss was fixed by retaining visited views rather than unmounting them. The next RED failure was scroll `0 !== 700`: an empty hidden virtual range removed both spacers and clamped the scroll offset. Preserving the full-size spacer in `EventTable` fixed it without mounting the entire dataset. The existing 20k-row performance check still passes.
 
 Only visited secondary views mount. Replacing a dataset resets visited views, selected lineage overlay and the Workbench session key, preventing hidden old-dataset state from appearing current. Saved configurations remain in their existing persistence layer.
+
+The earlier spacer fix alone was insufficient after repeated returns. EventTable now preserves cached row measurements while its workspace is inactive. `check:workspace-overlays` covers parent and standalone overlay lifetimes, hidden keyboard handlers, delayed requests, and source-modal containment. The parent observed the focus regression RED at both sizes before fixing it; all focused checks, `check:inspector`, `check:capture-ui`, and `build` now pass. Existing chunk-size warnings remain. Full integrated component/native/platform acceptance is still pending.
 
 The current secondary Hunt bar and contextual Analysis return control are transitional. Do not mistake them for completion of the final consolidated Hunt or in-grid summary designs.
 

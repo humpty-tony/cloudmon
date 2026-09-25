@@ -1,4 +1,5 @@
-import {useEffect,useMemo,useRef,useState} from "react";
+import {useEffect,useLayoutEffect,useMemo,useRef,useState} from "react";
+import {useWorkspaceActive} from "./WorkspaceActivity";
 import {useVirtualizer} from "@tanstack/react-virtual";
 import {backend} from "../api/backend";
 import {compileQuery} from "../api/queryLang";
@@ -53,6 +54,10 @@ export function HuntView({filter}:{filter:QueryFilter}) {
   },[result,resultMode]);
   const virtual=useVirtualizer({count:rows.length,getScrollElement:()=>scroll.current,estimateSize:()=>142,overscan:3});
   const chosen=rows[selected];
+  const workspaceActive=useWorkspaceActive();
+  useLayoutEffect(()=>{
+    if(!workspaceActive){rawRequest.current++;setRaw(null);setRawBusy(false);setRawError("");setInvestigation(null)}
+  },[workspaceActive]);
   useEffect(()=>()=>{controller.current?.abort();request.current++;rawRequest.current++},[]);
   useEffect(()=>{if(result)virtual.measure()},[result]);
   const load=(hunt:SavedHunt)=>{
@@ -70,7 +75,7 @@ export function HuntView({filter}:{filter:QueryFilter}) {
     finally{if(id===request.current){controller.current=null;setBusy(false);if(abort.signal.aborted)setError("Hunt cancelled. Run again when ready.")}}
   };
   const original=async(event:EventRow)=>{
-    if(!result)return;const id=++rawRequest.current;setRawBusy(true);setRawError("");
+    if(!result||!workspaceActive)return;const id=++rawRequest.current;setRawBusy(true);setRawError("");
     try{const json=await backend.queryLineageRaw(event.seq,result.snapshot);if(id===rawRequest.current)setRaw({title:`${event.eventName} · ${event.eventID}`,json})}
     catch(e){if(id===rawRequest.current)setRawError(String(e))}
     finally{if(id===rawRequest.current)setRawBusy(false)}
