@@ -34,6 +34,7 @@ type Row struct {
 	ReadOnly           bool   `json:"readOnly"`
 	ManagementEvent    bool   `json:"managementEvent"`
 	RawJSON            string `json:"rawJSON"`
+	Target             string `json:"target"`
 }
 
 // pageCols intentionally omits `raw` - the detail pane fetches it lazily via Raw(seq).
@@ -356,7 +357,7 @@ func (s *Store) Page(f Filter, offset, limit int) ([]Row, error) {
 	if err != nil {
 		return nil, err
 	}
-	sql := fmt.Sprintf("SELECT %s FROM events%s ORDER BY seq DESC LIMIT %d OFFSET %d;", pageCols, where, limit, offset)
+	sql := fmt.Sprintf("SELECT %s FROM events%s ORDER BY seq DESC LIMIT %d OFFSET %d;", displayCols, where, limit, offset)
 	var rows []Row
 	if err := s.queryJSON(sql, &rows); err != nil {
 		return nil, err
@@ -385,7 +386,7 @@ func (s *Store) Newer(f Filter, sinceSeq int64, limit int) ([]Row, error) {
 	// If a burst produced more than `limit` new rows, this leaves the newer-still rows
 	// for the next tick so the append cursor advances contiguously - no permanent gap
 	// (a plain "ORDER BY seq DESC LIMIT n" would skip the middle band).
-	sql := fmt.Sprintf("SELECT * FROM (SELECT %s FROM events%s ORDER BY seq ASC LIMIT %d) ORDER BY seq DESC;", pageCols, where, limit)
+	sql := fmt.Sprintf("SELECT * FROM (SELECT %s FROM events%s ORDER BY seq ASC LIMIT %d) ORDER BY seq DESC;", displayCols, where, limit)
 	var rows []Row
 	if err := s.queryJSON(sql, &rows); err != nil {
 		return nil, err

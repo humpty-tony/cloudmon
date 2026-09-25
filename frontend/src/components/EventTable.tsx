@@ -56,8 +56,12 @@ function TimeCell({ e, tz }: { e: CloudTrailEvent; tz: TimeZonePref }) {
   );
 }
 
-function IdentityCell({ e }: { e: CloudTrailEvent }) {
+function IdentityCell({ e, compact }: { e: CloudTrailEvent; compact?: boolean }) {
   const ui = e.userIdentity;
+  if (compact) return <span className="workbench-action" title={ui.arn || ui.principalId}>
+    <span className="workbench-action-name">{ui.userName || ui.roleArn?.split("/").pop() || eventUser(e)}<AliasBadge kind="arn" value={ui.arn || ""}/></span>
+    <span className="workbench-action-meta">{ui.sessionName || ui.type}</span>
+  </span>;
   return (
     <span className="c-ident" title={ui.arn || ui.principalId || eventUser(e)}>
       <span className={`c-ident-glyph t-${ui.type}`}>{identityGlyph(ui.type)}</span>
@@ -80,7 +84,7 @@ function ResultCell({ e }: { e: CloudTrailEvent }) {
   return (
     <span className="c-result">
       <span className="dot-sev ok" />
-      <span className="c-result-ok">Success</span>
+      <span className="c-result-ok" title="No error code recorded; not a benignness verdict">No error</span>
     </span>
   );
 }
@@ -117,14 +121,14 @@ const EventRow = memo(function EventRow({
         const displayValue = c.get(e);
         let content;
         if (c.key === "time") content = <TimeCell e={e} tz={timeZone} />;
-        else if (c.key === "identity") content = <IdentityCell e={e} />;
+        else if (c.key === "identity") content = <IdentityCell e={e} compact={compact} />;
         else if (c.key === "result") content = <ResultCell e={e} />;
-        else if (c.key === "name" && compact && !columns.some(column => column.key === "identity")) content = <span className="workbench-action">
+        else if (c.key === "name" && compact) content = <span className="workbench-action">
           <span className="workbench-action-name">{e.eventName}</span>
-          <span className="workbench-action-meta">{eventUser(e)}<AliasBadge kind="arn" value={e.userIdentity.arn || ""} /></span>
+          <span className="workbench-action-meta">{columns.some(column => column.key === "identity") ? e.eventSource.replace(/\.amazonaws\.com$/, "") : eventUser(e)}</span>
         </span>;
         else content = displayValue;
-        const pivotable = c.field !== "eventTime";
+        const pivotable = c.field !== "eventTime" && c.pivotable !== false;
         return (
           <div key={c.key} role="cell" className={`cell ${c.mono ? "mono" : ""} c-${c.key}`} title={displayValue}>
             <span className="cell-inner">{content}{c.key!=="identity"&&<AliasBadge field={c.field} value={rawVal}/>}</span>

@@ -141,7 +141,7 @@ export default function App() {
   const [visibleCols, setVisibleCols] = useState<string[]>(() => {
     const saved = load<string[]>("workbench.cols", DEFAULT_PRESET.columns);
     // Migrate only the former stock Workbench layouts, not custom column sets.
-    const previousDefaults = ["time,name,result", "time,name,identity,source,region,result"];
+    const previousDefaults = ["time,name,result", "time,name,identity,source,region,result", "time,name,identity,ip,result"];
     return load("workbench.preset", DEFAULT_PRESET.key) === "workbench" && previousDefaults.includes(saved.join(",")) ? DEFAULT_PRESET.columns : saved;
   });
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => load("workbench.colw", {}));
@@ -291,9 +291,9 @@ export default function App() {
   const columns = useMemo(() => visibleCols.map((key) => COLUMN_BY_KEY[key]).filter(Boolean).map(column => {
     if (presetKey !== "workbench" || uiView !== "console") return column;
     const defaults: Record<string, {width: number; label: string}> = {
-      time: {width: 88, label: "Time"}, name: {width: 148, label: "Event"},
-      identity: {width: 142, label: "Principal"}, ip: {width: 128, label: "Source IP"},
-      source: {width: 170, label: "Service"}, region: {width: 100, label: "Region"}, result: {width: 124, label: "Result"},
+      time: {width: 76, label: "Time"}, name: {width: 145, label: "Event / service"},
+      identity: {width: 126, label: "Actor / session"}, target: {width: 128, label: "Target"}, ip: {width: 116, label: "Source IP"},
+      source: {width: 150, label: "Service"}, region: {width: 100, label: "Region"}, result: {width: 94, label: "Result"},
     };
     return {...column, ...defaults[column.key]};
   }), [visibleCols, presetKey, uiView]);
@@ -889,7 +889,7 @@ export default function App() {
             events={events}
             columns={columns}
             colWidths={colWidths}
-            rowHeight={presetKey === "workbench" ? Math.max(rowH, visibleCols.includes("identity") ? 32 : 44) : rowH}
+            rowHeight={presetKey === "workbench" ? Math.max(rowH, 42) : rowH}
             selected={selected}
             cursorSeq={cursorSeq}
             follow={follow}
@@ -915,6 +915,8 @@ export default function App() {
           rawError={selectedRawErr ? "Could not load this event." : undefined}
           lineage={selectedLineage} lineageLoading={!!selected && hasCredentialLineage(selected) && !selectedLineage && !selectedLineageError}
           lineageError={selectedLineageError} onRetry={retryDetail} onPivot={pivot}
+          onPrevious={() => openAt(cursorIndex-1)} onNext={() => openAt(cursorIndex+1)}
+          canPrevious={cursorIndex>0} canNext={cursorIndex>=0 && cursorIndex<events.length-1}
           onOpenLineage={setLineageSeq} onClose={closeInspector} timeZone={timeZone} />
       </div>
         </div>

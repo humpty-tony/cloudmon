@@ -26,6 +26,7 @@ export interface CloudTrailEvent {
   errorMessage?: string;
   recipientAccountId: string;
   rawJSON: string;
+  target?: string; // bounded recorded display summary, not a resource correlation key
 }
 
 export type ConnectionMode = "create-infra" | "existing-sqs" | "import-dump";
@@ -115,6 +116,7 @@ export interface EventRow {
   readOnly: boolean;
   managementEvent: boolean;
   rawJSON: string;
+  target?: string; // bounded recorded display summary, not a resource correlation key
 }
 
 /** Comparison operators the query language compiles to (mirrors internal/store cmpSQL).
@@ -303,6 +305,7 @@ export function rowToEvent(r: EventRow): CloudTrailEvent {
     errorCode: r.errorCode || undefined,
     errorMessage: r.errorMessage || undefined,
     recipientAccountId: r.recipientAccountId,
+    target: r.target || "",
     rawJSON: r.rawJSON || "", // lazy - fetched on expand
   };
 }

@@ -12,6 +12,7 @@ export interface ColumnDef {
   width: number; // default/min column width in px (overridable, resizable)
   defaultVisible: boolean;
   mono?: boolean;
+  pivotable?: boolean;
   grow?: number; // if set, this column absorbs extra horizontal space (fr weight)
   get: (e: CloudTrailEvent) => string;
 }
@@ -26,6 +27,7 @@ export const COLUMNS: ColumnDef[] = [
   { key: "region", label: "awsRegion", field: "awsRegion", width: 120, defaultVisible: true, mono: true, get: (e) => e.awsRegion },
   { key: "ip", label: "sourceIPAddress", field: "sourceIPAddress", width: 150, defaultVisible: true, mono: true, get: (e) => e.sourceIPAddress },
   { key: "result", label: "result", field: "result", width: 160, defaultVisible: true, get: (e) => eventResult(e) },
+  { key: "target", label: "Target", field: "target", width: 160, defaultVisible: false, grow: 2, pivotable: false, get: (e) => e.target || "—" },
   // Available via the column chooser / presets.
   { key: "identityType", label: "identityType", field: "identityType", width: 130, defaultVisible: false, get: (e) => e.userIdentity.type },
   // Concrete, round-tripping identity fields (the value IS what you type in the query bar).
