@@ -1,5 +1,5 @@
 import {AliasBadge} from "./AliasBadge";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { stratify, tree, type HierarchyNode } from "d3-hierarchy";
 import type { EvidenceSnapshot, FilterField, GraphEdge, GraphNode, LineageTree, QueryOp } from "../api/types";
@@ -12,6 +12,7 @@ import { WorkspaceOverlay } from "./WorkspaceActivity";
 interface Props {
   seq: number;
   initialSnapshot?:EvidenceSnapshot;
+  eventLabel?: string;
   onClose: () => void;
   onPivot: (field: FilterField, value: string, op: QueryOp) => void;
 }
@@ -65,7 +66,7 @@ export function LineageView(props: Props) {
   return <WorkspaceOverlay onClose={props.onClose}><LineageContent {...props}/></WorkspaceOverlay>;
 }
 
-function LineageContent({ seq, initialSnapshot, onClose, onPivot }: Props) {
+function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: Props) {
   const [nodes, setNodes] = useState<Map<string, GraphNode>>(new Map());
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [meta, setMeta] = useState<{ currentId: string; rootId: string; notes: string[] }>({ currentId: "", rootId: "", notes: [] });
@@ -85,6 +86,19 @@ function LineageContent({ seq, initialSnapshot, onClose, onPivot }: Props) {
   const viewportRef = useRef<SVGGElement>(null);
   const [raw, setRaw] = useState<{ title: string; json: string } | null>(null);
 
+  const modalRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useLayoutEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const host = modalRef.current?.parentElement;
+    const background = Array.from(document.body.children).filter((el): el is HTMLElement => el instanceof HTMLElement && el !== host).map(el => ({el, inert: el.inert}));
+    background.forEach(({el}) => { el.inert = true; });
+    closeRef.current?.focus({preventScroll: true});
+    return () => {
+      background.forEach(({el, inert}) => { el.inert = inert; });
+      if (previous?.isConnected && !previous.closest('[hidden],[inert]') && previous.getClientRects().length) previous.focus({preventScroll: true});
+    };
+  }, []);
   const svgRef = useRef<SVGSVGElement>(null);
   const didCenter = useRef(false);
 
@@ -168,7 +182,11 @@ function LineageContent({ seq, initialSnapshot, onClose, onPivot }: Props) {
     const svg = svgRef.current;
     if (!cur || !svg) return;
     const r = svg.getBoundingClientRect();
-    moveViewport({ k: 1, x: r.width / 2 - (cur as { x: number }).x, y: r.height / 3 - (cur as { y: number }).y });
+    const positions = laidOut.descendants().map(node => node as HierarchyNode<GraphNode> & {x:number;y:number});
+    const minX = Math.min(...positions.map(n => n.x)), maxX = Math.max(...positions.map(n => n.x));
+    const minY = Math.min(...positions.map(n => n.y)), maxY = Math.max(...positions.map(n => n.y));
+    const k = Math.min(1, (r.width - 64) / (maxX - minX + NODE_W), (r.height - 64) / (maxY - minY + NODE_H));
+    moveViewport({k, x:r.width/2 - (minX+maxX)*k/2, y:r.height/2 - (minY+maxY)*k/2});
     didCenter.current = true;
   }, [loading, laidOut, posOf, meta.currentId, moveViewport]);
 
@@ -292,7 +310,7 @@ function LineageContent({ seq, initialSnapshot, onClose, onPivot }: Props) {
       }
       const state = `${n.id === meta.currentId ? "cur" : ""} ${n.id === selected ? "sel" : ""} k-${n.kind}`;
       return (
-        <g key={n.id} className="lgv-g" transform={`translate(${x - NODE_W / 2},${y - NODE_H / 2})`} onClick={() => setSelected(n.id)}>
+        <g key={n.id} className="lgv-g" role="button" tabIndex={0} aria-label={`Inspect credential: ${lab.primary}`} transform={`translate(${x - NODE_W / 2},${y - NODE_H / 2})`} onKeyDown={event => {if(event.key === "Enter" || event.key === " "){event.preventDefault();setSelected(n.id)}}} onClick={() => setSelected(n.id)}>
           <title>{n.arn}</title>
           <rect className={`lgv-rect ${state}`} width={NODE_W} height={NODE_H} rx={8} />
           <text x={16} y={NODE_H / 2 + 5} className={`lgv-gl ${GL_FILL[n.identityType] || "gl-other"}`}>{identityGlyph(n.identityType)}</text>
@@ -311,12 +329,18 @@ function LineageContent({ seq, initialSnapshot, onClose, onPivot }: Props) {
 
   return createPortal(
     <div className="lgv-scrim" onClick={onClose}>
-      <div className="lgv-modal" onClick={(e) => e.stopPropagation()}>
+      <div ref={modalRef} className="lgv-modal" role="dialog" aria-modal="true" aria-label="Credential lineage" onClick={(e) => e.stopPropagation()} onKeyDown={event => {
+        if (event.key !== "Tab" || raw) return;
+        const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),[tabindex="0"]')).filter(el => el.getClientRects().length);
+        const first = items[0], last = items[items.length-1];
+        if (event.shiftKey && (document.activeElement === first || !items.includes(document.activeElement as HTMLElement))) { event.preventDefault(); last?.focus(); }
+        else if (!event.shiftKey && (document.activeElement === last || !items.includes(document.activeElement as HTMLElement))) { event.preventDefault(); first?.focus(); }
+      }}>
         <div className="lgv-bar">
-          <span className="lgv-title">Credential lineage</span>
+          <span className="lgv-title">Credential lineage</span><span className="lgv-hint">{eventLabel || `Event #${seq}`} · observed evidence, not verified human identity</span>
           <span className="lgv-spacer" />
           <span className="lgv-hint">drag pan · scroll zoom · click a node for details</span>
-          <button className="lgv-close" onClick={onClose}>✕ Close</button>
+          <button ref={closeRef} className="lgv-close" onClick={onClose}>✕ Close</button>
         </div>
 
         {meta.notes.length>0 && <div className="lgv-notes">{meta.notes.map((n,i)=><div key={i} className="lgv-note">{n}</div>)}</div>}

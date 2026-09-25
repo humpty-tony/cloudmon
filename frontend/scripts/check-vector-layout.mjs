@@ -16,6 +16,7 @@ const lineage={applicable:true,complete:true,status:'complete',sourceIdentity:''
  {identityType:'IAMUser',arn:'arn:aws:iam::444455556666:user/maya.chen',userName:'maya.chen',accountId:'444455556666',roleArn:'',sessionName:'',invokedBy:'',viaSeq:1,viaEvent:'AssumeRole',viaTime:records[0].eventTime,viaSourceIP:'198.51.100.24',evidence:'Synthetic fixture: qualified issuance response',evidenceSeqs:[1]},
  {identityType:'AssumedRole',arn:'arn:aws:sts::444455556666:assumed-role/SecurityAudit/maya-session',userName:'SecurityAudit',accountId:'444455556666',roleArn:'arn:aws:iam::444455556666:role/SecurityAudit',sessionName:'maya-session',invokedBy:'',viaSeq:2,viaEvent:'AssumeRole',viaTime:records[1].eventTime,viaSourceIP:'198.51.100.24',evidence:'Synthetic fixture: qualified issuance response',evidenceSeqs:[2]}
 ]};
+Object.assign(records[80],{userAgent:'aws-cli/2.17.0',resources:[{ARN:'arn:aws:secretsmanager:us-east-1:111122223333:secret:prod/payments',type:'AWS::SecretsManager::Secret'}],requestParameters:{secretId:'prod/payments'},errorCode:'AccessDenied',errorMessage:'Caller is not authorized to read this secret.'});
 const server=await createServer({root,cacheDir:'node_modules/.vite-vector-layout',server:{host:'127.0.0.1',port:5198,strictPort:true}});
 await server.listen();
 const browser=await chromium.launch({headless:true});
@@ -27,7 +28,17 @@ try {
   page.on('pageerror',e=>errors.push(String(e)));page.setDefaultTimeout(7000);
   await page.goto('http://127.0.0.1:5198');
   assert.equal(await page.evaluate(()=>Boolean(window.go)),false);
-  await page.evaluate(async response=>{const {backend}=await import('/src/api/backend.ts');backend.queryLineage=async()=>response;},lineage);
+  await page.evaluate(async response=>{const {backend}=await import('/src/api/backend.ts');window.inlineLineageCalls=0;window.graphCalls=[];
+   backend.queryLineage=async()=>{window.inlineLineageCalls++;return response};
+   backend.queryLineageGraph=async(seq,snapshot)=>{
+    window.graphCalls.push({seq,snapshot});
+    const common={arn:'',roleArn:'',roleName:'',userName:'',sessionName:'',accountId:'',accessKeyId:'',invokedBy:'',events:0,childCount:0};
+    return {snapshot,applicable:true,rootId:'origin',currentId:'current',notes:['Synthetic graph fixture — not a native correlation result.'],nodes:[
+     {...common,...response.nodes[0],id:'origin',kind:'origin'},
+     {...common,...response.nodes[1],id:'parent',kind:'parent',roleName:'SecurityAudit'},
+     {...common,id:'current',kind:'current',identityType:'AssumedRole',roleName:'ProdDeploy',sessionName:'cli-session',arn:'arn:aws:sts::111122223333:assumed-role/ProdDeploy/cli-session',accountId:'111122223333'}
+    ],edges:[{parent:'origin',child:'parent',viaSeq:1,viaEvent:'AssumeRole',evidence:'Synthetic issuance fixture'},{parent:'parent',child:'current',viaSeq:2,viaEvent:'AssumeRole',evidence:'Synthetic issuance fixture'}]};
+   };},lineage);
   await page.getByRole('button',{name:/Import a dump/}).click();
   await page.locator('input[type=file]').setInputFiles({name:'synthetic-vector.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({Records:records}))});
   await page.getByRole('button',{name:'Load dump',exact:true}).click();
@@ -39,32 +50,39 @@ try {
    return {grid:rect('.workbench-results'),dock:rect('.workbench-body > .event-inspector'),row:rect('.workbench-results .row'),rail:rect('.facet-selector'),overflow:document.documentElement.scrollWidth>innerWidth};
   });
   let geometry=await measure();
-  assert.ok(geometry.dock.y>=geometry.grid.bottom-1,`Inspector must sit BELOW the grid, not beside it: ${JSON.stringify(geometry)}`);
-  assert.ok(Math.abs(geometry.dock.width-geometry.grid.width)<2);
-  assert.ok(geometry.grid.width>=1000 && geometry.grid.height>=280,`Useful wide log grid: ${JSON.stringify(geometry)}`);
-  assert.ok(geometry.row.height<=36,`Vector default rows must be dense, not old 52px cards: ${JSON.stringify(geometry)}`);
-  assert.equal(geometry.overflow,false);
-  assert.ok(geometry.grid.y<=158,`Review chrome should not push the grid down to the old stacked layout: ${JSON.stringify(geometry)}`);
-  const readablePrincipal=await page.locator('.workbench-results .c-ident-name').first().evaluate(e=>e.scrollWidth<=e.clientWidth+1);
-  assert.ok(readablePrincipal,'Default principal name must not be squeezed by a second truncated ARN');
-  assert.ok(geometry.rail.bottom>=geometry.dock.bottom-1,'Facets must remain full height beside grid and dock');
-  assert.equal(await page.getByRole('tab',{name:'Context',exact:true}).getAttribute('aria-selected'),'true');
-  assert.equal(await page.getByRole('button',{name:/Inspect observed caller/}).count(),2);
-  for(const name of ['Principal','Service','Region']) assert.ok(await page.locator('.workbench-results .ethead').getByText(name,{exact:true}).isVisible(),`Default grid must show ${name}`);
-  await page.getByRole('tab',{name:'Original JSON',exact:true}).click();
-  await page.locator('.ei-source').waitFor();
-  const id=JSON.parse(await page.locator('.ei-source').textContent()).eventID;
-  await page.getByRole('tab',{name:'Context',exact:true}).click();
-  await page.getByRole('button',{name:'Inspect observed caller 2: SecurityAudit',exact:true}).click();
-  await page.getByRole('region',{name:'Focused credential'}).waitFor();
-  await page.getByRole('button',{name:'Close credential details',exact:true}).click();
+  assert.ok(geometry.dock.x>=geometry.grid.right-1,`Selected event must open on the RIGHT: ${JSON.stringify(geometry)}`);
+  assert.ok(Math.abs(geometry.dock.y-geometry.grid.y)<2);
+  assert.ok(geometry.grid.height>=550 && geometry.grid.width>=600,'Keep a useful full-height event list');
+  assert.ok(geometry.row.height<=36);assert.equal(geometry.overflow,false);
+  assert.equal(await page.locator('.ls-chain, .event-inspector .lg').count(),0,'No inline lineage in the review panel');
+  const inspector=page.getByRole('complementary',{name:'Event inspector'});
+  await inspector.getByRole('tab',{name:'Overview',exact:true}).waitFor();
+  await inspector.getByText('prod/payments',{exact:true}).waitFor();
+  await inspector.getByText('Caller is not authorized to read this secret.',{exact:true}).waitFor();
+  assert.ok(await inspector.getByText('aws-cli/2.17.0',{exact:true}).isVisible());
+  assert.equal(await page.evaluate(()=>window.inlineLineageCalls),0,'Do not resolve lineage while simply browsing');
+  assert.equal(await page.evaluate(()=>window.graphCalls.length),0);
   await page.screenshot({path:fileURLToPath(new URL(`workbench-${width}.png`,out))});
-  observations.push({width,height,geometry,selectedEventID:id});
+  await inspector.getByRole('tab',{name:'Original JSON',exact:true}).click();
+  const source=await inspector.locator('.ei-source').textContent();
+  const id=JSON.parse(source).eventID;assert.equal(id,'vector-layout-80');
+  await inspector.getByRole('tab',{name:'Overview',exact:true}).click();
+  const seq=Number(await page.locator('.workbench-results .row--selected').getAttribute('data-event-seq'));
+  await inspector.getByRole('button',{name:'Resolve lineage',exact:true}).click();
+  const graph=page.getByRole('dialog',{name:'Credential lineage',exact:true});
+  await graph.locator('.lgv-g').first().waitFor();
+  assert.equal(await graph.locator('.lgv-g').count(),3);
+  const calls=await page.evaluate(()=>window.graphCalls);assert.ok(calls.length>=1);assert.ok(calls.every(call=>call.seq===seq && call.snapshot.generation===calls[0].snapshot.generation && call.snapshot.maxSeq===calls[0].snapshot.maxSeq));assert.ok(calls[0].snapshot.generation); // Dev StrictMode may remount the graph effect.
+  await page.screenshot({path:fileURLToPath(new URL(`lineage-popup-${width}.png`,out))});
+  await page.keyboard.press('Escape');await graph.waitFor({state:'detached'});
+  assert.equal(await inspector.getByRole('button',{name:'Resolve lineage'}).evaluate(el=>el===document.activeElement),true);
+  assert.equal(Number(await page.locator('.workbench-results .row--selected').getAttribute('data-event-seq')),seq);
+  observations.push({width,height,geometry,selectedEventID:id,lineage:'on-demand popup, exact selected snapshot'});
   await page.getByRole('button',{name:'Close inspector',exact:true}).click();
   assert.equal(await page.locator('.event-inspector.has-event').count(),0);
-  assert.ok((await measure()).grid.height>=geometry.grid.height,'Closing inspection must not shrink the grid');
+  assert.ok((await measure()).grid.width>geometry.grid.width,'Closing selection must return the width to the logs');
   assert.deepEqual(errors,[]);
-  console.log(`PASS ${width}x${height}: wide dense grid; bottom context/lineage dock; full-height facets; exact selected source; keyboard-reachable credential details`);
+  console.log(`PASS ${width}x${height}: right-hand event overview, resources/errors/source, on-demand lineage popup, exact evidence and close/return`);
   await page.close();
  }
  await fs.writeFile(new URL('layout.json',out),JSON.stringify({scope:'Production App with synthetic imported events and a synthetic lineage response; no native resolver or AWS',observations},null,2));

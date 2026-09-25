@@ -9,14 +9,18 @@ Recorded: 2026-09-24 (local EDT). Repository inspected at `a4afbf3`.
 
 This is the durable handoff for the UI discussions and visual POCs. Preserve the product decisions below; treat the proposed technical decomposition and open questions as a plan to review, not as additional user-approved requirements. Update this document as decisions change.
 
+## Latest direction — supersedes the bottom-dock reference
+
+Selected events now expand vertically on the **right**, for SOC/IR log review. Default to useful event facts: outcome/errors, recorded targets, actor/session, source and evidence. Lineage is a toggleable **on-demand graph popup** using the existing snapshot-bound resolver, not an always-visible chain. Do not resolve lineage just because a row is selected. Earlier bottom-dock screenshots below remain historical reference only. This correction is implementation-authorized; shipping-first and bounded validation remain in force.
+
 ## 1. Product and design contract
 
 - Build a local, cloud-centric SIEM/log-review tool: understand cloud events, follow observed credential relationships, and optionally hunt indicators, rules, and sequences.
 - **Primary journey:** open cloud logs → browse without a hypothesis → select an interesting event → understand its context → follow useful evidence → return to browsing.
 - Start with all imported activity and an empty optional query. Do not require a case, IOC, alert, selected identity, or assumed malicious activity.
-- Use the selected **Vector** direction: dark steel/blue, compact desktop chrome, horizontal navigation, readable dense rows, useful persistent controls, and a docked lower inspector. It must look like a tool, not a website or dashboard presentation.
+- Use the selected **Vector** direction: dark steel/blue, compact desktop chrome, horizontal navigation, readable dense rows, useful persistent controls, and a vertical right-hand event inspector. It must look like a tool, not a website or dashboard presentation.
 - **Two primary destinations:** Workbench and optional Hunt. Capabilities do not each earn another top-level tab.
-- Identity lineage belongs to the selected event. Expand nodes and technical evidence locally; do not require a separate Identities workspace.
+- Identity lineage belongs to the selected event. Open the evidence-backed lineage graph as a popup; do not reserve inline space or require a separate Identities workspace.
 - Analysis is an optional summary over the same log list. Surrounding activity is a clearly scoped temporary view of that list. Original evidence belongs in the inspector; comparison is temporary and contextual.
 - Import and capture share one data-source entry point. Settings, help, exports, saved configurations, and rule suites are controls, not permanent workspaces.
 - Add a left facet selector with counts. Keep its groups and the whole rail collapsible, and allow additional fields without displaying every possible facet at once.

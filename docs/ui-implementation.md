@@ -4,6 +4,17 @@
 
 ## Current checkpoint
 
+### Latest correction: right-hand SOC/IR event review
+
+- [x] Replace the Workbench bottom dock with a vertical right-hand inspector; clearing selection returns that width to the event grid.
+- [x] Default to Overview: outcome/error, account/region/source, recorded resources/request targets, actor/session/MFA when recorded, user agent and evidence identifiers. Fields and exact Original JSON remain available.
+- [x] Remove inline lineage from Workbench and stop resolving it during row browsing. Resolve lineage opens the existing snapshot-bound graph on demand, with keyboard focus/close return and the full observed chain fitted into view.
+- [x] Keep parsing bounded and lossless; large/unsafe records explicitly fall back to Fields/Original. Target identifiers are not claims of impact, and absent MFA is not reported as false.
+- [x] Build and the updated real-App `check:vector-layout` smoke pass at 1440×960 and 1280×800, including popup arguments, exact selected raw source, no background lineage calls and close/return. Screenshots in `frontend/test-results/vector-layout/` are current; graph data is explicitly synthetic.
+- No new agents or broad validation run. Existing bundle-size warning remains. Other legacy whole-App harness selectors/layout expectations still need migration; their historical passing runs do not validate this new layout.
+- This supersedes the earlier bottom-dock choice. Compatibility layouts remain for Hunt/standalone callers; this correction changes the main Workbench, not their result composition.
+
+
 **Shipping-first correction:** finish and commit the remaining implementation. Use one build plus focused changed-workflow smoke checks; no new agents, repeated audit matrices or full-suite loops. Outstanding full-integration validation remains explicitly deferred, not silently claimed.
 
 - Main checkout: `/home/humpty/projects/cloudmon`
@@ -11,7 +22,7 @@
 - Verified baseline/design commit: `d6953e5` — `docs(ui): preserve Vector roadmap and visual reference`
 - Original production baseline: `a4afbf3`
 - User authorized real implementation and incremental commits. No push or merge has been requested.
-- **Pass 1 (visible Vector integration) is implemented and locally verified.** Navigation (`ea490a0`) and truthful facets (`8cb90ca`) are committed. The checkpoint containing this update integrates the full-width grid, compact chrome and bottom context/lineage dock, with tab continuity and issuance-lifetime regressions. **This is not full-product acceptance.** Hunt is now integrated with its focused checks passing. In-grid summary/around and unified source controls remain pending, followed by one bounded final integration pass.
+- **Pass 1 (visible Vector integration) is implemented and locally verified.** Navigation (`ea490a0`) and truthful facets (`8cb90ca`) are committed. The original bottom-dock checkpoint `8d859ad` is superseded by the right-hand event overview and on-demand lineage popup described above. Hunt remains committed in `707f0f0`. **This is not full-product acceptance.** Hunt is now integrated with its focused checks passing. In-grid summary/around and unified source controls remain pending, followed by one bounded final integration pass.
 - Tested navigation implementation checkpoint: `ea490a0` — `feat(ui): preserve review state across workspace navigation`. Parent working tree was clean after this commit; the component worktrees retain separate unfinished work.
 - Committed regressions: `frontend/scripts/check-vector-workbench.cjs` and `frontend/scripts/check-workspace-overlays.cjs`, both wired into Linux CI. Remote CI has not been run.
 - Do not discard, reset, or overwrite this work when resuming. Inspect `git status` and the diff first.

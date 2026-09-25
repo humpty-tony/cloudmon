@@ -65,6 +65,37 @@
 .ei-empty p { max-width: 260px; margin: 10px 0; color: var(--tx-2); line-height: 1.7; }
 .ei-empty > span:last-child { max-width: 250px; color: var(--tx-2); font-size: var(--fs-cap); line-height: 1.7; }
 
+/* SOC/IR review: all vertical space belongs to event facts, not a diagram. */
+.event-inspector--review .ei-head { padding: 10px 12px 6px; }
+.event-inspector--review .ei-heading h2 { font-size: 15px; margin-top: 5px; }
+.ei-review-meta { display: flex; flex-direction: column; gap: 4px; padding: 0 12px 10px; color: var(--tx-2); font: 11px/1.4 var(--mono); }
+.event-inspector--review .ei-actions { padding: 0 12px 10px; gap: 5px; }
+.event-inspector--review .ei-actions button { padding: 5px 7px; font-size: 11px; }
+.event-inspector--review .ei-tabs { padding: 0 12px; }
+.event-inspector--review .ei-tabs button { padding: 9px 0 7px; font-size: 12px; }
+.event-inspector--review .ei-panel { padding: 0; }
+.event-inspector--review .ei-panel-fields, .event-inspector--review .ei-panel-original { padding: 10px; }
+.event-inspector--review :is(button,[tabindex]):focus-visible { outline: 2px solid var(--acc-text); outline-offset: -2px; }
+.eo-section { padding: 11px 12px; border-bottom: 1px solid var(--line-struct); }
+.eo-section h3 { margin: 0 0 9px; font-size: 12px; font-weight: 600; }
+.eo-section h3 > span { font-size: 10px; font-weight: 400; color: var(--tx-2); }
+.eo-outcome { display: flex; align-items: baseline; gap: 8px; font-size: 12px; }
+.eo-outcome > span { margin-left: auto; font-size: 10px; color: var(--tx-2); }
+.eo-outcome .is-error, .eo-error { color: var(--sev-err); }
+.eo-outcome .is-ok { color: var(--sev-ok); }
+.eo-error { margin: 7px 0; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.eo-kv { display: grid; grid-template-columns: 82px minmax(0,1fr); gap: 6px 8px; margin: 8px 0 0; font-size: 11px; line-height: 1.45; }
+.eo-pair { display: contents; }
+.eo-kv dt { color: var(--tx-2); overflow-wrap: anywhere; }
+.eo-kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; user-select: text; font-family: var(--mono); }
+.eo-kv dd .alias-badge { margin-left: 5px; }
+.eo-pivot { display: inline; max-width: 100%; border: 0; padding: 0; background: transparent; color: var(--tx-1); text-align: left; font: inherit; overflow-wrap: anywhere; cursor: pointer; }
+.eo-pivot:hover { color: var(--acc-text); text-decoration: underline; }
+.eo-missing { color: var(--tx-2); font-size: 11px; line-height: 1.5; margin: 6px 0 0; }
+.eo-targets { list-style: none; margin: 0; padding: 0; }
+.eo-targets li { padding: 4px 0; font: 11px/1.5 var(--mono); overflow-wrap: anywhere; }
+.eo-targets small { display: block; color: var(--tx-2); font: 10px/1.5 var(--sans); }
+
 /* Dock owns only its internal split; the Workbench owns pane allocation. */
 .event-inspector--dock { width: 100%; height: 100%; border-left: 0; border-top: 1px solid var(--line-struct); }
 .event-inspector--dock .ei-head { align-items: center; gap: 12px; padding: 7px 12px; border-bottom: 1px solid var(--line-struct); }

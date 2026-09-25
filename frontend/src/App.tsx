@@ -138,7 +138,12 @@ export default function App() {
   const [newCount, setNewCount] = useState(0);
 
   const [presetKey, setPresetKey] = useState<string>(() => load("workbench.preset", DEFAULT_PRESET.key));
-  const [visibleCols, setVisibleCols] = useState<string[]>(() => load("workbench.cols", DEFAULT_PRESET.columns));
+  const [visibleCols, setVisibleCols] = useState<string[]>(() => {
+    const saved = load<string[]>("workbench.cols", DEFAULT_PRESET.columns);
+    // Migrate only the former stock Workbench layouts, not custom column sets.
+    const previousDefaults = ["time,name,result", "time,name,identity,source,region,result"];
+    return load("workbench.preset", DEFAULT_PRESET.key) === "workbench" && previousDefaults.includes(saved.join(",")) ? DEFAULT_PRESET.columns : saved;
+  });
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => load("workbench.colw", {}));
   const [customPresets, setCustomPresets] = useState<Preset[]>(() => load("customPresets", []));
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => load("sidebar", false));
@@ -285,9 +290,9 @@ export default function App() {
   const columns = useMemo(() => visibleCols.map((key) => COLUMN_BY_KEY[key]).filter(Boolean).map(column => {
     if (presetKey !== "workbench" || uiView !== "console") return column;
     const defaults: Record<string, {width: number; label: string}> = {
-      time: {width: 88, label: "Time"}, name: {width: 190, label: "Event"},
-      identity: {width: 190, label: "Principal"}, source: {width: 170, label: "Service"},
-      region: {width: 100, label: "Region"}, result: {width: 130, label: "Result"},
+      time: {width: 88, label: "Time"}, name: {width: 148, label: "Event"},
+      identity: {width: 142, label: "Principal"}, ip: {width: 128, label: "Source IP"},
+      source: {width: 170, label: "Service"}, region: {width: 100, label: "Region"}, result: {width: 124, label: "Result"},
     };
     return {...column, ...defaults[column.key]};
   }), [visibleCols, presetKey, uiView]);
@@ -600,11 +605,7 @@ export default function App() {
         if (id !== detailReq.current) return;
         if (raw) setSelectedRaw(raw); else setSelectedRawErr(true);
       }).catch(() => { if (id === detailReq.current) setSelectedRawErr(true); });
-      if (hasCredentialLineage(e)) {
-        void backend.queryLineage(e.seq, snapshot).then(lineage => {
-          if (id === detailReq.current) setSelectedLineage(lineage);
-        }).catch(() => { if (id === detailReq.current) setSelectedLineageError(true); });
-      }
+      // Credential resolution is on demand in the snapshot-bound graph popup.
     }).catch(() => {
       if (id !== detailReq.current) return;
       setSelectedRawErr(true); setSelectedLineageError(true);
@@ -910,7 +911,7 @@ export default function App() {
           />
           <div className="workbench-list-footer">↑ ↓ Inspect events · / Search · {events.length.toLocaleString()} loaded</div>
         </section>
-        <EventInspector layout="dock" event={selected} snapshot={selectedSnapshot ?? undefined} rawJSON={selectedRaw}
+        <EventInspector layout="review" event={selected} snapshot={selectedSnapshot ?? undefined} rawJSON={selectedRaw}
           rawLoading={!!selected && !selectedRaw && !selectedRawErr}
           rawError={selectedRawErr ? "Could not load this event." : undefined}
           lineage={selectedLineage} lineageLoading={!!selected && hasCredentialLineage(selected) && !selectedLineage && !selectedLineageError}
@@ -938,6 +939,7 @@ export default function App() {
         <ErrorBoundary label="Lineage view" onReset={() => setLineageSeq(null)}>
           <LineageView
             seq={lineageSeq}
+            eventLabel={lineageSeq === selected?.seq ? `${selected.eventName} · ${selected.eventID}` : undefined}
             initialSnapshot={uiView === "console" && lineageSeq === selected?.seq ? selectedSnapshot ?? undefined : undefined}
             onClose={() => setLineageSeq(null)}
             onPivot={(f, v, o) => {

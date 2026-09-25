@@ -26,7 +26,7 @@
 .workbench-search .qbar-terms { max-height: 72px; overflow-y: auto; }
 .qbar-search { color: var(--tx-1); background: var(--acc-sel); border: 1px solid var(--acc-focus); border-radius: 4px; font-size: 12px; padding: 5px 12px; cursor: pointer; }
 .qbar-search:disabled { opacity: .5; cursor: default; }
-.workbench-body { display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) clamp(260px, 33vh, 300px); flex: 1; min-height: 0; overflow: hidden; }
+.workbench-body { display: grid; grid-template-columns: minmax(0, 1fr) clamp(360px, 31vw, 420px); grid-template-rows: minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }
 .workbench-session { display: grid; grid-template-columns: var(--workbench-filter-width) minmax(0, 1fr); flex: 1; min-height: 0; overflow: hidden; }
 .workbench-session--no-filters { grid-template-columns: 40px minmax(0, 1fr); }
 .workbench-main { display: flex; flex-direction: column; min-width: 0; min-height: 0; overflow: hidden; }
@@ -60,8 +60,8 @@
 }
 @media (max-width: 820px) {
   .workbench-session { --workbench-filter-width: 180px; }
-  .workbench-body { grid-template-columns: minmax(280px, 1fr); overflow-y: auto; }
-  .workbench-body > .event-inspector { grid-column: 1 / -1; min-height: 330px; border-left: 0; border-top: 1px solid var(--line-struct); }
+  .workbench-body { position: relative; grid-template-columns: minmax(0, 1fr); }
+  .workbench-body > .event-inspector.has-event { position: absolute; inset: 0 0 0 auto; width: min(420px, 90%); z-index: 5; box-shadow: -8px 0 24px #0007; }
   .workbench-results { min-height: 300px; }
   .workbench-context > div { flex-wrap: wrap; gap: 4px 12px; }
   .workbench-scope { display: none; }
@@ -71,6 +71,8 @@
 .facet-row:focus-within .facet-excl { opacity: 1; }
 
 .workbench-body > .event-inspector { width: 100%; }
+.workbench-body:has(> .event-inspector.is-empty) { grid-template-columns: minmax(0, 1fr) 0; }
+.workbench-body > .event-inspector.is-empty { visibility: hidden; border: 0; }
 .workbench-search .qbar-hl { font-size: 13px; }
 @media (max-height: 760px) {
   .workbench-inspector:not(.event-inspector--dock) .ei-head { padding-top: 10px; padding-bottom: 7px; }
