@@ -1,7 +1,8 @@
-import { memo, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { memo, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { TimeZonePref } from "../api/settings";
 import type { CloudTrailEvent, EvidenceSnapshot, FilterField, Lineage, QueryOp } from "../api/types";
 import { eventResult, eventUser, hasCredentialLineage } from "../api/types";
+import { eventMeaning, eventServiceLabel } from "../api/eventPresentation";
 import { AliasBadge } from "./AliasBadge";
 import { PinComparisonButton } from "./EvidenceComparison";
 import { EvidenceModal } from "./EvidenceModal";
@@ -33,6 +34,12 @@ export interface EventInspectorProps {
   onOpenLineage?: (seq: number) => void;
   /** Hand off the selected event without substituting a focused lineage node. */
   onInvestigate?: (event: CloudTrailEvent, snapshot?: EvidenceSnapshot) => void;
+  onPrevious?: () => void;
+  onNext?: () => void;
+  canPrevious?: boolean;
+  canNext?: boolean;
+  /** Parent-owned related activity, after Origin and before Around / Evidence. */
+  reviewContext?: ReactNode;
   onClose: () => void;
   timeZone: TimeZonePref;
 }
@@ -47,7 +54,7 @@ const DOCK_TABS = [
   { id: "fields", label: "Fields" },
   { id: "original", label: "Original JSON" },
 ] as const;
-const REVIEW_TABS = [{id: "overview", label: "Overview"}, {id: "fields", label: "Fields"}, {id: "original", label: "Original JSON"}] as const;
+const REVIEW_TABS = [{id: "overview", label: "Overview"}, {id: "fields", label: "Fields"}, {id: "original", label: "Original"}] as const;
 type Tab = typeof TABS[number]["id"] | "overview";
 
 /** Observe the available pane, keeping field work bounded to its visible rows. */
@@ -79,7 +86,7 @@ function InspectorFields({ json, onPivot }: { json: string; onPivot: EventInspec
   return <div className="ei-field-area" ref={area}><FieldTree json={json} height={height} onPivot={onPivot} /></div>;
 }
 
-function SelectedInspector({ event: e, layout = "side", snapshot, rawJSON, rawLoading, rawError, lineage, lineageLoading, lineageError, onRetry, onPivot, onOpenLineage, onInvestigate, onClose, timeZone, tab, onSelectTab }: EventInspectorProps & { event: CloudTrailEvent; tab: Tab; onSelectTab: (tab: Tab) => void }) {
+function SelectedInspector({ event: e, layout = "side", snapshot, rawJSON, rawLoading, rawError, lineage, lineageLoading, lineageError, onRetry, onPivot, onOpenLineage, onInvestigate, onPrevious, onNext, canPrevious, canNext, reviewContext, onClose, timeZone, tab, onSelectTab }: EventInspectorProps & { event: CloudTrailEvent; tab: Tab; onSelectTab: (tab: Tab) => void }) {
   const dock = layout === "dock";
   const review = layout === "review";
   const workspaceActive = useWorkspaceActive();
@@ -94,6 +101,7 @@ function SelectedInspector({ event: e, layout = "side", snapshot, rawJSON, rawLo
   const id = useId();
   const hasRaw = !!rawJSON && !rawLoading && !rawError;
   const supportsLineage = hasCredentialLineage(e) && (lineage?.applicable ?? true);
+  const meaning = eventMeaning(e);
   const actor = e.userIdentity.arn || e.userIdentity.principalId || eventUser(e) || "Not recorded";
   const milliseconds = Date.parse(e.eventTime);
   const timestamp = Number.isFinite(milliseconds)
@@ -127,18 +135,19 @@ function SelectedInspector({ event: e, layout = "side", snapshot, rawJSON, rawLo
       </dl>
       {e.errorMessage && <p className="ei-error-message" title={`${e.errorCode || "Error"}: ${e.errorMessage}`}>{e.errorMessage}</p>}
     </div>;
-  const actions = <div className="ei-actions" aria-label={`Selected event actions: ${e.eventName} · ${e.eventID}`}>
-      <button className="ei-investigate" disabled={!onInvestigate && !snapshot} title={`Around selected event: ${e.eventName} · ${e.eventID}`} onClick={() => onInvestigate ? handOff(() => onInvestigate(e, snapshot)) : setDialog("investigate")}>{dock || review || onInvestigate ? "Around this event" : "Investigate"}</button>
-      <button disabled={!snapshot} title={`Sources / versions for selected event: ${e.eventName} · ${e.eventID}`} onClick={() => { setSourceSeq(e.seq); setDialog("sources"); }}>Sources &amp; hashes</button>
-      {review && <button disabled={!snapshot} aria-haspopup="dialog" onClick={() => onOpenLineage ? onOpenLineage(e.seq) : setDialog("lineage")}>Resolve lineage</button>}
-      <span className="ei-comparison">{hasRaw ? <PinComparisonButton event={e} json={rawJSON} /> : <button disabled title="Load the original record before pinning">Pin comparison</button>}</span>
-    </div>;
+  const aroundAction = <button className="ei-investigate" disabled={!onInvestigate && !snapshot} title={`Around selected event: ${e.eventName} · ${e.eventID}`} onClick={() => onInvestigate ? handOff(() => onInvestigate(e, snapshot)) : setDialog("investigate")}>{dock || review || onInvestigate ? "Around this event" : "Investigate"}{review && <span aria-hidden="true"> →</span>}</button>;
+  const evidenceActions = <>
+    <button disabled={!snapshot} title={`Sources / versions for selected event: ${e.eventName} · ${e.eventID}`} onClick={() => { setSourceSeq(e.seq); setDialog("sources"); }}>Sources &amp; hashes</button>
+    <span className="ei-comparison">{hasRaw ? <PinComparisonButton event={e} json={rawJSON} /> : <button disabled title="Load the original record before pinning">Pin comparison</button>}</span>
+  </>;
+  const actions = <div className="ei-actions" aria-label={`Selected event actions: ${e.eventName} · ${e.eventID}`}>{aroundAction}{evidenceActions}</div>;
+  const lineageAction = <button className="ei-lineage-action" disabled={!snapshot} aria-haspopup="dialog" onClick={() => onOpenLineage ? handOff(() => onOpenLineage(e.seq)) : setDialog("lineage")}>View lineage <span aria-hidden="true">↗</span></button>;
   const details = <>
     <div className="ei-tabs" role="tablist" aria-label="Event details">
       {items.map((item, index) => <button key={item.id} ref={element => { tabs.current[index] = element; }} type="button" role="tab" id={`${id}-${item.id}`} aria-controls={`${id}-${item.id}-panel`} aria-selected={tab === item.id} tabIndex={tab === item.id ? 0 : -1} onClick={() => selectTab(item.id)} onKeyDown={event => navigateTabs(event, index)}>{item.label}</button>)}
     </div>
     {review && <section className="ei-panel ei-panel-overview" role="tabpanel" id={`${id}-overview-panel`} aria-labelledby={`${id}-overview`} hidden={tab !== "overview"} tabIndex={0}>
-      {tab === "overview" && <EventOverview event={e} rawJSON={hasRaw ? rawJSON : ""} loading={rawLoading} onPivot={onPivot}/>}
+      {tab === "overview" && <EventOverview event={e} rawJSON={hasRaw ? rawJSON : ""} loading={rawLoading} onPivot={onPivot} lineageAction={lineageAction} reviewContext={reviewContext} aroundAction={aroundAction} evidenceActions={<div className="ei-actions">{evidenceActions}</div>}/>}
       {rawError && <div role="alert" className="ei-state">Original record unavailable. <button onClick={onRetry}>Retry event</button></div>}
     </section>}
     <section className="ei-panel ei-panel-fields" role="tabpanel" id={`${id}-fields-panel`} aria-labelledby={`${id}-fields`} tabIndex={0} hidden={tab !== "fields"}>
@@ -161,12 +170,21 @@ function SelectedInspector({ event: e, layout = "side", snapshot, rawJSON, rawLo
   </>;
   return <>
     <header className="ei-head">
-      <div className="ei-heading"><span className="ei-eyebrow">{dock || review ? "Selected event" : "Event inspector"}</span><h2 title={`${e.eventName} · ${e.eventID}`}>{e.eventName}</h2></div>
+      <div className="ei-heading"><span className="ei-eyebrow">{dock || review ? "Selected event" : "Event inspector"}</span>{!review && <h2 title={`${e.eventName} · ${e.eventID}`}>{e.eventName}</h2>}</div>
+      {review && (onPrevious || onNext) && <div className="ei-event-nav" aria-label="Selected event navigation">
+        <button onClick={onPrevious} disabled={!onPrevious || canPrevious === false} aria-label="Previous event" title="Previous event">↑</button>
+        <button onClick={onNext} disabled={!onNext || canNext === false} aria-label="Next event" title="Next event">↓</button>
+      </div>}
       {dock && actions}
       <button className="ei-close" onClick={onClose} aria-label="Close inspector" title="Clear selected event">×</button>
     </header>
-    {review ? <><div className="ei-review-meta"><span>{e.eventSource}</span><time dateTime={e.eventTime}>{timestamp}</time></div>{actions}{details}</> : dock ? <div className="ei-dock-body">{context}<div className="ei-details">{details}</div></div> : <>{context}{actions}{details}</>}
-    {dialog === "lineage" && <LineageView seq={e.seq} initialSnapshot={snapshot} onClose={() => setDialog(null)} onPivot={onPivot}/>}
+    {review ? <><div className="ei-review-intro">
+      <div className="ei-review-kind"><span title={e.eventSource}>{eventServiceLabel(e.eventSource)}</span><span aria-hidden="true">/</span><span title={e.eventName}>{e.eventName || "Operation not recorded"}</span></div>
+      <h2 title={meaning.headline}>{meaning.headline}</h2>
+      <div className="ei-review-stamp"><span className={`ei-review-outcome is-${meaning.tone}`} title={meaning.outcome}>{meaning.outcome}</span><time dateTime={e.eventTime} title={e.eventTime}>{timestamp}</time></div>
+      {e.errorMessage && <p className="ei-review-error" title={e.errorMessage}>{e.errorMessage}</p>}
+    </div>{details}</> : dock ? <div className="ei-dock-body">{context}<div className="ei-details">{details}</div></div> : <>{context}{actions}{details}</>}
+    {dialog === "lineage" && <LineageView seq={e.seq} initialSnapshot={snapshot} eventLabel={`${e.eventName} · ${e.eventID}`} onClose={() => setDialog(null)} onPivot={onPivot}/>}
     {dialog === "investigate" && <InvestigationView event={e} initialSnapshot={snapshot} onClose={() => setDialog(null)} />}
     {dialog === "sources" && <EvidenceModal seq={sourceSeq} snapshot={snapshot} onClose={() => setDialog(null)} />}
     {dialog === "original" && hasRaw && <RawJsonModal title={`${e.eventName} · ${e.eventID}`} json={rawJSON} onClose={() => setDialog(null)} />}
