@@ -1,5 +1,7 @@
 # CloudMon: review-first UI implementation roadmap
 
+**Execution status and reset handoff:** see [ui-implementation.md](ui-implementation.md) for verified checkboxes, current test failures, worktree ownership, and the exact next action.
+
 Status: **implementation authorized; work is proceeding in tested, separately committed slices.**
 
 The user approved implementation and requested a feature branch with incremental commits. Initial conservative choices: retain applied-filter facet counts and the existing recorded `userName` identity grouping; label both explicitly. These choices do not introduce self-excluding counts or a new identity-resolution model.
