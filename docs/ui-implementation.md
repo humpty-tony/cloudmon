@@ -9,8 +9,8 @@
 - Verified baseline/design commit: `d6953e5` — `docs(ui): preserve Vector roadmap and visual reference`
 - Original production baseline: `a4afbf3`
 - User authorized real implementation and incremental commits. No push or merge has been requested.
-- **Current implementation is incomplete. The new Workbench regression is RED; do not describe this branch as fully passing.**
-- Production edits currently on disk but not committed: `frontend/src/App.tsx`, `frontend/src/components/TitleBar.tsx`.
+- **Current implementation is incomplete. Automated navigation checks are GREEN, but independent code review rejected the slice for a hidden-workspace portal/request-ownership regression. The completed UX audit also rejected repeated-scroll/focus behavior; targeted fixes are in progress. No implementation commit or UX acceptance yet. Bottom-dock, facet and Hunt integration remain unfinished.**
+- Uncommitted implementation files: `frontend/src/App.tsx`, `frontend/src/components/TitleBar.tsx`, `frontend/src/components/EventTable.tsx`, and `frontend/src/workbench.css`. Test/CI wiring also changes `frontend/package.json`, `frontend/scripts/check-capture-ui.cjs`, and `.github/workflows/build.yml`.
 - New test currently on disk but not committed: `frontend/scripts/check-vector-workbench.cjs`.
 - Do not discard, reset, or overwrite this work when resuming. Inspect `git status` and the diff first.
 
@@ -22,6 +22,19 @@
 - Read back the branch/commit state before recording it. Do not prefill expected hashes or mark delegated work done from intent.
 - Commit only the relevant verified slice; preserve unrelated work. Keep this checklist in sync in the same commit where practical.
 
+## Recurring adversarial UX checkpoints
+
+Run these during implementation, not only in Phase 7. The user explicitly requested periodic adversarial UX reviews. Use a separate critical pass after smaller visible changes and an independent reviewer at the meaningful integration checkpoints below. Test the actual goal-free review → select → understand → pivot → return journey, not just rendering or happy-path assertions.
+
+- [ ] **UX-1 — navigation/state retention:** independently attack draft/applied-query coherence, selection/scroll/inspector retention, hidden-view focus, source replacement, and secondary-control discoverability. Completed by `sa-1-58e7c95f` / `deleg_afac83f6`: **REJECT** pre-fix UX-1. Report `frontend/test-results/vector-navigation-ux-audit/report.md` reproduces repeated-scroll loss, portal leakage and Source evidence focus escape. Fixes and fresh retests remain pending.
+- [ ] **UX-2 — integrated facets and lower inspector:** verify count scope, literal filtering, selected-event/evidence agreement, identity uncertainty, reachable groups, and usable grid/dock space.
+- [ ] **UX-3 — contextual journeys:** challenge summary drill-down, surrounding-activity anchor, evidence/comparison target labels, and exact return scope/selection/scroll.
+- [ ] **UX-4 — consolidated Hunt:** try cross-mode draft/result loss, ambiguous inherited scope, result-to-evidence pivots, and return to browsing.
+- [ ] **UX-5 — unified source controls:** challenge offline recovery, replacement/error/cancellation states, stale context, and deliberate capture/cleanup consent using fixtures only.
+- [ ] **UX-6 — integrated acceptance:** repeat the complete journey after integration; earlier component reviews do not establish final acceptance.
+
+For each checkpoint, exercise 1440×960 and 1280×800, keyboard/focus and long identifiers, plus relevant empty/error states and rapid pivots. Record the exact reviewed revision/diff, reproducible steps, expected/actual outcomes, severity, screenshots, successful scenarios, and browser/native limitations. Distinguish current-slice regressions from intentionally deferred design work. Keep this checklist unchecked until the parent verifies the report and any required fixes/retests. Do not call a slice UX-approved solely because its code review or automated tests passed.
+
 ## Phase 0 — branch, design record, baseline
 
 - [x] Create and switch to `feat/vector-workbench`.
@@ -30,7 +43,7 @@
 - [x] Run the complete existing frontend baseline chain successfully (commands below).
 - [x] Run the native Go/DuckDB baseline successfully on this Linux host (command below).
 - [x] Isolate parallel work into dedicated worktrees with non-overlapping ownership.
-- [ ] Finalize and verify the shared review-state transition contract during the first implementation slice.
+- [x] Verify the initial transition contract: retain review/authoring state within a dataset session; reset it deliberately when replacing the source.
 
 ### Verified baseline commands
 
@@ -55,49 +68,48 @@ The browser baseline includes capture bridge fixtures, not real AWS provisioning
 - [x] Keep existing Rules and Analysis entry points reachable while consolidation is in progress.
 - [x] Add the next regression: preserve unapplied query draft, selection, inspector mode, scroll, and Hunt draft across destination switches.
 - [x] Observe the expected RED failure: the unapplied query draft is lost when returning to Workbench.
-- [ ] Fix state retention without resetting the search snapshot or selection.
-- [ ] Re-run the retention regression to GREEN, including scroll and inspector mode.
+- [x] Fix same-dataset state retention with lazy-mounted retained views, without replacing the applied search or selection.
+- [x] Re-run retention to GREEN at 1440×960 and 1280×800, including scroll and inspector mode.
+- [x] Add and observe RED→GREEN for source replacement from Hunt: return to Workbench and clear the old dataset session.
+- [x] Add `npm run check:workbench` and wire it into the Linux CI job (local execution verified; remote CI not yet run).
 - [ ] Integrate the lower-dock inspector and compact Vector layout.
-- [ ] Adapt the existing capture UI navigation selectors without weakening its assertions.
-- [ ] Run relevant existing regressions and the production build.
-- [ ] Perform independent code review and adversarial visual review at both target sizes.
+- [x] Adapt existing capture UI navigation selectors and restrict the analysis layout assertion to the visible retained view; original assertions remain in place.
+- [x] Run the production build and existing capture, performance, search, inspector, labels, and saved-hunt checks successfully for the navigation slice.
+- [ ] Reproduce and fix the independent review blocker: Columns/body-portaled dialogs must not leak from hidden workspaces; pending original-record requests must not open stale dialogs after leaving or leaving/returning. Preserve retained drafts/results.
+- [ ] Perform independent code re-review and adversarial UX review at both target sizes; the initial code review failed.
 - [ ] Commit the verified shell/retention slice and record its hash here.
 
 ### Exact next action
 
-Run from `frontend/`:
+The interrupted fix/audit/reviews resumed in batch `deleg_afac83f6` (worker IDs below). Verify their current status after any reset rather than assuming they remain live. On delivery, inspect/apply only the overlay fix delta, rerun its regressions and navigation/build checks, resolve UX findings, and obtain fresh code review before committing implementation. The three component patches are complete in isolated worktrees and parent-rerun checks pass, but independent reviewers rejected uncovered edge cases. Targeted fixes and integration are pending; current ownership/findings are recorded in `ui-reviews/component-verification.md`. Do not reimplement the old query-draft fix or restart finished component implementation.
+
+The regression command from `frontend/` is:
 
 ```sh
-node scripts/check-vector-workbench.cjs
+npm run check:workbench
 ```
 
-Last observed failure:
+Verified at both desktop sizes: two primary destinations; retained unapplied query, selected event, inspector mode, table scroll and Hunt draft; replacing the source starts a clean Workbench session. Query draft loss was fixed by retaining visited views rather than unmounting them. The next RED failure was scroll `0 !== 700`: an empty hidden virtual range removed both spacers and clamped the scroll offset. Preserving the full-size spacer in `EventTable` fixed it without mounting the entire dataset. The existing 20k-row performance check still passes.
 
-```text
-Leaving Workbench must retain an unapplied query draft
-actual: ''
-expected: 'eventName=GetSecretValue'
-```
-
-The current `App.tsx` switches views with conditional rendering, unmounting `QueryBar` and the inspector/table. The test also covers Hunt draft retention, which has not yet been reached because the earlier assertion fails. Implement stable/lazy-mounted workspace containers or equivalent explicit retained state; preserve keyboard ownership and avoid making hidden panes issue unintended operations. Then rerun the full test rather than checking only the first assertion.
+Only visited secondary views mount. Replacing a dataset resets visited views, selected lineage overlay and the Workbench session key, preventing hidden old-dataset state from appearing current. Saved configurations remain in their existing persistence layer.
 
 The current secondary Hunt bar and contextual Analysis return control are transitional. Do not mistake them for completion of the final consolidated Hunt or in-grid summary designs.
 
-## Phase 2 — truthful facets (delegated; not integrated)
+## Phase 2 — truthful facets (isolated checks verified; not integrated)
 
-- [ ] Implement/test native field presence, missing counts, distinct counts, and top-value truncation.
-- [ ] Match the browser aggregate contract without inventing totals for legacy fixtures.
-- [ ] Implement default groups, Add facet, collapse, explicit count scope, and literal include/exclude actions.
-- [ ] Verify sparse fields, high cardinality, missing values, full-snapshot counts, and filter semantics.
+- [x] Implement/test native field presence, missing counts, distinct counts, and top-value truncation in the isolated facet worktree.
+- [x] Verify browser/native parity across nine shared cases and unavailable totals for legacy metadata in the isolated worktree.
+- [x] Implement/test default groups, Add facet, collapse, explicit count scope, and literal include/exclude actions in the isolated worktree.
+- [x] Parent rerun: sparse/high-cardinality/missing/full-snapshot filter cases, facet browser UI, build, full native suite and store vet pass in the isolated worktree.
 - [ ] Review the delivered diff independently, integrate, run native/frontend regressions, and commit.
 
-## Phase 3 — contextual lower inspector (delegated; not integrated)
+## Phase 3 — contextual lower inspector (isolated checks verified; not integrated)
 
-- [ ] Implement/test optional `layout="dock"` with backwards-compatible side mode.
-- [ ] Show real observed lineage and explicit missing/ambiguous/error states, never a hard-coded chain.
-- [ ] Keep Fields, Original, Sources/versions, comparison, and local expansion accessible.
-- [ ] Add optional `onInvestigate(event, snapshot)` integration callback while retaining existing fallback behavior.
-- [ ] Verify layout, keyboard access, exact evidence and snapshots at both target sizes.
+- [x] Implement/test optional `layout="dock"` with backwards-compatible side mode in the isolated inspector worktree.
+- [x] Test lineage-response rendering and explicit missing/ambiguous/error states with synthetic bridge fixtures; no native GUI claim.
+- [x] Verify Fields, Original, Sources/versions, comparison, and local expansion in isolated component checks.
+- [x] Add/test optional `onInvestigate(event, snapshot)` callback with exact arguments and existing fallback behavior.
+- [x] Parent rerun: 11 short-dock checks, keyboard/focus, exact evidence/snapshots and both target sizes pass; isolated production build passes.
 - [ ] Review, integrate into the parent shell, run regressions, and commit.
 
 ## Phase 4 — summary and surrounding activity (not started)
@@ -108,11 +120,11 @@ The current secondary Hunt bar and contextual Analysis return control are transi
 - [ ] Keep neighbor inspection and temporary original-evidence previews separate from the anchor.
 - [ ] Verify return scope, draft, selection, and scroll; review and commit.
 
-## Phase 5 — consolidated Hunt (delegated; not integrated)
+## Phase 5 — consolidated Hunt (isolated checks verified; not integrated)
 
-- [ ] Implement/test one HuntWorkspace with Indicators, Rules, and Sequences modes.
-- [ ] Retain drafts/results across modes and destination switches.
-- [ ] Preserve saved-definition cross-mode loading, scope, cancellation, snapshots, diagnostics, and rule suites.
+- [x] Implement/test one HuntWorkspace with Indicators, Rules, and Sequences in the isolated Hunt worktree.
+- [x] Parent rerun verifies draft/result retention across modes and hidden destination switches in the isolated fixture; activation/portal integration remains pending.
+- [x] Parent rerun: nine Hunt check groups cover saved routing/scope, cancellation/snapshots, diagnostics, suites, shared inspection and layout; isolated build passes.
 - [ ] Integrate with the parent using existing SigmaView props plus the current review filter.
 - [ ] Review, run relevant existing/new checks, and commit.
 
@@ -137,7 +149,7 @@ The current secondary Hunt bar and contextual Analysis return control are transi
 
 ## Parallel-work handoff
 
-Last checked: all three workers were running. **Do not assume they survive a session reset.** Inspect their worktrees before restarting work. They were told to stage only owned files and deliver a binary patch, not commit, push, or touch the parent checkout. Expected patch destinations below are requests, not proof that the files already exist.
+The three implementation workers completed in `deleg_0274768f`. The parent verified each patch equals its worktree index, contains only owned files, and applies cleanly to the main checkout; checks were rerun independently. No component is integrated or committed yet. Patch digests, parent-run commands and evidence boundaries are recorded in `ui-reviews/component-verification.md`. **Do not restart completed implementation after a reset.** Independent reviews were interrupted by provider limits, resumed, and returned rejection findings. Targeted fix workers now own unstaged deltas in the preserved worktrees; see `ui-reviews/component-verification.md`.
 
 ### Facets
 
@@ -168,6 +180,23 @@ Last checked: all three workers were running. **Do not assume they survive a ses
 - Must not edit parent shell/layout, shared API/backend/types, package scripts, general capture tests, or roadmap.
 - Expected patch: `/home/humpty/.hermes/cache/scratch/cloudmon-vector-hunt.patch`
 - Browser-test port: 5194.
+
+### Independent review result and fix handoff
+
+Navigation/state code review: worker `sa-0-c9cc076f`, batch `deleg_90cad787`, **completed with `passed=false`**, no security concerns. Reviewed snapshot: `/home/humpty/.hermes/cache/scratch/cloudmon-navigation-review.diff`.
+
+- Reported P2 blocker at `App.tsx:792-809`: retained hidden workspaces do not own body-portaled transient UI. Repro: open Workbench Columns, Shift+Tab to Hunt, Enter; the old popover and backdrop remain above Hunt. Reviewer reproduced this in a browser probe; parent integration regression remains pending.
+- Related gap: Hunt/Analysis original-record requests can finish after navigation and open a dialog over the wrong workspace. Invalidate obsolete requests even when the user leaves and returns before completion; do not sacrifice draft/result retention.
+- Reviewer suggestions: use unique event identity in retention assertions, check nonzero/restored scroll after the virtualizer settles, cover Rules/Analysis retention and reset. Assigned to the fix worker alongside the focused regressions.
+- CI screenshot suggestion addressed locally: the upload paths now include `frontend/test-results/vector-workbench/*.png`. This is configuration only; no remote CI run claimed.
+
+Overlay fix: original worker `sa-0-a44ef3e6` / `deleg_4dab976b` was interrupted by HTTP 429. Resumed worker `sa-0-8d7493ae` in `deleg_afac83f6` owns the preserved worktree `/home/humpty/projects/cloudmon-worktrees/vector-overlays`, branch `work/vector-overlays`. The index contains a snapshot of the parent's pre-fix navigation changes; **only its unstaged delta** is the fix, not the entire `HEAD` diff. Expected patch `/home/humpty/.hermes/cache/scratch/cloudmon-vector-overlays.patch`; expected handoff `/home/humpty/.hermes/cache/scratch/cloudmon-vector-overlays-review.md`. These are requested artifacts, not verified completions. Partial App/Toolbar edits, WorkspaceActivity and overlay-test fixtures survived; the new worker must resume them rather than overwrite. Browser regression port 5196, unique Vite cache. Never stage its untracked `frontend/node_modules` symlink.
+
+Independent UX-1 audit: original `sa-0-b2052db9` / `deleg_8cd92f40` was interrupted by HTTP 429 and its server was terminated. Resumed `sa-1-58e7c95f` / `deleg_afac83f6`, port 5195, recovers saved observations/scripts/screenshots and reviews the unchanged parent UI while the fix runs in isolation. The completed audit rejects pre-fix UX-1; see the report and `ui-reviews/component-verification.md`.
+
+Component review retries in batch `deleg_afac83f6`: facets `sa-2-39dd3166`; inspector `sa-3-539d337c`; Hunt `sa-4-f8fa2457`. Earlier `deleg_d75845d5` reviewers all hit HTTP 429. Resumed component reviewers have now returned `passed=false`; targeted facet/inspector/Hunt fixes are assigned in `ui-reviews/component-verification.md`. No accepted verdict exists; component test success is not acceptance.
+
+Hunt integration precaution: the delivered Hunt patch and overlay fix may both touch `HuntView.tsx`; reconcile both and test nested Hunt mode deactivation as well as top-level switches. Reconcile Hunt-scoped inspector CSS with `layout="dock"`. Rules/suites intentionally disclose all-evidence scope because the native Sigma contract does not accept QueryFilter; do not fake filtering.
 
 ### Integration precautions
 
