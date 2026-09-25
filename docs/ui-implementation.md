@@ -4,6 +4,8 @@
 
 ## Current checkpoint
 
+**ACTIVE PLAN:** [Approved analyst-review tasks](analyst-review-tasks.md). The user approved the new mock and authorized shipping it in separately committed slices. Two narrow workers own facets and inspector; parent owns shared integration. Older pass numbering below is historical. Shipping first, focused checks only, one final integration pass.
+
 ### Latest correction: right-hand SOC/IR event review
 
 - [x] Replace the Workbench bottom dock with a vertical right-hand inspector; clearing selection returns that width to the event grid.

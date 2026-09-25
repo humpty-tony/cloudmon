@@ -9,6 +9,10 @@ Recorded: 2026-09-24 (local EDT). Repository inspected at `a4afbf3`.
 
 This is the durable handoff for the UI discussions and visual POCs. Preserve the product decisions below; treat the proposed technical decomposition and open questions as a plan to review, not as additional user-approved requirements. Update this document as decisions change.
 
+## Approved analyst-review mock
+
+The user approved `ui-reference/analyst-review/cloudmon-review.html` and authorized production implementation. Compact facet distributions, grid-first review with targets, meaning-first right inspector, related-activity pivots and optional lineage graph replace the prior field-list presentation. Execution and acceptance are tracked in [analyst-review-tasks.md](analyst-review-tasks.md). Existing engine/evidence safeguards remain.
+
 ## Latest direction — supersedes the bottom-dock reference
 
 Selected events now expand vertically on the **right**, for SOC/IR log review. Default to useful event facts: outcome/errors, recorded targets, actor/session, source and evidence. Lineage is a toggleable **on-demand graph popup** using the existing snapshot-bound resolver, not an always-visible chain. Do not resolve lineage just because a row is selected. Earlier bottom-dock screenshots below remain historical reference only. This correction is implementation-authorized; shipping-first and bounded validation remain in force.
