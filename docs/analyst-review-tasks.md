@@ -16,6 +16,11 @@ Ship implementation first. Reuse existing engines and checks; perform a narrow t
 - [x] **AR-6 — Unified source controls.** One Sources entry point wraps existing offline import/recovery and capture setup/status/cleanup controls. Do not auto-provision or remove cloud infrastructure; preserve existing confirmations.
 - [x] **AR-7 — Bounded integration.** One frontend build, focused changed-flow/browser/native checks as warranted; update affected legacy selectors; inspect screenshots at 1440×960 and 1280×800; record remaining limitations honestly.
 
+## Native follow-up
+
+- [x] Compile the production Linux Wails executable and verify native startup/rendering.
+- [ ] Complete native offline-import/review smoke; chooser aborts in GTK/glycin in the isolated dependency setup. See `ui-reviews/native-build.md`; AR-7 browser checks do not satisfy this item.
+
 ## Scope boundaries
 
 - Existing consolidated Hunt stays functional; no new authoring workspace or detection engine.

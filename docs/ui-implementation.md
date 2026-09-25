@@ -6,6 +6,13 @@
 
 **ACTIVE PLAN:** [Approved analyst-review tasks](analyst-review-tasks.md). The user approved the new mock and authorized shipping it in separately committed slices. Two narrow workers own facets and inspector; parent owns shared integration. Older pass numbering below is historical. Shipping first, focused checks only, one final integration pass.
 
+### Native build checkpoint
+
+- [x] Real Linux production executable built at `build/bin/cloudmon`; generated Wails bindings synchronized.
+- [x] Executable launched and rendered the native import screen with isolated local dependencies/profile.
+- [ ] Native import/Workbench smoke blocked by GTK/glycin file-picker crash in that isolated setup. Do not equate startup with end-to-end acceptance.
+- Evidence, environment, exact failure and next action: `ui-reviews/native-build.md`.
+
 ### Analyst-review shipping checkpoint
 
 - [x] AR-1 through AR-6 implemented and separately committed; see `analyst-review-tasks.md` for hashes and scopes.
