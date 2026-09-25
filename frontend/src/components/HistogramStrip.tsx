@@ -79,6 +79,7 @@ export function HistogramStrip({ hist, collapsed, timeZone, onToggleCollapse, on
 
   return (
     <div className="hist">
+      <div className="review-hist-label"><span>Event volume</span><span>Drag to narrow time · errors highlighted</span></div>
       <button className="hist-collapse" onClick={onToggleCollapse} title="Hide histogram">
         ▴
       </button>
@@ -110,6 +111,7 @@ export function HistogramStrip({ hist, collapsed, timeZone, onToggleCollapse, on
           </div>
         )}
       </div>
+      <div className="review-hist-axis"><span>{hist.from ? fmtClock(hist.from, timeZone) : ""}</span><span>{hist.to ? fmtClock(hist.to, timeZone) : ""} {timeZone === "utc" ? "UTC" : "local"}</span></div>
     </div>
   );
 }

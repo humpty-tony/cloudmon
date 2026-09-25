@@ -5,6 +5,7 @@ import { COLUMNS, COLUMN_BY_KEY } from "../api/columns";
 import type { Preset } from "../api/presets";
 
 interface Props {
+  compact?: boolean;
   capturing: boolean;
   follow: boolean;
   live: boolean;
@@ -258,7 +259,7 @@ export function ColumnsMenu({
 export function Toolbar(p: Props) {
   const isCustom = (k: string) => k.startsWith("custom-");
   return (
-    <div className="toolbar">
+    <div className={`toolbar ${p.compact ? "toolbar--review" : ""}`}>
       {p.streaming && (
         <>
           <button
@@ -278,6 +279,8 @@ export function Toolbar(p: Props) {
         </>
       )}
 
+      {p.compact ? <Popover label="Lenses" active={p.errorsOnly || p.hideReadOnly || p.sensitiveOnly}>
+        {() => <div className="review-lenses">
       <button className={`tb-btn ${p.errorsOnly ? "active sev-err" : ""}`} onClick={p.onToggleErrors}>
         Errors only
       </button>
@@ -287,6 +290,18 @@ export function Toolbar(p: Props) {
       <button className={`tb-btn ${p.sensitiveOnly ? "active sev-warn" : ""}`} onClick={p.onToggleSensitive}>
         Sensitive only
       </button>
+        </div>}
+      </Popover> : <>
+      <button className={`tb-btn ${p.errorsOnly ? "active sev-err" : ""}`} onClick={p.onToggleErrors}>
+        Errors only
+      </button>
+      <button className={`tb-btn ${p.hideReadOnly ? "active" : ""}`} onClick={p.onToggleReadOnly}>
+        Hide read-only
+      </button>
+      <button className={`tb-btn ${p.sensitiveOnly ? "active sev-warn" : ""}`} onClick={p.onToggleSensitive}>
+        Sensitive only
+      </button>
+      </>}
 
       <span className="tb-sep" />
 

@@ -4,6 +4,7 @@ import logo from "../assets/logo.png";
 
 interface Props {
   connected: boolean;
+  sourceLabel?: string;
   canExport: boolean;
   canExportMatches: boolean;
   view: "console" | "sigma" | "analysis" | "hunts";
@@ -15,7 +16,7 @@ interface Props {
   onSettings: () => void;
 }
 
-export function TitleBar({ connected, canExport, canExportMatches, view, onView, onOpenDataset, onExport, onExportMatches, onHelp, onSettings }: Props) {
+export function TitleBar({ connected, sourceLabel, canExport, canExportMatches, view, onView, onOpenDataset, onExport, onExportMatches, onHelp, onSettings }: Props) {
   const [menu, setMenu] = useState<null | "file" | "help">(null);
   const close = () => setMenu(null);
   const run = (fn: () => void) => () => {
@@ -100,6 +101,7 @@ export function TitleBar({ connected, canExport, canExportMatches, view, onView,
         </div>
       )}
 
+      {sourceLabel && <span className="tbar-source" title={sourceLabel}>{sourceLabel}</span>}
       <div className="tbar-drag" />
 
       <div className="tbar-winctl">

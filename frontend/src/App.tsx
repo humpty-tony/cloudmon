@@ -147,7 +147,8 @@ export default function App() {
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => load("workbench.colw", {}));
   const [customPresets, setCustomPresets] = useState<Preset[]>(() => load("customPresets", []));
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => load("sidebar", false));
-  const [histCollapsed, setHistCollapsed] = useState<boolean>(() => load("workbench.hist", true));
+  const [histCollapsed, setHistCollapsed] = useState<boolean>(() => load("workbench.hist", false));
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [help, setHelp] = useState<{ open: boolean; tab: string }>({ open: false, tab: "getting-started" });
   const [theme, setTheme] = useState<string>(() => load("theme", DEFAULT_THEME));
@@ -779,6 +780,7 @@ export default function App() {
     <div className={`app ${connected && uiView === "console" ? "app--workbench" : ""}`}>
       <TitleBar
         connected={connected}
+        sourceLabel={connected ? (capInfra ? `${capInfra.account} · ${capInfra.region}` : config?.mode === "import-dump" ? "Imported CloudTrail evidence" : "CloudTrail activity") : undefined}
         canExport={uiView === "console" && events.length > 0}
         canExportMatches={uiView === "console" && !exporting && !querying && !queryFailure && resultsFilter.current === filter && !!agg.snapshot}
         onExportMatches={exportMatches}
@@ -814,23 +816,9 @@ export default function App() {
       </div></WorkspaceActivity.Provider>}
       {connected && <WorkspaceActivity.Provider value={uiView === "console"}><main key={datasetSession} className="workbench-page" hidden={uiView !== "console"}>
       <div className="workbench-search">
-        <div className="workbench-search-tools">
-          <button className={`tb-btn ${!sidebarCollapsed ? "active" : ""}`} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(v => !v)}>Filters</button>
-          <button className={`tb-btn ${!histCollapsed ? "active" : ""}`} aria-expanded={!histCollapsed} onClick={() => setHistCollapsed(v => !v)}>Histogram</button>
-          <button className="tb-btn" onClick={() => selectView("analysis")}>Summarize</button>
-        </div>
         <QueryBar terms={terms} queryText={queryText} error={compiled.error} inputRef={queryInputRef}
           onQueryChange={setQueryText} onRemove={removeQ} onClear={clearQ} />
-      </div>
-      <div className={`workbench-session ${sidebarCollapsed ? "workbench-session--no-filters" : ""}`}>
-        <FacetSidebar facets={facets} collapsed={sidebarCollapsed} activeValues={activeValues} activeExcludes={activeExcludes}
-          onToggleCollapse={() => setSidebarCollapsed(v => !v)} onPick={pivot} />
-        <div className="workbench-main">
-      <div className="workbench-context">
-        <div><h1>Event workbench</h1><span>{capInfra ? `${capInfra.account} · ${capInfra.region}` : config?.mode === "import-dump" ? "Imported evidence" : "CloudTrail activity"}</span></div>
-        <span className="workbench-scope">{datasetTotal.toLocaleString()} recorded events · {backend.live ? "Local evidence" : "Browser preview"}</span>
-      </div>
-      <Toolbar
+      <Toolbar compact
         capturing={capturing}
         follow={follow}
         live={backend.live}
@@ -860,20 +848,31 @@ export default function App() {
         onTimeRange={applyTimeRange}
         onClearTime={clearTime}
       />
+      </div>
+      <div className={`workbench-session ${sidebarCollapsed ? "workbench-session--no-filters" : ""}`}>
+        <FacetSidebar facets={facets} collapsed={sidebarCollapsed} activeValues={activeValues} activeExcludes={activeExcludes}
+          onToggleCollapse={() => setSidebarCollapsed(v => !v)} onPick={pivot} />
+        <div className="workbench-main">
+
+
       {savedCapture && <div className="capture-status">
         <details><summary>{capturing ? "Capture running" : savedCapture.phase === "ready" ? "Capture paused" : "Capture needs cleanup"} · {savedCapture.infra.account} · {savedCapture.infra.region} <span>Resources retained after exit</span></summary><CaptureDescription capture={savedCapture} /></details>
         <button className="btn-ghost" disabled={captureBusy} onClick={teardownCapture}>{savedCapture.infra.owned ? "Remove infrastructure…" : "Disconnect queue…"}</button>
       </div>}
-      {!histCollapsed && <HistogramStrip hist={hist} collapsed={false} timeZone={timeZone}
-        onToggleCollapse={() => setHistCollapsed(true)}
-        onBrush={(from, to) => addQ(timeTerm(from, to, `${fmtClock(from, timeZone)}–${fmtClock(to, timeZone)}`))} />}
+
       <div className="workbench-body">
         <section className="workbench-results" aria-label="Event results">
           <div className="workbench-list-heading">
-            <strong>{agg.total.toLocaleString()} matches</strong>
+            <strong>{agg.total.toLocaleString()} events</strong>
             <span>{stats.errors.toLocaleString()} errors · {stats.principals.toLocaleString()} principals</span>
             <span className="workbench-order">Newest received first · {timeZone === "utc" ? "UTC" : "Local time"}</span>
+            <button className="tb-btn" aria-expanded={!histCollapsed} onClick={() => setHistCollapsed(v => !v)}>Activity</button>
+            <button className="tb-btn" aria-expanded={summaryOpen} onClick={() => setSummaryOpen(v => !v)}>Summarize</button>
           </div>
+      {!histCollapsed && <HistogramStrip hist={hist} collapsed={false} timeZone={timeZone}
+        onToggleCollapse={() => setHistCollapsed(true)}
+        onBrush={(from, to) => addQ(timeTerm(from, to, `${fmtClock(from, timeZone)}–${fmtClock(to, timeZone)}`))} />}
+          {summaryOpen && <section className="workbench-summary" aria-label="Activity summary"><AnalysisView filter={filter}/></section>}
           {queryFailure ? (
             <div className="search-notice search-notice--error" role="alert">
               <div><strong>Search failed.</strong> Displayed results have not been updated. Retry to refresh them.
