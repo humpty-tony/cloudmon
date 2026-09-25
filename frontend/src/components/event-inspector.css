@@ -64,3 +64,25 @@
 .ei-empty h2 { margin: 17px 0 0; font-size: var(--fs-body); font-weight: 600; }
 .ei-empty p { max-width: 260px; margin: 10px 0; color: var(--tx-2); line-height: 1.7; }
 .ei-empty > span:last-child { max-width: 250px; color: var(--tx-2); font-size: var(--fs-cap); line-height: 1.7; }
+
+/* Dock owns only its internal split; the Workbench owns pane allocation. */
+.event-inspector--dock { width: 100%; height: 100%; border-left: 0; border-top: 1px solid var(--line-struct); }
+.event-inspector--dock .ei-head { align-items: center; gap: 12px; padding: 7px 12px; border-bottom: 1px solid var(--line-struct); }
+.event-inspector--dock .ei-heading { display: flex; align-items: baseline; gap: 10px; flex: 1; }
+.event-inspector--dock .ei-heading .ei-eyebrow { flex: none; }
+.event-inspector--dock .ei-heading h2 { margin: 0; font-size: 13px; }
+.event-inspector--dock .ei-actions { padding: 0; flex-wrap: nowrap; gap: 7px; }
+.event-inspector--dock .ei-actions button { white-space: nowrap; padding: 5px 8px; }
+.ei-dock-body { display: grid; grid-template-columns: minmax(245px, 29%) minmax(0, 1fr); flex: 1; min-height: 0; }
+.event-inspector--dock .ei-context { padding: 12px; overflow: auto; overscroll-behavior: contain; border-right: 1px solid var(--line-struct); }
+.event-inspector--dock .ei-context > .ei-eyebrow { margin-bottom: 10px; text-transform: none; letter-spacing: .3px; }
+.event-inspector--dock .ei-summary { margin-top: 12px; gap: 7px 8px; }
+.ei-details { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.event-inspector--dock .ei-tabs { padding: 0 12px; gap: 20px; border-top: 0; }
+.event-inspector--dock .ei-tabs button { padding: 8px 0 7px; font-size: 12px; }
+.event-inspector--dock .ei-panel { padding: 10px 12px; }
+.ei-lineage-note { margin: 0; padding: 6px 12px; color: var(--tx-2); font-size: 11px; border-top: 1px solid var(--line-struct); }
+.event-inspector--dock :is(button, [tabindex]):focus-visible { outline: 2px solid var(--acc-text); outline-offset: -2px; }
+.event-inspector--dock .ei-empty { padding: 12px; }
+.event-inspector--dock .ei-empty-glyph { display: none; }
+.event-inspector--dock .ei-empty h2 { margin-top: 0; }

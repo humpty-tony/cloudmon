@@ -140,6 +140,8 @@ jobs:
         run: |
           npm run check:workbench
           npm run check:workspace-overlays
+          npm run check:vector-layout
+          npm run check:inspector-dock
       - name: Facet counts, parity and Workbench integration
         if: runner.os == 'Linux'
         env:
@@ -162,6 +164,8 @@ jobs:
             frontend/test-results/capture/*.png
             frontend/test-results/performance/*
             frontend/test-results/vector-workbench/*.png
+            frontend/test-results/vector-layout/*
+            frontend/test-results/inspector-dock/*
             frontend/test-results/facets/*.png
             frontend/test-results/facets-workbench/*.png
           if-no-files-found: warn

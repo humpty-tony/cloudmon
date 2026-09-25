@@ -1,0 +1,33 @@
+.ls-summary { min-width: 0; color: var(--tx-1); font-size: 12px; }
+.ls-heading { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 12px; }
+.ls-heading h3 { margin: 0; font-size: 12px; font-weight: 600; }
+.ls-status { font-size: 11px; color: var(--tx-2); }
+.ls-status.complete { color: var(--sev-ok); }
+.ls-status.incomplete { color: var(--sev-warn); }
+.ls-summary button { font: inherit; cursor: pointer; }
+.ls-summary .ls-expand { margin-left: auto; padding: 2px 4px; border: 0; background: transparent; color: var(--acc-text); }
+.ls-chain { display: flex; align-items: center; gap: 8px; overflow-x: auto; overscroll-behavior: contain; padding: 2px 1px 6px; }
+.ls-summary .ls-node { flex: 1 0 140px; min-width: 0; max-width: 240px; align-self: stretch; display: flex; flex-direction: column; gap: 5px; padding: 9px 10px; border: 1px solid var(--border-fn); border-radius: 4px; background: var(--bg-2); color: var(--tx-1); text-align: left; }
+.ls-node strong, .ls-node > span { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-node strong { font-weight: 550; }
+.ls-node > span, .ls-node small { font-size: 11px; color: var(--tx-2); }
+.ls-summary .ls-node:hover, .ls-summary .ls-node[aria-expanded="true"] { border-color: var(--acc-text); }
+.ls-summary .ls-current { border-color: var(--acc); background: var(--acc-sel); }
+.ls-link { display: flex; flex: 0 0 66px; flex-direction: column; align-items: center; gap: 3px; color: var(--tx-2); font-size: 11px; }
+.ls-link > span:first-child { max-width: 66px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ls-link > span:last-child { font-size: 18px; }
+.ls-gap { margin: 0 0 10px; color: var(--sev-warn); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.ls-attribute { margin: 6px 0 0; color: var(--tx-2); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.ls-attribute > span { color: var(--tx-1); }
+.ls-detail { margin-top: 12px; padding: 10px; border: 1px solid var(--border-fn); border-radius: 4px; background: var(--bg-0); }
+.ls-detail header { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.ls-detail header > strong { overflow-wrap: anywhere; min-width: 0; }
+.ls-detail header > span { color: var(--tx-2); font-size: 11px; }
+.ls-detail header button { margin-left: auto; border: 0; background: transparent; color: var(--tx-2); font-size: 18px; }
+.ls-detail dl { display: grid; grid-template-columns: 138px minmax(0, 1fr); gap: 6px 12px; margin: 10px 0; font-size: 11px; line-height: 1.5; }
+.ls-detail dt { color: var(--tx-2); }
+.ls-detail dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; font-family: var(--mono); user-select: text; }
+.ls-detail-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.ls-detail-actions button { padding: 5px 7px; border: 1px solid var(--border-fn); border-radius: 4px; background: var(--bg-1); color: var(--acc-text); font-size: 11px; }
+.ls-detail-actions button:disabled { opacity: .5; cursor: default; }
+.ls-detail-actions button:hover:not(:disabled) { border-color: var(--acc); }

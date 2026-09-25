@@ -9,6 +9,8 @@
     "preview": "vite preview",
     "check:capture-ui": "node scripts/check-capture-ui.cjs",
     "check:workbench": "node scripts/check-vector-workbench.cjs",
+    "check:vector-layout": "node scripts/check-vector-layout.mjs",
+    "check:inspector-dock": "node scripts/check-inspector-dock.mjs",
     "check:workspace-overlays": "node scripts/check-workspace-overlays.cjs",
     "check:facets": "node scripts/check-facets.mjs && node scripts/check-facets-ui.mjs && node scripts/check-facets-workbench.mjs",
     "check:search": "node scripts/check-search.mjs",

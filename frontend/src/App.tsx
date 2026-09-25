@@ -285,8 +285,12 @@ export default function App() {
 
   const columns = useMemo(() => visibleCols.map((key) => COLUMN_BY_KEY[key]).filter(Boolean).map(column => {
     if (presetKey !== "workbench" || uiView !== "console") return column;
-    const width = column.key === "time" ? 88 : column.key === "name" ? 160 : column.key === "result" ? 108 : column.width;
-    return {...column, width, label: column.key === "time" ? "Time" : column.key === "name" ? "Action / principal" : column.key === "result" ? "Result" : column.label};
+    const defaults: Record<string, {width: number; label: string}> = {
+      time: {width: 88, label: "Time"}, name: {width: 190, label: "Event"},
+      identity: {width: 190, label: "Principal"}, source: {width: 170, label: "Service"},
+      region: {width: 100, label: "Region"}, result: {width: 130, label: "Result"},
+    };
+    return {...column, ...defaults[column.key]};
   }), [visibleCols, presetKey, uiView]);
 
   // Invalid applied expressions fail closed; never discard an invalid predicate
@@ -891,7 +895,7 @@ export default function App() {
             events={events}
             columns={columns}
             colWidths={colWidths}
-            rowHeight={presetKey === "workbench" ? Math.max(rowH, 52) : rowH}
+            rowHeight={presetKey === "workbench" ? Math.max(rowH, visibleCols.includes("identity") ? 32 : 44) : rowH}
             selected={selected}
             cursorSeq={cursorSeq}
             follow={follow}
@@ -912,7 +916,7 @@ export default function App() {
           />
           <div className="workbench-list-footer">↑ ↓ Inspect events · / Search · {events.length.toLocaleString()} loaded</div>
         </section>
-        <EventInspector key={selected?.seq ?? "empty"} event={selected} snapshot={selectedSnapshot ?? undefined} rawJSON={selectedRaw}
+        <EventInspector layout="dock" event={selected} snapshot={selectedSnapshot ?? undefined} rawJSON={selectedRaw}
           rawLoading={!!selected && !selectedRaw && !selectedRawErr}
           rawError={selectedRawErr ? "Could not load this event." : undefined}
           lineage={selectedLineage} lineageLoading={!!selected && hasCredentialLineage(selected) && !selectedLineage && !selectedLineageError}

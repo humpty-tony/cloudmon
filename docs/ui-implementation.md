@@ -9,7 +9,7 @@
 - Verified baseline/design commit: `d6953e5` — `docs(ui): preserve Vector roadmap and visual reference`
 - Original production baseline: `a4afbf3`
 - User authorized real implementation and incremental commits. No push or merge has been requested.
-- **Navigation repair is applied to the parent checkout and targeted checks pass.** Repeated scroll/visible-row retention, portal/request deactivation and Source evidence focus containment have regressions. This is a tested local progress checkpoint, **not final UX acceptance**. Facets are now integrated with passing local checks. Lower dock, consolidated Hunt, summary/around and source-control integration remain unfinished.
+- **Pass 1 (visible Vector integration) is implemented and locally verified.** Navigation (`ea490a0`) and truthful facets (`8cb90ca`) are committed. The checkpoint containing this update integrates the full-width grid, compact chrome and bottom context/lineage dock, with tab continuity and issuance-lifetime regressions. **This is not full-product acceptance.** Consolidated Hunt, in-grid summary/around and unified source controls remain pending, followed by the final integrated verification pass.
 - Tested navigation implementation checkpoint: `ea490a0` — `feat(ui): preserve review state across workspace navigation`. Parent working tree was clean after this commit; the component worktrees retain separate unfinished work.
 - Committed regressions: `frontend/scripts/check-vector-workbench.cjs` and `frontend/scripts/check-workspace-overlays.cjs`, both wired into Linux CI. Remote CI has not been run.
 - Do not discard, reset, or overwrite this work when resuming. Inspect `git status` and the diff first.
@@ -26,8 +26,8 @@
 
 Run these during implementation, not only in Phase 7. The user explicitly requested periodic adversarial UX reviews. Use a separate critical pass after smaller visible changes and an independent reviewer at the meaningful integration checkpoints below. Test the actual goal-free review → select → understand → pivot → return journey, not just rendering or happy-path assertions.
 
-- [ ] **UX-1 — navigation/state retention:** independently attack draft/applied-query coherence, selection/scroll/inspector retention, hidden-view focus, source replacement, and secondary-control discoverability. Completed by `sa-1-58e7c95f` / `deleg_afac83f6`: **REJECT** pre-fix UX-1. Report `frontend/test-results/vector-navigation-ux-audit/report.md` reproduces repeated-scroll loss, portal leakage and Source evidence focus escape. Fixes and fresh retests remain pending.
-- [ ] **UX-2 — integrated facets and lower inspector:** verify count scope, literal filtering, selected-event/evidence agreement, identity uncertainty, reachable groups, and usable grid/dock space.
+- [ ] **UX-1 — navigation/state retention:** independently attack draft/applied-query coherence, selection/scroll/inspector retention, hidden-view focus, source replacement, and secondary-control discoverability. Completed by `sa-1-58e7c95f` / `deleg_afac83f6`: **REJECT** pre-fix UX-1. Report `frontend/test-results/vector-navigation-ux-audit/report.md` reproduces repeated-scroll loss, portal leakage and Source evidence focus escape. Those failures were fixed in `ea490a0`; repeated navigation/overlay/focus regressions also pass with the current dock. Fresh independent integrated acceptance is deferred to the final pass, not claimed from the historical rejection.
+- [x] **UX-2 — bounded separate critical pass:** inspected both production-layout screenshots and exercised count scope, literal filtering, selected-event/evidence agreement, identity uncertainty, local disclosure, keyboard/focus and useful grid/dock space. Reproduced and repaired tab reset, obsolete issuance and missing lineage-label regressions. See `ui-reviews/vector-layout-integration.md`. This is a solo critical pass under the usage constraint, not independent full-product approval.
 - [ ] **UX-3 — contextual journeys:** challenge summary drill-down, surrounding-activity anchor, evidence/comparison target labels, and exact return scope/selection/scroll.
 - [ ] **UX-4 — consolidated Hunt:** try cross-mode draft/result loss, ambiguous inherited scope, result-to-evidence pivots, and return to browsing.
 - [ ] **UX-5 — unified source controls:** challenge offline recovery, replacement/error/cancellation states, stale context, and deliberate capture/cleanup consent using fixtures only.
@@ -72,7 +72,7 @@ The browser baseline includes capture bridge fixtures, not real AWS provisioning
 - [x] Re-run retention to GREEN at 1440×960 and 1280×800, including scroll and inspector mode.
 - [x] Add and observe RED→GREEN for source replacement from Hunt: return to Workbench and clear the old dataset session.
 - [x] Add `npm run check:workbench` and wire it into the Linux CI job (local execution verified; remote CI not yet run).
-- [ ] Integrate the lower-dock inspector and compact Vector layout.
+- [x] Integrate the lower-dock inspector and compact Vector layout; both desktop-size layout checks pass, including exact source identity and keyboard-reachable caller evidence.
 - [x] Adapt existing capture UI navigation selectors and restrict the analysis layout assertion to the visible retained view; original assertions remain in place.
 - [x] Run the production build and existing capture, performance, search, inspector, labels, and saved-hunt checks successfully for the navigation slice.
 - [x] Apply and parent-verify the overlay/request fix: inactive popovers/dialogs unmount, late Hunt/Analysis requests are invalidated across leave/return, and drafts/results remain retained.
@@ -84,7 +84,7 @@ The browser baseline includes capture bridge fixtures, not real AWS provisioning
 
 ### Exact next action
 
-**Latest checkpoint:** navigation repairs and Source evidence focus fix are now in the parent tree and tested. Extra fix workers were stopped for usage efficiency; no worker remains active. Continue serially from preserved component deltas—do not restart a fan-out. Facet integration and targeted checks now pass; continue with the preserved lower-dock component and its activation/issuance fixes, then Hunt. The paragraph below records the earlier dispatch rather than live ownership.
+**Latest checkpoint:** the real Workbench now has a compact six-column grid and bottom Context/Fields/Original dock; navigation, facets and inspector integration checks pass. No agents are running. **Next: pass 2**, reusing the preserved Hunt implementation and saved-Hunt repair, then integrating the existing summary/around and source workflows. Inspect actual deltas first; combine nested mode activity with parent activity and preserve saved-definition identity. **Pass 3** is the final integrated verification/fix pass. No new mockups, worker fan-out or repeated component review cycles. The dispatch paragraphs below are historical, not live ownership.
 
 The interrupted fix/audit/reviews resumed in batch `deleg_afac83f6` (worker IDs below). Verify their current status after any reset rather than assuming they remain live. On delivery, inspect/apply only the overlay fix delta, rerun its regressions and navigation/build checks, resolve UX findings, and obtain fresh code review before committing implementation. The three component patches are complete in isolated worktrees and parent-rerun checks pass, but independent reviewers rejected uncovered edge cases. Targeted fixes and integration are pending; current ownership/findings are recorded in `ui-reviews/component-verification.md`. Do not reimplement the old query-draft fix or restart finished component implementation.
 
@@ -115,14 +115,19 @@ The current secondary Hunt bar and contextual Analysis return control are transi
 - [x] Critical screenshot pass: full-height facets are usable, but the side inspector/old chrome are explicitly NOT the approved Vector layout. Lower-dock integration is the immediate next visible milestone.
 - [ ] Final independent integrated UX acceptance remains part of UX-2/UX-6, not inferred from these tests.
 
-## Phase 3 — contextual lower inspector (isolated checks verified; not integrated)
+## Phase 3 — contextual lower inspector (integrated; local checks pass)
 
 - [x] Implement/test optional `layout="dock"` with backwards-compatible side mode in the isolated inspector worktree.
 - [x] Test lineage-response rendering and explicit missing/ambiguous/error states with synthetic bridge fixtures; no native GUI claim.
 - [x] Verify Fields, Original, Sources/versions, comparison, and local expansion in isolated component checks.
 - [x] Add/test optional `onInvestigate(event, snapshot)` callback with exact arguments and existing fallback behavior.
 - [x] Parent rerun: 11 short-dock checks, keyboard/focus, exact evidence/snapshots and both target sizes pass; isolated production build passes.
-- [ ] Review, integrate into the parent shell, run regressions, and commit.
+- [x] Integrate the preserved dock/lineage component into the parent shell and review the production diff.
+- [x] Verify RED→GREEN for compact layout/readability, stale issuance across workspace switches, and Fields/Original mode continuity when browsing rows. Keep evidence/disclosures keyed to record and snapshot while retaining only the chosen mode.
+- [x] Preserve personal labels in the compact credential chain; capture regression failed before repair and now passes.
+- [x] Run all 28 dock checks, real-App layout at both desktop sizes, navigation/overlays, capture UI, 20k-row performance, integrated facets and production build successfully.
+- [x] Wire dock/layout checks and their artifacts into Linux CI; no remote run claimed.
+- [x] Record the bounded critical review and remaining limitations in `ui-reviews/vector-layout-integration.md`; final full-product acceptance remains unchecked.
 
 ## Phase 4 — summary and surrounding activity (not started)
 
@@ -161,7 +166,7 @@ The current secondary Hunt bar and contextual Analysis return control are transi
 
 ## Parallel-work handoff
 
-The three implementation workers completed in `deleg_0274768f`. The parent verified each patch equals its worktree index, contains only owned files, and applies cleanly to the main checkout; checks were rerun independently. No component is integrated or committed yet. Patch digests, parent-run commands and evidence boundaries are recorded in `ui-reviews/component-verification.md`. **Do not restart completed implementation after a reset.** Independent reviews were interrupted by provider limits, resumed, and returned rejection findings. Targeted fix workers now own unstaged deltas in the preserved worktrees; see `ui-reviews/component-verification.md`.
+The three implementation workers completed in `deleg_0274768f`. The parent verified each patch equals its worktree index, contains only owned files, and applies cleanly to the main checkout; checks were rerun independently. **Historical dispatch:** facets are now integrated/committed (`8cb90ca`), and the lower inspector is integrated in this checkpoint; Hunt still awaits integration. Patch digests, parent-run commands and evidence boundaries are recorded in `ui-reviews/component-verification.md`. **Do not restart completed implementation after a reset.** Independent reviews were interrupted by provider limits, resumed, and returned rejection findings. Targeted fix workers were stopped; their preserved deltas remain on disk without active ownership; see `ui-reviews/component-verification.md`.
 
 ### Facets
 
@@ -197,7 +202,7 @@ The three implementation workers completed in `deleg_0274768f`. The parent verif
 
 Navigation/state code review: worker `sa-0-c9cc076f`, batch `deleg_90cad787`, **completed with `passed=false`**, no security concerns. Reviewed snapshot: `/home/humpty/.hermes/cache/scratch/cloudmon-navigation-review.diff`.
 
-- Reported P2 blocker at `App.tsx:792-809`: retained hidden workspaces do not own body-portaled transient UI. Repro: open Workbench Columns, Shift+Tab to Hunt, Enter; the old popover and backdrop remain above Hunt. Reviewer reproduced this in a browser probe; parent integration regression remains pending.
+- Reported P2 blocker at `App.tsx:792-809`: retained hidden workspaces do not own body-portaled transient UI. Repro: open Workbench Columns, Shift+Tab to Hunt, Enter; the old popover and backdrop remain above Hunt. Reviewer reproduced this in a browser probe. Fixed in `ea490a0`; the parent regression passes with the integrated dock.
 - Related gap: Hunt/Analysis original-record requests can finish after navigation and open a dialog over the wrong workspace. Invalidate obsolete requests even when the user leaves and returns before completion; do not sacrifice draft/result retention.
 - Reviewer suggestions: use unique event identity in retention assertions, check nonzero/restored scroll after the virtualizer settles, cover Rules/Analysis retention and reset. Assigned to the fix worker alongside the focused regressions.
 - CI screenshot suggestion addressed locally: the upload paths now include `frontend/test-results/vector-workbench/*.png`. This is configuration only; no remote CI run claimed.

@@ -59,7 +59,7 @@ function TimeCell({ e, tz }: { e: CloudTrailEvent; tz: TimeZonePref }) {
 function IdentityCell({ e }: { e: CloudTrailEvent }) {
   const ui = e.userIdentity;
   return (
-    <span className="c-ident">
+    <span className="c-ident" title={ui.arn || ui.principalId || eventUser(e)}>
       <span className={`c-ident-glyph t-${ui.type}`}>{identityGlyph(ui.type)}</span>
       <span className="c-ident-name">{eventUser(e)}</span>
       {ui.arn && <span className="c-ident-arn">{truncateArn(ui.arn, 22)}</span>}
@@ -119,7 +119,7 @@ const EventRow = memo(function EventRow({
         if (c.key === "time") content = <TimeCell e={e} tz={timeZone} />;
         else if (c.key === "identity") content = <IdentityCell e={e} />;
         else if (c.key === "result") content = <ResultCell e={e} />;
-        else if (c.key === "name" && compact) content = <span className="workbench-action">
+        else if (c.key === "name" && compact && !columns.some(column => column.key === "identity")) content = <span className="workbench-action">
           <span className="workbench-action-name">{e.eventName}</span>
           <span className="workbench-action-meta">{eventUser(e)}<AliasBadge kind="arn" value={e.userIdentity.arn || ""} /></span>
         </span>;

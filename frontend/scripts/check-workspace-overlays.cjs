@@ -94,10 +94,10 @@ async function workbenchDialog(page,kind) {
   const eventID=JSON.parse(await page.locator('.ei-source').textContent()).eventID;
   if(kind==='raw') await page.getByRole('button',{name:'Open full JSON',exact:true}).click();
   if(kind==='evidence') await page.getByRole('button',{name:'Sources & hashes',exact:true}).click();
-  if(kind==='investigation') await page.getByRole('button',{name:'Investigate',exact:true}).click();
+  if(kind==='investigation') await page.getByRole('button',{name:'Around this event',exact:true}).click();
   if(kind==='lineage') {
-    await page.getByRole('tab',{name:'Lineage',exact:true}).click();
-    await page.getByRole('button',{name:'⤢ View full lineage',exact:true}).click();
+    await page.getByRole('tab',{name:'Context',exact:true}).click();
+    await page.getByRole('button',{name:'Expand selected-event lineage',exact:true}).click();
   }
   const portals=page.locator('[role=dialog], .lgv-scrim');
   await portals.first().waitFor();
