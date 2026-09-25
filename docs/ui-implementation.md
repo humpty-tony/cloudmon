@@ -9,7 +9,7 @@
 - Verified baseline/design commit: `d6953e5` — `docs(ui): preserve Vector roadmap and visual reference`
 - Original production baseline: `a4afbf3`
 - User authorized real implementation and incremental commits. No push or merge has been requested.
-- **Navigation repair is applied to the parent checkout and targeted checks pass.** Repeated scroll/visible-row retention, portal/request deactivation and Source evidence focus containment have regressions. This is a tested local progress checkpoint, **not final UX acceptance**. Facets, lower dock, consolidated Hunt, summary/around and source-control integration remain unfinished.
+- **Navigation repair is applied to the parent checkout and targeted checks pass.** Repeated scroll/visible-row retention, portal/request deactivation and Source evidence focus containment have regressions. This is a tested local progress checkpoint, **not final UX acceptance**. Facets are now integrated with passing local checks. Lower dock, consolidated Hunt, summary/around and source-control integration remain unfinished.
 - Tested navigation implementation checkpoint: `ea490a0` — `feat(ui): preserve review state across workspace navigation`. Parent working tree was clean after this commit; the component worktrees retain separate unfinished work.
 - Committed regressions: `frontend/scripts/check-vector-workbench.cjs` and `frontend/scripts/check-workspace-overlays.cjs`, both wired into Linux CI. Remote CI has not been run.
 - Do not discard, reset, or overwrite this work when resuming. Inspect `git status` and the diff first.
@@ -84,7 +84,7 @@ The browser baseline includes capture bridge fixtures, not real AWS provisioning
 
 ### Exact next action
 
-**Latest checkpoint:** navigation repairs and Source evidence focus fix are now in the parent tree and tested. Extra fix workers were stopped for usage efficiency; no worker remains active. Continue serially from preserved component deltas—do not restart a fan-out. Reconcile facet labels/search first, then dock/Hunt activation and saved-target fixes. The paragraph below records the earlier dispatch rather than live ownership.
+**Latest checkpoint:** navigation repairs and Source evidence focus fix are now in the parent tree and tested. Extra fix workers were stopped for usage efficiency; no worker remains active. Continue serially from preserved component deltas—do not restart a fan-out. Facet integration and targeted checks now pass; continue with the preserved lower-dock component and its activation/issuance fixes, then Hunt. The paragraph below records the earlier dispatch rather than live ownership.
 
 The interrupted fix/audit/reviews resumed in batch `deleg_afac83f6` (worker IDs below). Verify their current status after any reset rather than assuming they remain live. On delivery, inspect/apply only the overlay fix delta, rerun its regressions and navigation/build checks, resolve UX findings, and obtain fresh code review before committing implementation. The three component patches are complete in isolated worktrees and parent-rerun checks pass, but independent reviewers rejected uncovered edge cases. Targeted fixes and integration are pending; current ownership/findings are recorded in `ui-reviews/component-verification.md`. Do not reimplement the old query-draft fix or restart finished component implementation.
 
@@ -102,13 +102,18 @@ The earlier spacer fix alone was insufficient after repeated returns. EventTable
 
 The current secondary Hunt bar and contextual Analysis return control are transitional. Do not mistake them for completion of the final consolidated Hunt or in-grid summary designs.
 
-## Phase 2 — truthful facets (isolated checks verified; not integrated)
+## Phase 2 — truthful facets (integrated; local checks pass)
 
 - [x] Implement/test native field presence, missing counts, distinct counts, and top-value truncation in the isolated facet worktree.
 - [x] Verify browser/native parity across nine shared cases and unavailable totals for legacy metadata in the isolated worktree.
 - [x] Implement/test default groups, Add facet, collapse, explicit count scope, and literal include/exclude actions in the isolated worktree.
 - [x] Parent rerun: sparse/high-cardinality/missing/full-snapshot filter cases, facet browser UI, build, full native suite and store vet pass in the isolated worktree.
-- [ ] Review the delivered diff independently, integrate, run native/frontend regressions, and commit.
+- [x] Integrate the preserved implementation and reviewed identity/search fixes into the parent; retain native/browser normalized-name semantics.
+- [x] Observe parent integration RED for disappearing exclusions, destroyed collapsed-rail state, wrapped-value overlap, and default groups not fitting at 1280×800; resolve and verify GREEN at both target sizes.
+- [x] Verify all facet checks with real DuckDB parity (nine filter cases plus six normalized-name cases), full native suite/store vet, search, navigation/overlays, capture, bounded performance, and build.
+- [x] Wire `check:facets` and native parity export into Linux CI; local execution passes, no remote CI claim.
+- [x] Critical screenshot pass: full-height facets are usable, but the side inspector/old chrome are explicitly NOT the approved Vector layout. Lower-dock integration is the immediate next visible milestone.
+- [ ] Final independent integrated UX acceptance remains part of UX-2/UX-6, not inferred from these tests.
 
 ## Phase 3 — contextual lower inspector (isolated checks verified; not integrated)
 

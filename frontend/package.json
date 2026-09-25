@@ -10,6 +10,7 @@
     "check:capture-ui": "node scripts/check-capture-ui.cjs",
     "check:workbench": "node scripts/check-vector-workbench.cjs",
     "check:workspace-overlays": "node scripts/check-workspace-overlays.cjs",
+    "check:facets": "node scripts/check-facets.mjs && node scripts/check-facets-ui.mjs && node scripts/check-facets-workbench.mjs",
     "check:search": "node scripts/check-search.mjs",
     "check:inspector": "node scripts/check-inspector.mjs",
     "check:labels": "node scripts/check-aliases.mjs",

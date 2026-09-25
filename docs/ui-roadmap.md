@@ -4,7 +4,7 @@
 
 Status: **implementation authorized; work is proceeding in tested, separately committed slices.**
 
-The user approved implementation and requested a feature branch with incremental commits. Initial conservative choices: retain applied-filter facet counts and the existing recorded `userName` identity grouping; label both explicitly. These choices do not introduce self-excluding counts or a new identity-resolution model.
+The user approved implementation and requested a feature branch with incremental commits. Initial conservative choices: retain applied-filter facet counts and the existing normalized `userName` grouping (direct user name with session-issuer fallback, not a resolved person); label both explicitly. These choices do not introduce self-excluding counts or a new identity-resolution model.
 Recorded: 2026-09-24 (local EDT). Repository inspected at `a4afbf3`.
 
 This is the durable handoff for the UI discussions and visual POCs. Preserve the product decisions below; treat the proposed technical decomposition and open questions as a plan to review, not as additional user-approved requirements. Update this document as decisions change.

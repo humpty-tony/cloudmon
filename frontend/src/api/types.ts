@@ -158,11 +158,22 @@ export interface AnalysisOptions { filter: QueryFilter; dimension: AnalysisDimen
 export interface ActivityStats { events: number; errors: number; writes: number; unknownReadOnly: number; credentialIDs: number; invalidTimes: number; firstMs: number | null; lastMs: number | null }
 export interface ActivityGroup { value: string; current: number; previous: number; errors: number; writes: number; totalGroups: number }
 export interface ActivityAnalysis { snapshot: EvidenceSnapshot; scope: ActivityStats; current: ActivityStats; previous: ActivityStats; groups: ActivityGroup[]; totalGroups: number; limit: number; fromMs: number; toMs: number; previousFromMs: number; hasWindow: boolean; breakdowns: Record<string, ActivityGroup[]>; events: EventRow[]; notes: string[] }
+/** Counts across the complete applied-query snapshot, not the returned page. */
+export interface FacetMetadata {
+  totalEvents: number;
+  presentEvents: number;
+  missingEvents: number;
+  distinctValues: number;
+  returnedValues: number;
+  limit: number;
+  truncated: boolean;
+}
 export interface EngineAggregates {
   snapshot: EvidenceSnapshot;
   total: number;
   stats: { errors: number; principals: number; sources: number; regions: number; minMs: number; maxMs: number };
   facets: Record<string, { value: string; count: number }[]>;
+  facetMetadata?: Record<string, FacetMetadata>; // absent in legacy/native fixtures
   histogram: { t: number; n: number; e: number }[];
   histStep: number;
   histFrom: number;

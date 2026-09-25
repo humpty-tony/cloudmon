@@ -1,0 +1,45 @@
+/* Owned facet styles. Keep rail layout independent of workbench composition. */
+.facets.facet-selector { width: 224px; min-width: 0; min-height: 0; flex-shrink: 0; display: flex; flex-direction: column; background: var(--bg-1); border-right: 1px solid var(--line-struct); box-shadow: none; border-radius: 0; color: var(--tx-2); }
+.facets.facet-selector.facets--rail { width: 40px; padding: 7px 0; align-items: center; }
+.facet-selector .facets-head { height: 36px; min-height: 36px; padding: 0 12px; text-transform: none; font-size: 12px; letter-spacing: 0; }
+.facet-selector .facet-scope { margin: 0; padding: 8px 12px; color: var(--tx-3); font-size: 11px; line-height: 1.5; border-bottom: 1px solid var(--line-row); }
+.facet-selector .facets-scroll { overflow: auto; flex: 1; min-height: 0; padding: 0 0 8px; }
+.facet-selector .facet-group { margin: 0; padding: 2px 0; border-bottom: 1px solid var(--line-row); }
+.facet-selector .facet-group-head { padding: 4px 10px; font: 600 12px/1.4 var(--sans); color: var(--tx-2); letter-spacing: 0; }
+.facet-selector .facet-group-label { min-width: 0; text-align: left; }
+.facet-selector .facet-caret { font-size: 13px; color: var(--tx-3); transform: none; }
+.facet-selector .facet-presence { margin-left: auto; padding: 0; color: var(--tx-3); font: 10px/1.5 var(--mono); white-space: nowrap; }
+.facet-selector .facet-note { margin: 0; padding: 0 12px 0 25px; font-size: 10px; line-height: 1.4; color: var(--tx-3); overflow-wrap: anywhere; }
+.facet-selector .facet-list { padding: 0; }
+.facet-selector .facet-row { display: flex; align-items: center; gap: 5px; min-height: 26px; height: auto; overflow: visible; padding: 0 9px 0 12px; margin: 0; border-radius: 0; background: none; border: 0; }
+.facet-selector .facet-row::before { display: none; }
+.facet-selector .facet-row:hover, .facet-selector .facet-row:focus-within { background: var(--bg-2); }
+.facet-selector .facet-row.active { background: var(--acc-sel); color: var(--acc-text); }
+.facet-selector .facet-val { display: block; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; background: none; padding: 4px 0; color: inherit; border: 0; cursor: pointer; font: 12px/1.4 var(--mono); }
+.facet-selector .facet-count { flex-shrink: 0; color: var(--tx-3); font: 11px var(--mono); }
+.facet-selector .facet-excl { flex-shrink: 0; opacity: 1; height: 24px; width: 20px; padding: 0; color: var(--tx-3); border: 0; background: none; cursor: pointer; }
+.facet-selector .facet-more { margin: 2px 12px; padding: 3px 0; font-size: 11px; color: var(--acc); }
+.facet-selector .facet-missing { padding: 3px 0; color: var(--tx-3); font-size: 11px; }
+.facet-selector .facet-footer { display: grid; gap: 7px; padding: 9px 12px; border-top: 1px solid var(--line-struct); color: var(--tx-3); font-size: 10px; line-height: 1.5; }
+.facet-selector .facet-group-tools { display: flex; align-items: center; padding-right: 9px; }
+.facet-selector .facet-group-tools .facet-group-head { flex: 1; min-width: 0; }
+.facet-selector .facet-tool { padding: 3px 4px; border: 0; background: none; color: var(--tx-3); font-size: 10px; cursor: pointer; }
+.facet-selector .facet-row.excluded { color: var(--exclude); }
+.facet-selector .facet-excl[aria-pressed="true"] { background: var(--bg-2); color: var(--exclude); outline: 1px solid currentColor; }
+.facet-selector .facet-unknown { display: inline-block; width: 48px; white-space: normal; font: 9px/1.1 var(--sans); }
+.facet-selector .facet-missing > .facet-note { display: block; padding: 0 12px; }
+.facet-selector .facet-missing .facet-val { font-family: var(--sans); font-size: 11px; }
+.facet-selector .facet-footer select { width: 100%; min-width: 0; height: 28px; padding: 3px 6px; border: 1px solid var(--line-struct); border-radius: 3px; color: var(--tx-2); background: var(--bg-2); font-size: 11px; }
+.facet-selector .facet-search { margin: 0 12px; font-size: 11px; color: var(--tx-3); }
+.facet-selector .facet-search summary { cursor: pointer; padding: 3px 0; }
+.facet-selector .facet-search p { line-height: 1.4; margin: 5px 0; }
+.facet-selector .facet-search input:not([type="checkbox"]) { width: 100%; min-width: 0; padding: 6px; border: 1px solid var(--line-struct); border-radius: 3px; background: var(--bg-0); color: var(--tx-1); font: 11px var(--mono); }
+.facet-selector .facet-exact-actions { display: flex; gap: 5px; margin: 5px 0; }
+.facet-selector .facet-exact-actions button { flex: 1; padding: 4px; border: 1px solid var(--line-struct); border-radius: 3px; background: var(--bg-2); color: var(--tx-2); font-size: 10px; cursor: pointer; }
+.facet-selector .facet-exact-actions button:disabled { opacity: 0.5; cursor: default; }
+.facet-selector .facet-search label { display: flex; align-items: center; gap: 5px; }
+.facet-selector .facet-value-search { display: flex; align-items: flex-start; gap: 5px; padding: 4px 12px; color: var(--tx-2); font-size: 11px; line-height: 1.4; }
+.facet-selector .facet-value-search span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.facet-selector .facet-value-search button { flex-shrink: 0; color: var(--acc); }
+.facet-selector .facet-group--wrapped .facet-val { white-space: normal; overflow-wrap: anywhere; }
+.facet-selector button:focus-visible, .facet-selector input:focus-visible, .facet-selector select:focus-visible { outline: 2px solid var(--acc); outline-offset: -2px; }

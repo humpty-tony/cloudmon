@@ -68,6 +68,16 @@ The remaining Source evidence focus defect was then reproduced on the parent at 
 
 No subagent remains active. Do not restart stopped fixers automatically; their partial deltas are preserved. Inspector-local issuance/competing-dialog ownership and Hunt nested-mode activation are separate, still-pending integration work.
 
+## Facets integrated into the parent
+
+The original implementation and interrupted fixer's completed deltas were recovered without restarting agents. Its transcript establishes RED→GREEN for normalized-name wording and concealed local search. Parent native/browser parity matches nine shared filter cases and six issuer-fallback cases.
+
+`check-facets-workbench.mjs` uses the real import/query/App path. It reproduced missing active exclusions, remounted rail state loss, fixed-height wrapped-value overlap, and insufficient rail height. The integrated full-height rail now preserves added groups/search/wrap, keeps exclusions removable, clears facet terms without erasing the applied query or its unapplied draft, and fits default groups at 1440×960 and 1280×800. The last test correction uses derived Result rather than expecting a service on the deliberately sparse remaining fixture record.
+
+Parent GREEN: `check:facets` (with both native exports), `check:workbench`, `check:workspace-overlays`, `check:search`, `check:capture-ui`, `check:ui-performance`, build; `go test -p 1 -tags webkit2_41 ./...`, `go vet ./internal/store`, and whitespace checks. New checks/screenshots are wired into Linux CI, not run remotely. No native GUI or AWS action is claimed.
+
+Current screenshots under `frontend/test-results/facets-workbench/` honestly show the old side inspector. The user correctly rejected that as the final design: the visible Vector migration remains the next priority. Do not equate completed facet plumbing with completed UI.
+
 ## Historical fix ownership
 
 **Usage correction:** the user requested substantially lower usage. Stop requests were sent to the facet, inspector and saved-Hunt fix workers below; preserve their partial changes and do not restart them automatically. Only the navigation fix worker is retained, with instructions to finish a bounded patch/handoff. Continue serially with targeted checks and brief updates, not another review fan-out.
@@ -84,7 +94,7 @@ Expected artifact names are requests, not evidence of completion. Check live sta
 - [ ] Verify each fix-only delta and its RED/GREEN evidence, then obtain fresh independent review.
 - [ ] Re-run navigation repeatedly, checking settled first-visible identity and offset, not only nonzero scroll or selected event name.
 - [ ] Resolve overlapping HuntView changes without discarding either saved-target or activation fixes.
-- [ ] Wire facet exclusions/clearing and retain rail state on collapse.
+- [x] Wire facet exclusions/clearing and retain rail state on collapse; parent integration tests pass.
 - [ ] Allocate actual lower dock and reconcile Hunt-specific inspector CSS with its optional dock API.
 - [ ] Test parent/inner-mode activation, competing dialogs, late requests and modal focus together.
 - [ ] Preserve Sigma's explicit all-evidence scope; its existing API does not accept QueryFilter.

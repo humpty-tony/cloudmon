@@ -37,7 +37,7 @@ import { rowToEvent } from "./types";
 import { MockFeed, mockPermissions } from "./mock";
 import { parseDump } from "./dumpParser";
 import { applyFilter } from "./searchFilter";
-import { computeFacets, type FacetGroup } from "./facets";
+import { computeFacets, FACET_FIELDS, type FacetGroup } from "./facets";
 import { computeHistogram, type Histogram } from "./histogram";
 import { computeStats, fmtSpan, type Stats } from "../components/StatsBar";
 
@@ -134,25 +134,15 @@ function wailsApp(): Record<string, (...args: unknown[]) => Promise<unknown>> | 
 
 // ---- engine (Go) aggregate shape → the frontend component shapes ----
 
-const FACET_DEFS: [string, FilterField, string][] = [
-  ["eventSource", "eventSource", "eventSource"],
-  ["eventName", "eventName", "eventName"],
-  ["userName", "userName", "userName"],
-  ["roleArn", "roleArn", "roleArn"],
-  ["identityType", "identityType", "identityType"],
-  ["sourceIPAddress", "sourceIPAddress", "sourceIPAddress"],
-  ["awsRegion", "awsRegion", "awsRegion"],
-];
-
 function mapFacets(agg: EngineAggregates): FacetGroup[] {
-  const out: FacetGroup[] = [];
-  for (const [col, field, label] of FACET_DEFS) {
-    const vals = agg.facets[col] || [];
-    if (!vals.length) continue;
-    const max = vals[0].count || 1;
-    out.push({ field, label, total: vals.length, values: vals.map((v) => ({ value: v.value, count: v.count, fraction: v.count / max })) });
-  }
-  return out;
+  return FACET_FIELDS.map(def => {
+    const values = agg.facets[def.field] || [];
+    const metadata = agg.facetMetadata?.[def.field];
+    const max = Math.max(1, ...values.map(value => value.count));
+    // A legacy top list establishes neither presence nor distinct totals.
+    return {...def, total: metadata?.distinctValues, metadata,
+      values: values.map(value => ({...value, fraction: value.count / max}))};
+  });
 }
 
 function mapHistogram(agg: EngineAggregates): Histogram {

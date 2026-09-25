@@ -140,6 +140,15 @@ jobs:
         run: |
           npm run check:workbench
           npm run check:workspace-overlays
+      - name: Facet counts, parity and Workbench integration
+        if: runner.os == 'Linux'
+        env:
+          CLOUDMON_FACETS_OUTPUT: ${{ runner.temp }}/cloudmon-facets.json
+          CLOUDMON_FACETS_IDENTITY_OUTPUT: ${{ runner.temp }}/cloudmon-facets-identity.json
+        working-directory: frontend
+        run: |
+          (cd .. && go test -p 1 ./internal/store -run TestFacet -count=1)
+          npm run check:facets
       - name: UI interaction performance checks
         if: runner.os == 'Linux'
         working-directory: frontend
@@ -153,6 +162,8 @@ jobs:
             frontend/test-results/capture/*.png
             frontend/test-results/performance/*
             frontend/test-results/vector-workbench/*.png
+            frontend/test-results/facets/*.png
+            frontend/test-results/facets-workbench/*.png
           if-no-files-found: warn
           retention-days: 7
       - name: Install Wails

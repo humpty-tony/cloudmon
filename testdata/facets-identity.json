@@ -1,0 +1,73 @@
+{
+  "records": [
+    {
+      "eventID": "issuer-only",
+      "eventTime": "2026-09-24T10:00:00Z",
+      "eventName": "DescribeInstances",
+      "eventSource": "ec2.amazonaws.com",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/AdminRole/session-one",
+        "sessionContext": {"sessionIssuer": {"userName": "AdminRole", "arn": "arn:aws:iam::111122223333:role/AdminRole"}}
+      }
+    },
+    {
+      "eventID": "iam-same-name",
+      "eventTime": "2026-09-24T10:01:00Z",
+      "eventName": "DescribeInstances",
+      "eventSource": "ec2.amazonaws.com",
+      "userIdentity": {
+        "type": "IAMUser",
+        "userName": "AdminRole",
+        "arn": "arn:aws:iam::444455556666:user/AdminRole"
+      }
+    },
+    {
+      "eventID": "direct-precedence",
+      "eventTime": "2026-09-24T10:02:00Z",
+      "eventName": "DescribeInstances",
+      "eventSource": "ec2.amazonaws.com",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "userName": "DirectName",
+        "sessionContext": {"sessionIssuer": {"userName": "AdminRole"}}
+      }
+    },
+    {
+      "eventID": "empty-direct-fallback",
+      "eventTime": "2026-09-24T10:03:00Z",
+      "eventName": "DescribeInstances",
+      "eventSource": "ec2.amazonaws.com",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "userName": "",
+        "sessionContext": {"sessionIssuer": {"userName": "AdminRole"}}
+      }
+    },
+    {
+      "eventID": "missing-both",
+      "eventTime": "2026-09-24T10:04:00Z",
+      "eventName": "DescribeInstances",
+      "eventSource": "ec2.amazonaws.com",
+      "userIdentity": {
+        "type": "IAMUser",
+        "arn": "arn:aws:iam::111122223333:user/AdminRole"
+      }
+    }
+  ],
+  "userNames": {
+    "issuer-only": "AdminRole",
+    "iam-same-name": "AdminRole",
+    "direct-precedence": "DirectName",
+    "empty-direct-fallback": "AdminRole",
+    "missing-both": ""
+  },
+  "cases": [
+    {"name": "normalized names", "filter": {}, "ids": ["direct-precedence", "empty-direct-fallback", "iam-same-name", "issuer-only", "missing-both"]},
+    {"name": "same normalized name includes user and issuer", "filter": {"includes": {"userName": ["AdminRole"]}}, "ids": ["empty-direct-fallback", "iam-same-name", "issuer-only"]},
+    {"name": "same normalized name excludes user and issuer", "filter": {"excludes": {"userName": ["AdminRole"]}}, "ids": ["direct-precedence", "missing-both"]},
+    {"name": "missing normalized name not raw field", "filter": {"includes": {"userName": [""]}}, "ids": ["missing-both"]},
+    {"name": "direct name wins over issuer", "filter": {"includes": {"userName": ["DirectName"]}}, "ids": ["direct-precedence"]},
+    {"name": "name filter stays literal", "filter": {"includes": {"userName": ["Admin*"]}}, "ids": []}
+  ]
+}

@@ -500,6 +500,12 @@ export default function App() {
     return s;
   }, [terms]);
 
+  const activeExcludes = useMemo(() => {
+    const s = new Set<string>();
+    for (const t of terms) if (t.kind === "field" && t.op === "exclude") s.add(`${String(t.field)} ${t.value}`);
+    return s;
+  }, [terms]);
+
   // ---- query mutations ----
   const addQ = useCallback((t: QueryTerm) => setTerms((prev) => addTerm(prev, t)), []);
   const removeQ = useCallback((id: string) => setTerms((prev) => removeTerm(prev, id)), []);
@@ -808,6 +814,19 @@ export default function App() {
         />
       </div></WorkspaceActivity.Provider>}
       {connected && <WorkspaceActivity.Provider value={uiView === "console"}><main key={datasetSession} className="workbench-page" hidden={uiView !== "console"}>
+      <div className="workbench-search">
+        <div className="workbench-search-tools">
+          <button className={`tb-btn ${!sidebarCollapsed ? "active" : ""}`} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(v => !v)}>Filters</button>
+          <button className={`tb-btn ${!histCollapsed ? "active" : ""}`} aria-expanded={!histCollapsed} onClick={() => setHistCollapsed(v => !v)}>Histogram</button>
+          <button className="tb-btn" onClick={() => selectView("analysis")}>Summarize</button>
+        </div>
+        <QueryBar terms={terms} queryText={queryText} error={compiled.error} inputRef={queryInputRef}
+          onQueryChange={setQueryText} onRemove={removeQ} onClear={clearQ} />
+      </div>
+      <div className={`workbench-session ${sidebarCollapsed ? "workbench-session--no-filters" : ""}`}>
+        <FacetSidebar facets={facets} collapsed={sidebarCollapsed} activeValues={activeValues} activeExcludes={activeExcludes}
+          onToggleCollapse={() => setSidebarCollapsed(v => !v)} onPick={pivot} />
+        <div className="workbench-main">
       <div className="workbench-context">
         <div><h1>Event workbench</h1><span>{capInfra ? `${capInfra.account} · ${capInfra.region}` : config?.mode === "import-dump" ? "Imported evidence" : "CloudTrail activity"}</span></div>
         <span className="workbench-scope">{datasetTotal.toLocaleString()} recorded events · {backend.live ? "Local evidence" : "Browser preview"}</span>
@@ -846,21 +865,10 @@ export default function App() {
         <details><summary>{capturing ? "Capture running" : savedCapture.phase === "ready" ? "Capture paused" : "Capture needs cleanup"} · {savedCapture.infra.account} · {savedCapture.infra.region} <span>Resources retained after exit</span></summary><CaptureDescription capture={savedCapture} /></details>
         <button className="btn-ghost" disabled={captureBusy} onClick={teardownCapture}>{savedCapture.infra.owned ? "Remove infrastructure…" : "Disconnect queue…"}</button>
       </div>}
-      <div className="workbench-search">
-        <div className="workbench-search-tools">
-          <button className={`tb-btn ${!sidebarCollapsed ? "active" : ""}`} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(v => !v)}>Filters</button>
-          <button className={`tb-btn ${!histCollapsed ? "active" : ""}`} aria-expanded={!histCollapsed} onClick={() => setHistCollapsed(v => !v)}>Histogram</button>
-          <button className="tb-btn" onClick={() => selectView("analysis")}>Summarize</button>
-        </div>
-        <QueryBar terms={terms} queryText={queryText} error={compiled.error} inputRef={queryInputRef}
-          onQueryChange={setQueryText} onRemove={removeQ} onClear={clearQ} />
-      </div>
       {!histCollapsed && <HistogramStrip hist={hist} collapsed={false} timeZone={timeZone}
         onToggleCollapse={() => setHistCollapsed(true)}
         onBrush={(from, to) => addQ(timeTerm(from, to, `${fmtClock(from, timeZone)}–${fmtClock(to, timeZone)}`))} />}
-      <div className={`workbench-body ${sidebarCollapsed ? "workbench-body--no-filters" : ""}`}>
-        {!sidebarCollapsed && <FacetSidebar facets={facets} collapsed={false} activeValues={activeValues}
-          onToggleCollapse={() => setSidebarCollapsed(true)} onPick={pivot} />}
+      <div className="workbench-body">
         <section className="workbench-results" aria-label="Event results">
           <div className="workbench-list-heading">
             <strong>{agg.total.toLocaleString()} matches</strong>
@@ -910,6 +918,8 @@ export default function App() {
           lineage={selectedLineage} lineageLoading={!!selected && hasCredentialLineage(selected) && !selectedLineage && !selectedLineageError}
           lineageError={selectedLineageError} onRetry={retryDetail} onPivot={pivot}
           onOpenLineage={setLineageSeq} onClose={closeInspector} timeZone={timeZone} />
+      </div>
+        </div>
       </div>
       <StatusBar
         streaming={!captureBusy && (savedCapture?.phase === "ready" || (!savedCapture && config?.mode !== "import-dump"))}
