@@ -4,13 +4,13 @@
 
 ## Current checkpoint
 
-**RELEASE IN PROGRESS — native E2E, README/cleanup and local CI checks verified; ready for PR.** The user authorized native E2E → README/cleanup → commit/push → merge to main → verify tagged release publication. Independent test-diff review found no blockers. No further UI redesign is planned.
+**COMPLETE — v0.4.0 published and downloaded artifacts verified.** Native E2E, README review, checkout cleanup, commit/push, PR merge, platform CI and tagged publication are complete. The release tag points to merge commit `8cada5a`; this final handoff changes documentation only. No unfinished release tasks or additional UI work.
 
 - [x] REL-1: Actual isolated Linux desktop import/browse/search/inspect/credential graph/Hunt/native export passed with 108 synthetic records, 5 indicator matches and an exported record equal to its original. No AWS reauthentication needed. See [native E2E verification](ui-reviews/native-e2e.md).
 - [x] REL-2a: README reviewed against the current Events/Hunt UI, explicit remote attribution, capture cleanup semantics and pinned build toolchain. Removed unsupported blanket performance/privacy and competitor claims; relative documentation links resolve.
 - [x] REL-2b: Corrected six stale CI test scripts without changing production; all corresponding checks pass. Archived generated `frontend/test-results/` into `~/.hermes/reports/cloudmon/2026-09-26-release-browser-results/`; native evidence is also retained outside the checkout. Preserved user evidence, dependency installs and final build outputs. See [release CI verification](ui-reviews/release-ci.md).
-- [ ] REL-3: Commit and push `feat/vector-workbench`; verify PR checks and merge into `main`.
-- [ ] REL-4: Push a new unused version tag on merged `main`; verify successful publish job plus downloaded release assets/checksums. Prior latest is `v0.3.0`; planned feature release is `v0.4.0`, subject to a fresh unused-tag check.
+- [x] REL-3: Pushed `feat/vector-workbench`; PR #24 passed exact-head platform/package checks at `af8846e` and merged into `main` as `8cada5a`, preserving the incremental commits. PR workflow `36269665480` and main workflow `36270063856` succeeded. The Windows-only POSIX-mode test assumption was corrected and independently reviewed without changing production code.
+- [x] REL-4: Annotated tag `v0.4.0` points to `8cada5a`. Release workflow `36270111750` passed all platform, package and publication jobs; GitHub published the stable Latest release on September 26, 2026. Downloaded all three platform archives and `SHA256SUMS`: archive checksums, all four GitHub asset digests/sizes, archive structure and macOS bundle version `0.4.0` verified. Durable verification: `~/.hermes/reports/cloudmon/v0.4.0-release/verification.json`. See [release CI verification](ui-reviews/release-ci.md).
 
 ### Completed hierarchy cleanup
 

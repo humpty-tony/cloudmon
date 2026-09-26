@@ -27,12 +27,14 @@ The production implementation and Linux native E2E were already verified. Before
 - [x] Generate `TestInvestigationReportFixture` through Go, then `CLOUDMON_REPORT_FIXTURE=<generated report> npm run check:capture-ui` — completed with `errors: []`, independently rerun after worker handoff.
 - [x] Added-line static scan found no matches for the reviewed secret/injection/unsafe-execution patterns.
 - [x] Independent test-diff review passed (`deleg_2c0928b0`): no security, logic or assertion-coverage blockers. The reviewed diff is verified unchanged before the accompanying commit.
-- [ ] Exact-head GitHub platform matrix and tagged publication; local checks do not substitute for those results.
+- [x] Exact-head PR workflow `36269665480` passed at `af8846e`, including Windows/Linux/macOS and package verification. PR #24 merged as `8cada5a`; main workflow `36270063856` also passed.
+- [x] Tag `v0.4.0` on `8cada5a` triggered release workflow `36270111750`; every job, including **Publish tagged release**, succeeded. Stable release published September 26, 2026 at 20:44:50 UTC and verified as Latest.
+- [x] Downloaded Windows/Linux/macOS archives and `SHA256SUMS`. All three archive checksums pass; all four downloaded assets match GitHub's SHA-256 digests and sizes. Required archive contents, Linux executable permissions and macOS native version `0.4.0` verified. Evidence and downloaded files: `~/.hermes/reports/cloudmon/v0.4.0-release/`.
 
 ## Hosted CI follow-up
 
 PR #24's first platform run (`36269150903`, head `62745d4`) passed Linux and macOS. Windows reached the backend tests, then failed the cache test's `0600` POSIX-mode assertion because Go reports writable Windows files with non-POSIX mode semantics. This was not a compile failure.
 
-The follow-up keeps all cache/configuration/dataset-isolation checks on Windows, limits the Unix-mode assertion to POSIX systems, handles file-stat errors, and isolates the tests through all three platform config-directory variables (`XDG_CONFIG_HOME`, `HOME`, `AppData`). It also asserts that the resolved config directory remains under the test temporary root. Focused attribution tests pass locally; exact-head hosted CI must confirm the Windows result. Windows ACL enforcement is not certified by these tests.
+The follow-up keeps all cache/configuration/dataset-isolation checks on Windows, limits the Unix-mode assertion to POSIX systems, handles file-stat errors, and isolates the tests through all three platform config-directory variables (`XDG_CONFIG_HOME`, `HOME`, `AppData`). It also asserts that the resolved config directory remains under the test temporary root. Focused attribution tests passed locally; independent review `deleg_4eaff10f` approved the delta, and the exact-head PR, main and tagged-release workflows subsequently passed on all platforms. Windows ACL enforcement is not certified by these tests.
 
 The earlier native evidence is documented separately in [native-e2e.md](native-e2e.md). Browser fixtures remain synthetic and must not be represented as live AWS or native-window behavior.
