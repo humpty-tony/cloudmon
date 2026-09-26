@@ -4,9 +4,34 @@
 
 ## Current checkpoint
 
-**ACTIVE PLAN:** [Approved analyst-review tasks](analyst-review-tasks.md). The user approved the new mock and authorized shipping it in separately committed slices. Two narrow workers own facets and inspector; parent owns shared integration. Older pass numbering below is historical. Shipping first, focused checks only, one final integration pass.
+**ACTIVE PLAN:** Finish the verified five persona-review corrections below, then execute the newly authorized desktop visual/ergonomic polish pass. All implementation workers have returned. Older pass numbering and [analyst-review tasks](analyst-review-tasks.md) are historical. Shipping first, focused checks and bounded reviews only.
 
-### Evidence-labeled connections and live resolver audit (current)
+### Final persona-review fixes (active)
+
+Approved scope: all five findings from the September 26 review of `818b5cb`. Review bundle: `~/.hermes/reports/cloudmon/2026-09-26-ux-review/`. Parent owns actor/navigation/Rules fixes; one bounded worker owns comparison/inspector files. No push/release or AWS work.
+
+- [x] SOC-01: actor include/exclude uses recorded ARN when principalId is absent; missing both identifiers exposes no actor pivot. Existing principal pivots retained. Focused actual-App browser regression reproduced RED (`principalId: [""]`) then GREEN, including distinct Alice/Bob and exclude behavior.
+- [x] IR-01: Hunt pivots open explicitly scoped temporary Workbench results; prior browsing stays mounted and untouched. RED→GREEN actual-App checks verify full-evidence search, Hunt return, original applied query/unapplied draft/selection/nonzero scroll.
+- [x] IR-02: opt-in grid keyboard inspection for Rules (and temporary pivot results), Home/End/arrow bounds, idempotent Enter, close-focus return and cursor reset per run. Focused RED→GREEN check preserves exact snapshot-bound originals.
+- [x] RESEARCH-01: keyboard-accessible exact value preview for either source at a changed path, including containers. Worker-side lossless numeric serialization, explicit formatting disclaimer, bounded work, swap/original safety and focus return verified by RED→GREEN focused regression; parent reran successfully.
+- [x] RESEARCH-02: single compact Pin A/B/Replace action in the selected-event header across Overview/Fields/Original. Missing/loading/errored raw sources stay unpinnable. RED→GREEN fixture checks at 1280×800 and 1440×960 passed and were independently rerun by parent.
+- [x] Frontend production build and existing inspector/comparison model checks pass; only the existing large-bundle warning remains.
+- [x] All-five integration passed through actual React/WailsBackend → isolated Go App/DuckDB with 108 synthetic records: actor include/exclude isolation, visible full-evidence Hunt scope, exact prior scroll/selection/applied-query/unapplied-draft restoration, Rules keyboard/focus, discoverable pins, exact comparison values/swap and unchanged originals. Browser adapter shims host logging/window helpers only; no evidence-query mocks. This is not native-window chooser/import acceptance.
+- [x] `/home/humpty/go/bin/wails build -tags webkit2_41 -skipbindings` rebuilt `build/bin/cloudmon`. Parent inspected final actual-App 1280×800 comparison/pin screenshots; no blocking layout issues. Screenshots and verification: `~/.hermes/reports/cloudmon/2026-09-26-ux-fixes/`.
+- [x] Bounded independent source/UX review found one source-association blocker and no other security/logic/layout blockers: first committed Hunt-pivot row B could receive A's raw text before a passive effect cleared it. A separate worker reproduced this RED and bound text/errors to event sequence plus snapshot. Parent inspected the correction and reran the first-commit regression, actual-App navigation/Rules checks and final native build successfully. No second broad audit was run.
+- [x] Native-backed integration bridge exited PASS; all three isolated datasets remained at maxSeq 108. UI/bridge servers stopped. Final source-association guard was verified by the targeted component prop-observer regression (real component; synthetic backend/stubbed children), not another native integration run.
+- [x] Verified changes committed in navigation/Rules, comparison/pinning and checked-handoff slices. No push/release. Verification detail: [final-persona-fixes.md](ui-reviews/final-persona-fixes.md).
+
+### Next authorized work — desktop visual/ergonomic polish
+
+Start **after completing and committing the current five-finding corrections**, including the independent review's Hunt-pivot original-source association fix. The user authorized research → audit → prioritized findings → implementation, not just another report.
+
+- [ ] Read authoritative desktop-application UI/UX guidance and save cited notes locally. Cover readable typography/sizing, contrast, corner geometry, spacing/density, visual hierarchy, button/control placement and consistency, focus/keyboard behavior, and interaction feedback.
+- [ ] Review actual CloudMon screens and representative interactions against those notes. Judge whether the app looks coherent and is pleasant to use; distinguish visual/ergonomic findings from backend correctness. Corner radius is a consistency/context choice, not an arbitrary universal rule.
+- [ ] List concrete, evidenced improvements by impact. Preserve the compact desktop-tool direction, goal-free log browsing, right inspector, truthful scope and exact evidence.
+- [ ] Implement justified improvements in small committed slices. Provide before/after screenshots, a bounded adversarial visual check and focused workflow/build verification. No sprawling redesign or repeated broad test campaigns; keep the user updated and execution economical. No push/release authorization is implied.
+
+### Evidence-labeled connections and live resolver audit
 
 - [x] Label every displayed connection by its supporting evidence: `onBehalfOf` plus Identity Store/user ID, activity's recorded `accessKeyId`/`userIdentity`, or actual STS method plus issued-key match/time. Gaps and exact field paths remain inspectable. Two-size actual-App regressions and fresh-real-S3 replay pass.
 - [x] Independent live diagnostics: original creation window ±5 minutes queried in all 17 enabled Regions (12 STS events, no exact issued key); 90-day us-east-1 SAML history exhausted in 6 pages / 287 events, no original key. ResourceName returned no events because real SAML records lacked indexed resources; signer-key lookup returned activity, not issuance. Fresh `aws s3 ls` succeeded at 14:12:50 UTC and reproduced the neighboring SAML returned-key mismatch.
