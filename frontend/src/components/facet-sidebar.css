@@ -5,11 +5,11 @@
 .facet-selector .facets-head { flex: none; height: 36px; min-height: 36px; padding: 0 12px; border-bottom: 0; text-transform: none; font-size: 12px; font-weight: 600; color: var(--tx-1); letter-spacing: 0; }
 .facet-selector.facets--rail .facets-head { padding: 0; justify-content: center; }
 .facet-selector .facet-content { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.facet-selector .facet-searchbar { display: flex; align-items: center; flex: none; margin: 0 12px; border: 1px solid var(--line-struct); border-radius: 3px; background: var(--bg-0); }
+.facet-selector .facet-searchbar { display: flex; align-items: center; flex: none; margin: 0 12px; border: 1px solid var(--line-struct); border-radius: var(--radius); background: var(--bg-0); }
 .facet-selector .facet-searchbar input { width: 100%; min-width: 0; height: 28px; padding: 4px 7px; border: 0; background: none; color: var(--tx-1); font: 12px var(--sans); }
 .facet-selector .facet-searchbar input::placeholder { color: var(--tx-3); }
-.facet-selector .facet-search-scope { flex: none; margin: 3px 12px 0; color: var(--tx-3); font-size: 11px; line-height: 1.4; }
-.facet-selector .facet-scope { flex: none; margin: 0; padding: 6px 12px; color: var(--tx-2); font-size: 11px; line-height: 1.4; }
+.facet-selector .facet-search-scope { flex: none; margin: 3px 12px 0; color: var(--tx-3); font-size: var(--fs-cap); line-height: 1.4; }
+.facet-selector .facet-scope { flex: none; margin: 0; padding: 6px 12px; color: var(--tx-2); font-size: var(--fs-cap); line-height: 1.4; }
 .facet-selector .facet-scope span { color: var(--tx-3); }
 .facet-selector .facets-scroll { overflow: auto; scrollbar-width: thin; flex: 1; min-height: 0; padding: 0; }
 .facet-selector .facet-group { margin: 0; padding: 2px 0; border-bottom: 1px solid var(--line-row); }
@@ -17,7 +17,7 @@
 .facet-selector .facet-group-head { display: flex; gap: 5px; min-height: 26px; padding: 3px 10px; font: 600 12px/1.4 var(--sans); color: var(--tx-2); letter-spacing: 0; }
 .facet-selector .facet-group-label { min-width: 0; text-align: left; }
 .facet-selector .facet-caret { font-size: 13px; color: var(--tx-3); transform: none; }
-.facet-selector .facet-note { margin: 0; padding: 4px 12px; font-size: 11px; line-height: 1.4; color: var(--tx-3); overflow-wrap: anywhere; }
+.facet-selector .facet-note { margin: 0; padding: 4px 12px; font-size: var(--fs-cap); line-height: 1.4; color: var(--tx-3); overflow-wrap: anywhere; }
 .facet-selector .facet-list { display: flex; flex-direction: column; padding: 0; }
 .facet-selector .facet-row { position: relative; display: flex; align-items: center; gap: 5px; min-height: 24px; height: auto; overflow: visible; padding: 0 9px 0 12px; margin: 0; border-radius: 0; background: none; border: 0; cursor: default; }
 .facet-selector .facet-row::before { display: none; }
@@ -28,31 +28,31 @@
 .facet-selector .facet-row.active .facet-bar { opacity: .8; }
 .facet-selector .facet-val { display: block; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-align: left; background: none; padding: 3px 0; color: inherit; border: 0; cursor: pointer; font: 12px/1.4 var(--mono); }
 .facet-selector .facet-row--label .facet-val { font-family: var(--sans); }
-.facet-selector .facet-count { flex-shrink: 0; color: var(--tx-3); font: 11px var(--mono); font-variant-numeric: tabular-nums; }
-.facet-selector .facet-excl { flex-shrink: 0; opacity: 0; height: 24px; min-height: 24px; width: 20px; min-width: 20px; padding: 0; color: var(--tx-3); border: 0; background: none; cursor: pointer; }
+.facet-selector .facet-count { flex-shrink: 0; color: var(--tx-3); font: var(--fs-cap) var(--mono); font-variant-numeric: tabular-nums; }
+.facet-selector .facet-excl { flex-shrink: 0; opacity: 0; height: 24px; min-height: 24px; width: 24px; min-width: 24px; padding: 0; color: var(--tx-3); border: 0; background: none; cursor: pointer; }
 .facet-selector .facet-row:hover .facet-excl, .facet-selector .facet-row:focus-within .facet-excl, .facet-selector .facet-row.excluded .facet-excl { opacity: 1; }
 .facet-selector .facet-list-actions { display: flex; gap: 8px; align-items: center; min-height: 22px; padding: 0 12px; }
-.facet-selector .facet-more, .facet-selector .facet-details-toggle { width: auto; margin: 0; padding: 3px 0; border: 0; background: none; font: 11px/1.4 var(--sans); text-align: left; color: var(--tx-3); cursor: pointer; }
+.facet-selector .facet-more, .facet-selector .facet-details-toggle { width: auto; margin: 0; padding: 3px 0; border: 0; background: none; font: var(--fs-cap)/1.4 var(--sans); text-align: left; color: var(--tx-3); cursor: pointer; }
 .facet-selector .facet-details-toggle { margin-left: auto; }
 .facet-selector .facet-more:hover, .facet-selector .facet-details-toggle:hover, .facet-selector .facet-details-toggle[aria-expanded="true"] { color: var(--acc-text); }
 .facet-selector .facet-missing { padding: 0; color: var(--tx-3); }
 .facet-selector .facet-footer { display: grid; flex: none; gap: 5px; padding: 8px 12px; border-top: 1px solid var(--line-struct); }
 .facet-selector .facet-group-tools { display: flex; align-items: center; padding-right: 9px; }
 .facet-selector .facet-group-tools .facet-group-head { flex: 1; min-width: 0; }
-.facet-selector .facet-tool { padding: 3px 4px; min-height: 24px; border: 0; background: none; color: var(--tx-3); font: 11px var(--sans); cursor: pointer; }
+.facet-selector .facet-tool { padding: 3px 4px; min-height: 24px; border: 0; background: none; color: var(--tx-3); font: var(--fs-cap) var(--sans); cursor: pointer; }
 .facet-selector .facet-row.excluded { color: var(--exclude); }
 .facet-selector .facet-row.excluded .facet-bar { background: var(--exclude); }
 .facet-selector .facet-excl[aria-pressed="true"] { background: var(--bg-2); color: var(--exclude); outline: 1px solid currentColor; }
 .facet-selector .facet-unknown { font: 12px var(--sans); }
-.facet-selector .facet-footer select { width: 100%; min-width: 0; height: 28px; padding: 3px 6px; border: 1px dashed var(--line-struct); border-radius: 3px; color: var(--tx-2); background: var(--bg-0); font: 12px var(--sans); }
-.facet-selector .facet-search { margin: 3px 12px 6px; padding-top: 3px; border-top: 1px solid var(--line-row); font-size: 11px; color: var(--tx-3); overflow-wrap: anywhere; }
+.facet-selector .facet-footer select { width: 100%; min-width: 0; height: 28px; padding: 3px 6px; border: 1px dashed var(--line-struct); border-radius: var(--radius); color: var(--tx-2); background: var(--bg-0); font: 12px var(--sans); }
+.facet-selector .facet-search { margin: 3px 12px 6px; padding-top: 3px; border-top: 1px solid var(--line-row); font-size: var(--fs-cap); color: var(--tx-3); overflow-wrap: anywhere; }
 .facet-selector .facet-search p { line-height: 1.5; margin: 5px 0; }
-.facet-selector .facet-search input:not([type="checkbox"]) { width: 100%; min-width: 0; padding: 6px; border: 1px solid var(--line-struct); border-radius: 3px; background: var(--bg-0); color: var(--tx-1); font: 12px var(--mono); }
+.facet-selector .facet-search input:not([type="checkbox"]) { width: 100%; min-width: 0; padding: 6px; border: 1px solid var(--line-struct); border-radius: var(--radius); background: var(--bg-0); color: var(--tx-1); font: 12px var(--mono); }
 .facet-selector .facet-exact-actions { display: flex; gap: 5px; margin: 5px 0; }
-.facet-selector .facet-exact-actions button { flex: 1; padding: 4px; border: 1px solid var(--line-struct); border-radius: 3px; background: var(--bg-2); color: var(--tx-2); font: 11px/1.4 var(--sans); cursor: pointer; }
+.facet-selector .facet-exact-actions button { flex: 1; padding: 4px; border: 1px solid var(--line-struct); border-radius: var(--radius); background: var(--bg-2); color: var(--tx-2); font: var(--fs-cap)/1.4 var(--sans); cursor: pointer; }
 .facet-selector .facet-exact-actions button:disabled { opacity: .5; cursor: default; }
 .facet-selector .facet-search label { display: flex; align-items: center; gap: 5px; }
-.facet-selector .facet-value-search { display: flex; align-items: flex-start; gap: 5px; padding: 2px 12px; color: var(--tx-2); font-size: 11px; line-height: 1.4; }
+.facet-selector .facet-value-search { display: flex; align-items: flex-start; gap: 5px; padding: 2px 12px; color: var(--tx-2); font-size: var(--fs-cap); line-height: 1.4; }
 .facet-selector .facet-value-search span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .facet-selector .facet-value-search button { flex-shrink: 0; color: var(--acc-text); }
 .facet-selector .facet-group--wrapped .facet-val { white-space: normal; overflow-wrap: anywhere; }

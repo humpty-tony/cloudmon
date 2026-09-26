@@ -63,25 +63,25 @@ try {
   assert.equal(await page.evaluate(()=>window.inlineLineageCalls),0,'Do not resolve lineage while simply browsing');
   assert.equal(await page.evaluate(()=>window.graphCalls.length),0);
   await page.screenshot({path:fileURLToPath(new URL(`workbench-${width}.png`,out))});
-  await inspector.getByRole('tab',{name:'Original',exact:true}).click();
+  await inspector.getByRole('tab',{name:'Original JSON',exact:true}).click();
   const source=await inspector.locator('.ei-source').textContent();
   const id=JSON.parse(source).eventID;assert.equal(id,'vector-layout-80');
   await inspector.getByRole('tab',{name:'Overview',exact:true}).click();
   const seq=Number(await page.locator('.workbench-results .row--selected').getAttribute('data-event-seq'));
-  await inspector.getByRole('button',{name:/^View lineage/}).click();
+  await inspector.getByRole('button',{name:/^Credential chain/}).click();
   const graph=page.getByRole('dialog',{name:'Credential lineage',exact:true});
   await graph.locator('.lgv-g').first().waitFor();
   assert.equal(await graph.locator('.lgv-g').count(),3);
   const calls=await page.evaluate(()=>window.graphCalls);assert.ok(calls.length>=1);assert.ok(calls.every(call=>call.seq===seq && call.snapshot.generation===calls[0].snapshot.generation && call.snapshot.maxSeq===calls[0].snapshot.maxSeq));assert.ok(calls[0].snapshot.generation); // Dev StrictMode may remount the graph effect.
   await page.screenshot({path:fileURLToPath(new URL(`lineage-popup-${width}.png`,out))});
   await page.keyboard.press('Escape');await graph.waitFor({state:'detached'});
-  assert.equal(await inspector.getByRole('button',{name:/^View lineage/}).evaluate(el=>el===document.activeElement),true);
+  assert.equal(await inspector.getByRole('button',{name:/^Credential chain/}).evaluate(el=>el===document.activeElement),true);
   assert.equal(Number(await page.locator('.workbench-results .row--selected').getAttribute('data-event-seq')),seq);
   // AR-3 navigation retains the selected evidence mode.
-  await inspector.getByRole('tab',{name:'Original',exact:true}).click();
+  await inspector.getByRole('tab',{name:'Original JSON',exact:true}).click();
   await inspector.getByRole('button',{name:'Previous event',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.ei-source')?.textContent?.includes('vector-layout-81'));
-  assert.equal(await inspector.getByRole('tab',{name:'Original',exact:true}).getAttribute('aria-selected'),'true');
+  assert.equal(await inspector.getByRole('tab',{name:'Original JSON',exact:true}).getAttribute('aria-selected'),'true');
   await inspector.getByRole('button',{name:'Next event',exact:true}).click();
   await page.waitForFunction(()=>document.querySelector('.ei-source')?.textContent?.includes('vector-layout-80'));
   await inspector.getByRole('tab',{name:'Overview',exact:true}).click();
@@ -103,7 +103,7 @@ try {
   await browse.locator('.etbody').evaluate(el=>{el.scrollTop=630;});
   await page.waitForTimeout(100);
   await browse.locator('.row').nth(4).locator('.c-time').click();
-  await inspector.getByRole('button',{name:/^View lineage/}).waitFor();
+  await inspector.getByRole('button',{name:/^Credential chain/}).waitFor();
   await page.locator('.qbar-input').fill('eventName=unapplied');
   const before=await browse.evaluate(el=>({scroll:el.querySelector('.etbody').scrollTop,seq:el.querySelector('.row--selected')?.getAttribute('data-event-seq'),heading:el.querySelector('.workbench-list-heading strong').textContent}));
   await inspector.getByRole('button',{name:'Same source IP',exact:false}).click();
@@ -115,29 +115,29 @@ try {
   assert.ok(requests.every(r=>r.seq===Number(before.seq) && r.relation==='ip' && r.snapshot.generation));
   await context.locator('.row').first().locator('.c-time').click();
   await page.screenshot({path:fileURLToPath(new URL(`context-${width}.png`,out))});
-  await context.getByRole('button',{name:'← Back to browsing',exact:true}).click();
+  await context.getByRole('button',{name:'Back to Events',exact:true}).click();
   await page.waitForTimeout(120);
   assert.equal(await page.locator('.qbar-input').inputValue(),'eventName=unapplied');
   const restored=await browse.evaluate(el=>({scroll:el.querySelector('.etbody').scrollTop,seq:el.querySelector('.row--selected')?.getAttribute('data-event-seq'),heading:el.querySelector('.workbench-list-heading strong').textContent}));
   assert.deepEqual(restored,before,'Context return must restore selection, nonzero scroll and applied count');
   await page.evaluate(()=>{window.contextFail=true});
-  await inspector.getByRole('button',{name:'Around this event',exact:true}).click();
+  await inspector.getByRole('button',{name:'Related events',exact:true}).click();
   await context.getByRole('alert').waitFor();
   await page.evaluate(()=>{window.contextFail=false});
   await context.getByRole('button',{name:'Retry context'}).click();
   await context.locator('.row').first().waitFor();
-  await context.getByRole('button',{name:'← Back to browsing',exact:true}).click();
+  await context.getByRole('button',{name:'Back to Events',exact:true}).click();
   // Sources wraps the existing form. Escape retains browsing and restores focus.
-  await page.getByRole('button',{name:'Sources',exact:true}).click();
+  await page.getByRole('button',{name:'Data sources…',exact:true}).click();
   const sources=page.getByRole('dialog',{name:'Sources',exact:true});
   await sources.getByRole('button',{name:'Open saved evidence',exact:true}).waitFor();
   assert.ok(await sources.locator('input[type=file]').isVisible());
   await page.screenshot({path:fileURLToPath(new URL(`sources-${width}.png`,out))});
   for(let i=0;i<12;i++){await page.keyboard.press('Tab');assert.ok(await sources.evaluate(el=>el.contains(document.activeElement)));}
   await page.keyboard.press('Escape'); await sources.waitFor({state:'detached'});
-  assert.equal(await page.getByRole('button',{name:'Sources',exact:true}).evaluate(el=>el===document.activeElement),true);
+  assert.equal(await page.getByRole('button',{name:'Data sources…',exact:true}).evaluate(el=>el===document.activeElement),true);
   assert.equal(await browse.locator('.etbody').evaluate(el=>el.scrollTop),before.scroll);
-  await page.getByRole('button',{name:'Sources',exact:true}).click();
+  await page.getByRole('button',{name:'Data sources…',exact:true}).click();
   await sources.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await sources.waitFor({state:'detached'});
   assert.equal(await page.locator('.qbar-input').inputValue(),'eventName=unapplied','Opening the same saved evidence must not reset browsing');
@@ -148,7 +148,7 @@ try {
   assert.equal(await page.locator('.event-inspector.has-event').count(),0);
   assert.ok((await measure()).grid.width>geometry.grid.width,'Closing selection must return the width to the logs');
   // Import failure keeps old evidence and browsing; successful replacement resets the session.
-  await page.getByRole('button',{name:'Sources',exact:true}).click();
+  await page.getByRole('button',{name:'Data sources…',exact:true}).click();
   await sources.getByRole('button',{name:'Load dump',exact:true}).waitFor();
   const replacement={...records[0],eventID:'replacement-review',eventName:'ListBuckets',eventSource:'s3.amazonaws.com'};
   await sources.locator('input[type=file]').setInputFiles({name:'replacement.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({Records:[replacement]}))});

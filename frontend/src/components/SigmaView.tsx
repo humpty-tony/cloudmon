@@ -43,8 +43,10 @@ export function SigmaView(p: SigmaViewProps) {
   const [out, setOut] = useState<SigmaOutcome | null>(null);
   const [running, setRunning] = useState(false);
   const [showSql, setShowSql] = useState(false);
+  const [showEditor,setShowEditor]=useState(false);
   const [mode,setMode]=useState<"single"|"suite">("single");
   const [error,setError]=useState("");
+  useEffect(()=>{if(error)setShowEditor(true)},[error]);
   const [graphSeq,setGraphSeq]=useState<number|null>(null);
   const active=useRef<AbortController|null>(null);
   const reqId = useRef(0);
@@ -100,8 +102,8 @@ export function SigmaView(p: SigmaViewProps) {
     setCursorSeq(-1);
     backend
       .sigmaRun(ruleRef.current,abort.signal)
-      .then((r) => {if(id===reqId.current)setOut(r)})
-      .catch((e) => {if(id===reqId.current&&!abort.signal.aborted)setError(String(e))})
+      .then((r) => {if(id===reqId.current){setOut(r);if(!r.parsed||!r.supported||r.diagnostics.length)setShowEditor(true)}})
+      .catch((e) => {if(id===reqId.current&&!abort.signal.aborted){setError(String(e));setShowEditor(true)}})
       .finally(()=>{if(id===reqId.current){active.current=null;setRunning(false)}});
   }, []);
 
@@ -152,10 +154,45 @@ export function SigmaView(p: SigmaViewProps) {
 
   return (
     <div className="sigma-workbench">
-      <div className="sg-snapshot">Scope: all loaded evidence. Workbench filters are not applied; the Sigma engine evaluates the full snapshot. Use rule conditions to narrow matches.</div>
+      <div className="sg-snapshot">Scope: all loaded evidence. Current event filters are not applied; the Sigma engine evaluates the full snapshot. Use rule conditions to narrow matches.</div>
       <div className="sg-mode"><button className="btn-ghost" onClick={()=>setMode(mode==="single"?"suite":"single")}>{mode==="single"?"Rule suite":"Rule editor"}</button><span>Matches are leads to investigate; they do not establish malicious activity.</span></div>
-      <WorkspaceActivity.Provider value={workspaceActive && mode==="suite"}><div className="sg-suite-container" hidden={mode!=="suite"} style={{display:mode==="suite"?"flex":"none",flex:1,minHeight:0}}><SigmaSuite saved={userRules} onOpen={(yaml,result)=>{loadRule(yaml);setOut(result);setMode("single")}}/></div></WorkspaceActivity.Provider>
-      <WorkspaceActivity.Provider value={workspaceActive && mode==="single"}><div className="sigma" hidden={mode!=="single"} style={mode==="single"?undefined:{display:"none"}}>
+      <WorkspaceActivity.Provider value={workspaceActive && mode==="suite"}><div className="sg-suite-container" hidden={mode!=="suite"} style={{display:mode==="suite"?"flex":"none",flex:1,minHeight:0}}><SigmaSuite saved={userRules} onOpen={(yaml,result)=>{loadRule(yaml);setOut(result);setShowEditor(!result.parsed||!result.supported);setMode("single")}}/></div></WorkspaceActivity.Provider>
+      <WorkspaceActivity.Provider value={workspaceActive && mode==="single"}><div hidden={mode!=="single"} className="sg-rule-controls">
+        <div className="sg-ed-head">
+          <Popover label="Choose a rule" menuClass="colmenu">
+            {(close) => (
+              <>
+                {userRules.length > 0 && (
+                  <>
+                    <div className="menu-label">Saved</div>
+                    {userRules.map((r) => (
+                      <div key={r.name} className="menu-item">
+                        <button className="menu-item-main" onClick={() => { loadRule(r.yaml); close(); }}>{r.name}</button>
+                        <button className="menu-del" title="Delete" onClick={() => {try{setUserRules(deleteUserRule(r.name))}catch(e){setError(String(e))}}}>✕</button>
+                      </div>
+                    ))}
+                    <div className="menu-divider" />
+                  </>
+                )}
+                <div className="menu-label">Examples</div>
+                {BUNDLED_RULES.map((r) => (
+                  <button key={r.name} className="menu-item menu-item-main" onClick={() => { loadRule(r.yaml); close(); }}>{r.name}</button>
+                ))}
+                <div className="menu-divider" />
+                <button className="menu-item menu-action" onClick={() => { saveCurrent(); close(); }}>＋ Save current rule…</button>
+              </>
+            )}
+          </Popover>
+          <span className="sg-fname" title={rule.match(/^title:\s*(.+)$/m)?.[1]||"Untitled rule"}>{rule.match(/^title:\s*(.+)$/m)?.[1]||"Untitled rule"}</span>
+          <button className="btn-ghost" aria-expanded={showEditor} aria-controls="hunt-rule-yaml" onClick={()=>setShowEditor(value=>!value)}>{showEditor?"Hide YAML":"Edit YAML"}</button>
+          <span className={`sg-pill ${status}`}>{pill[status]}</span>
+          {running&&<button className="btn-ghost" onClick={cancel}>Cancel rule</button>}
+          <button className="sg-run" onClick={run} disabled={running} title="Run (Ctrl/Cmd+Enter)">
+            {running ? "…" : "▶ Run"}
+          </button>
+        </div>
+      </div>
+      <div className="sigma" hidden={mode!=="single"} style={mode==="single"?undefined:{display:"none"}}>
       {/* LEFT - matches */}
       <div className="sg-pane sg-left">
         <div className="sg-head">
@@ -176,9 +213,9 @@ export function SigmaView(p: SigmaViewProps) {
         {selected&&out?.explanations[selected.seq]&&<section className="sg-explanations" aria-label="Selection explanations"><strong>Why this event matched</strong><div>{out.explanations[selected.seq].map(reason=><span key={reason.name} className={reason.matched?"matched":"unmatched"}>{reason.matched?"✓":"−"} {reason.name}: {reason.matched?"matched":"did not match"}</span>)}</div><small>Selection results for this event. The rule condition combines these; count thresholds use the full snapshot.</small></section>}
         <div className="sg-body" ref={resultBody}>
           {status === "idle" && (
-            <div className="sg-empty">Press <b>Run</b> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) to test the rule.</div>
+            <div className="sg-empty">Choose a rule above, then press <b>Run</b> to test it. No rule runs automatically.</div>
           )}
-          {status !== "valid" && status !== "idle" && <div className="sg-empty">Rule not run - fix the diagnostics on the right.</div>}
+          {status !== "valid" && status !== "idle" && <div className="sg-empty">Rule not run — open Edit YAML to review diagnostics.</div>}
           {status === "valid" && events.length === 0 && <div className="sg-empty">No events match this rule.</div>}
           {status === "valid" && events.length > 0 && (
             <>
@@ -217,45 +254,13 @@ export function SigmaView(p: SigmaViewProps) {
           )}
         </div>
         {status === "valid" && events.length > 0 && <div className="workbench-list-footer">↑ ↓ Inspect matches · Home / End · Enter open</div>}
-        {selected&&<EventInspector event={selected} snapshot={out?.snapshot??undefined} rawJSON={selectedRaw} rawError={selectedRawError} lineage={selectedLineage} lineageError={selectedLineageError} onRetry={retryDetail} onPivot={p.onPivot} onOpenLineage={setGraphSeq} onClose={closeDetail} timeZone={p.timeZone}/>}
+        {selected&&<EventInspector event={selected} snapshot={out?.snapshot??undefined} rawJSON={selectedRaw} rawError={selectedRawError} lineage={selectedLineage} lineageError={selectedLineageError} onRetry={retryDetail} onPivot={p.onPivot} pivotLabel="Search all evidence" onOpenLineage={setGraphSeq} onClose={closeDetail} timeZone={p.timeZone}/>}
       </div>
 
       <div className="sg-divider" />
 
       {/* RIGHT - editor */}
-      <div className="sg-pane sg-right">
-        <div className="sg-ed-head">
-          <Popover label="Rules" menuClass="colmenu">
-            {(close) => (
-              <>
-                {userRules.length > 0 && (
-                  <>
-                    <div className="menu-label">Saved</div>
-                    {userRules.map((r) => (
-                      <div key={r.name} className="menu-item">
-                        <button className="menu-item-main" onClick={() => { loadRule(r.yaml); close(); }}>{r.name}</button>
-                        <button className="menu-del" title="Delete" onClick={() => {try{setUserRules(deleteUserRule(r.name))}catch(e){setError(String(e))}}}>✕</button>
-                      </div>
-                    ))}
-                    <div className="menu-divider" />
-                  </>
-                )}
-                <div className="menu-label">Examples</div>
-                {BUNDLED_RULES.map((r) => (
-                  <button key={r.name} className="menu-item menu-item-main" onClick={() => { loadRule(r.yaml); close(); }}>{r.name}</button>
-                ))}
-                <div className="menu-divider" />
-                <button className="menu-item menu-action" onClick={() => { saveCurrent(); close(); }}>＋ Save current rule…</button>
-              </>
-            )}
-          </Popover>
-          <span className="sg-fname" title={out?.title||"rule.yml"}>{out?.title||"rule.yml"}</span>
-          <span className={`sg-pill ${status}`}>{pill[status]}</span>
-          {running&&<button className="btn-ghost" onClick={cancel}>Cancel rule</button>}
-          <button className="sg-run" onClick={run} disabled={running} title="Run (Ctrl/Cmd+Enter)">
-            {running ? "…" : "▶ Run"}
-          </button>
-        </div>
+      <div id="hunt-rule-yaml" className="sg-pane sg-right" hidden={!showEditor}>
         <div className="sg-editor">
           <CodeEditor value={rule} onChange={(value)=>{if(value!==ruleRef.current)loadRule(value)}} diagnostics={out?.diagnostics ?? []} onSubmit={run} />
         </div>

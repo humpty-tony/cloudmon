@@ -35,7 +35,7 @@ async function closeValue(page,button) {
 }
 
 test('comparison',async page=>{
-  await pin(page,'Pin event A'); await select(page,1); await pin(page,'Pin event B');
+  await pin(page,'Add to comparison'); await select(page,1); await pin(page,'Add as second event');
   await page.getByRole('button',{name:'Compare events',exact:true}).click();
   await dialog(page).locator('.comparison-change').first().waitFor();
   let opened=await inspect(page,action,'B');
@@ -90,39 +90,39 @@ test('comparison',async page=>{
 
 test('pinning',async page=>{
   const inspector=page.getByRole('complementary',{name:'Event inspector',exact:true});
-  const names=/^(Pin event [AB]|Replace event B|Pinned as [AB]|Pin comparison)$/;
+  const names=/^(Add to comparison|Add as second event|Replace second event|Selected as [AB])$/;
   const pinButton=()=>inspector.getByRole('button',{name:names});
   assert.ok(await pinButton().isVisible(),'RESEARCH-02: selected-event pin action is hidden in collapsed provenance');
   for(const viewport of [{width:1440,height:960},{width:1280,height:800}]) {
     await page.setViewportSize(viewport);
-    for(const mode of ['Overview','Fields','Original']) {
+    for(const mode of ['Overview','Fields','Original JSON']) {
       await inspector.getByRole('tab',{name:mode,exact:true}).click();
       assert.equal(await inspector.locator('button').filter({hasText:names}).count(),1,'duplicate pin controls');
       assert.ok(await pinButton().isVisible(),`pin action hidden in ${mode}`);
       assert.ok(await pinButton().isEnabled());
       assert.equal(await pinButton().evaluate(el=>!!el.closest('details')),false,'pin action remains in disclosure');
       const pane=await inspector.boundingBox(),button=await pinButton().boundingBox();
-      assert.ok(button.x>=pane.x&&button.x+button.width<=pane.x+pane.width&&button.y>=pane.y&&button.y+button.height<pane.y+90,'compact selected-event action is clipped or buried');
+      assert.ok(button.x>=pane.x&&button.x+button.width<=pane.x+pane.width&&button.y>=pane.y&&button.y+button.height<=(await inspector.locator('.ei-tabs').boundingBox()).y,'compact selected-event action is clipped or buried');
     }
     await inspector.getByRole('tab',{name:'Overview',exact:true}).click();
     await page.screenshot({path:out+`pinning-${viewport.width}.png`});
   }
   await pinButton().focus();await page.keyboard.press('Enter');
-  assert.equal(await pinButton().textContent(),'Pinned as A');assert.ok(await pinButton().isDisabled());
+  assert.equal(await pinButton().textContent(),'Selected as A');assert.ok(await pinButton().isDisabled());
   await select(page,1);
   const raw=await page.evaluate(async()=>(await import('/scripts/fixtures/comparison-pinning.tsx')).records[1]);
   for(const state of [{rawLoading:true},{rawLoading:false,rawError:'Synthetic original failure'},{rawError:false,rawJSON:''}]) {
     await update(page,state);
-    for(const mode of ['Overview','Fields','Original']) {
+    for(const mode of ['Overview','Fields','Original JSON']) {
       await inspector.getByRole('tab',{name:mode,exact:true}).click();
       assert.ok(await pinButton().isVisible());assert.ok(await pinButton().isDisabled(),'unavailable/stale raw source was pinnable');
     }
     assert.equal(await page.locator('.comparison-pin').count(),1,'unsafe source altered pins');
   }
   await update(page,{rawJSON:raw,rawLoading:false,rawError:false});
-  assert.equal(await pinButton().textContent(),'Pin event B');
-  await pinButton().click();assert.equal(await pinButton().textContent(),'Pinned as B');
-  await select(page,2);assert.equal(await pinButton().textContent(),'Replace event B');
+  assert.equal(await pinButton().textContent(),'Add as second event');
+  await pinButton().click();assert.equal(await pinButton().textContent(),'Selected as B');
+  await select(page,2);assert.equal(await pinButton().textContent(),'Replace second event');
   await pinButton().click();
   assert.ok((await page.locator('.comparison-pin').nth(1).textContent()).includes('research-c'));
   await page.getByRole('button',{name:'Compare events',exact:true}).click();
@@ -131,9 +131,9 @@ test('pinning',async page=>{
   assert.equal(await original.locator('.source-text').textContent(),await page.evaluate(async()=>(await import('/scripts/fixtures/comparison-pinning.tsx')).records[2]));
   await page.keyboard.press('Escape');await page.keyboard.press('Escape');
   await page.getByRole('button',{name:'Remove event A',exact:true}).click();
-  assert.equal(await pinButton().textContent(),'Pinned as A');
-  await page.getByRole('button',{name:'Clear pins',exact:true}).click();
-  assert.equal(await pinButton().textContent(),'Pin event A');
+  assert.equal(await pinButton().textContent(),'Selected as A');
+  await page.getByRole('button',{name:'Clear comparison',exact:true}).click();
+  assert.equal(await pinButton().textContent(),'Add to comparison');
 });
 
 const server=await createServer({root,cacheDir:'node_modules/.vite-comparison-pinning',server:{host:'127.0.0.1',port:5251,strictPort:true}});

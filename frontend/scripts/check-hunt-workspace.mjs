@@ -26,17 +26,18 @@ try {
   await page.getByLabel('Typed indicators',{exact:true}).waitFor();
   assert.equal(await page.getByRole('tablist',{name:'Hunt modes'}).count(),1,'Hunt must have one consolidated mode strip');
   await page.getByLabel('Typed indicators',{exact:true}).fill('ip 192.0.2.10');
-  await mode('Sequences').click();
+  await mode('Event sequences').click();
   await page.getByLabel('Step A search',{exact:true}).fill('eventName="CreateUser"');
   await page.getByLabel('Step B search',{exact:true}).fill('eventName="CreateAccessKey"');
   await mode('Rules').click();
+  await page.getByRole('button',{name:'Edit YAML',exact:true}).click();
   await page.locator('.cm-content:visible').fill('title: Retained rule draft');
   await mode('Indicators').click();
   assert.equal(await page.getByLabel('Typed indicators',{exact:true}).inputValue(),'ip 192.0.2.10');
   await page.getByRole('button',{name:'Toggle destination'}).click();
   await page.getByRole('button',{name:'Toggle destination'}).click();
   assert.equal(await page.getByLabel('Typed indicators',{exact:true}).inputValue(),'ip 192.0.2.10');
-  await mode('Sequences').click();
+  await mode('Event sequences').click();
   assert.equal(await page.getByLabel('Step A search',{exact:true}).inputValue(),'eventName="CreateUser"');
   assert.equal(await page.getByLabel('Step B search',{exact:true}).inputValue(),'eventName="CreateAccessKey"');
   await mode('Rules').click();
@@ -62,7 +63,7 @@ try {
   await panel().getByLabel('Hunt name',{exact:true}).fill('Saved scoped indicators');
   await panel().getByRole('button',{name:'Save new hunt',exact:true}).click();
   await panel().getByText('Hunt saved on this device with a copy of its filter scope.').waitFor();
-  await mode('Sequences').click();
+  await mode('Event sequences').click();
   await panel().getByRole('button',{name:'Run hunt',exact:true}).click();
   await panel().getByText('1 sequence · 8 events in scope').waitFor();
   await panel().getByText(/^Saved hunts \(/).click();
@@ -75,21 +76,21 @@ try {
   assert.equal(await mode('Indicators').getAttribute('aria-selected'),'true','Saved hunt must route across modes');
   await page.waitForFunction(()=>document.querySelector('.hw-panel:not([hidden]) [aria-label="Hunt scope"]')?.value==='saved');
   assert.equal(await panel().getByLabel('Hunt scope',{exact:true}).inputValue(),'saved');
-  assert.equal(await panel().getByRole('button',{name:'Use current Workbench filters',exact:true}).count(),1,'Saved scope replacement must name the current destination');
+  assert.equal(await panel().getByRole('button',{name:'Use current event filters',exact:true}).count(),1,'Saved scope replacement must name the current destination');
   assert.equal(await page.evaluate(()=>window.huntFixture.hunts.length),calls,'Loading must not run');
   await panel().getByRole('button',{name:'Run hunt',exact:true}).click();
   await panel().getByText('8 matched events · 8 events in scope').waitFor();
   assert.deepEqual(await page.evaluate(()=>window.huntFixture.hunts.at(-1).options.filter),copied,'Saved scope must not follow subsequent Workbench changes');
-  await mode('Sequences').click();
+  await mode('Event sequences').click();
   await panel().getByText('1 sequence · 8 events in scope').waitFor();
   await mode('Indicators').click();
   await panel().getByLabel('Saved hunt',{exact:true}).selectOption({label:'Saved sequence'});
   await panel().getByRole('button',{name:'Load hunt',exact:true}).click();
-  assert.equal(await mode('Sequences').getAttribute('aria-selected'),'true');
+  assert.equal(await mode('Event sequences').getAttribute('aria-selected'),'true');
   assert.equal(await panel().getByLabel('Step B search',{exact:true}).inputValue(),'eventName="CreateAccessKey"');
   await mode('Rules').click();
   assert.match(await panel().innerText(),/Scope: all loaded evidence/,'Sigma must disclose its actual engine scope');
-  assert.match(await panel().innerText(),/Workbench filters are not applied/,'Sigma must not pretend to accept the Workbench filter');
+  assert.match(await panel().innerText(),/Current event filters are not applied/,'Sigma must not pretend to accept the Workbench filter');
   console.log('PASS scope forwarding, saved cross-mode routing, exact copied filters, no autorun, result retention');
   await panel().getByRole('button',{name:'▶ Run',exact:true}).click();
   await panel().getByText('✓ Ran · 8 matches',{exact:true}).waitFor();
@@ -116,7 +117,7 @@ try {
   assert.equal(await panel().getByRole('complementary',{name:'Event inspector',exact:true}).count(),1,'Indicator results should use the shared inspector');
   await panel().getByRole('tab',{name:'Original JSON',exact:true}).click();
   await panel().getByRole('tabpanel',{name:'Original JSON',exact:true}).getByText(/9007199254740993/).waitFor();
-  await mode('Sequences').click();
+  await mode('Event sequences').click();
   await panel().getByRole('button',{name:'Run hunt',exact:true}).click();
   await panel().getByText('1 sequence · 8 events in scope').waitFor();
   await panel().getByRole('button',{name:'Inspect step B',exact:true}).click();
@@ -133,8 +134,9 @@ try {
   const layouts=[];
   for(const viewport of [{width:1440,height:960},{width:1280,height:800}]) {
     await page.setViewportSize(viewport);
-    for(const name of ['Indicators','Sequences','Rules']) {
+    for(const name of ['Indicators','Event sequences','Rules']) {
       await mode(name).click();
+      if(name==='Rules' && await panel().getByRole('button',{name:'Edit YAML',exact:true}).isVisible()) await panel().getByRole('button',{name:'Edit YAML',exact:true}).click();
       await panel().locator('details[open]').evaluateAll(items=>items.forEach(item=>item.open=false));
       await page.screenshot({path:fileURLToPath(new URL(`${name.toLowerCase()}-${viewport.width}.png`,output))});
       const layout=await panel().evaluate(element=>{
@@ -154,14 +156,14 @@ try {
   await mode('Indicators').focus();await page.keyboard.press('ArrowRight');
   assert.equal(await mode('Rules').getAttribute('aria-selected'),'true');
   await page.keyboard.press('End');
-  assert.equal(await mode('Sequences').getAttribute('aria-selected'),'true','Hunt mode tabs must support keyboard navigation');
+  assert.equal(await mode('Event sequences').getAttribute('aria-selected'),'true','Hunt mode tabs must support keyboard navigation');
   console.log('PASS readable rule cells and keyboard mode navigation');
   // Exercise cancellation through the actual Wails adapter, including a native
   // response that arrives after cancellation/load and ignores the abort signal.
   await page.evaluate(()=>{window.huntFixture.delay=true});
   await panel().getByRole('button',{name:'Run hunt',exact:true}).click();
   await panel().getByRole('button',{name:'Cancel hunt',exact:true}).waitFor();
-  await mode('Rules').click();await mode('Sequences').click();
+  await mode('Rules').click();await mode('Event sequences').click();
   await panel().getByRole('button',{name:'Cancel hunt',exact:true}).click();
   await page.evaluate(()=>window.huntFixture.pending.splice(0).forEach(resolve=>resolve()));
   await panel().getByText('Hunt cancelled. Run again when ready.').waitFor();
@@ -177,7 +179,7 @@ try {
   await panel().getByRole('button',{name:'Load hunt',exact:true}).click();
   await page.waitForFunction(()=>window.huntFixture.cancelled.length>=3);
   await page.evaluate(()=>{window.huntFixture.pending.splice(0).forEach(resolve=>resolve());window.huntFixture.delay=false});
-  assert.equal(await mode('Sequences').getAttribute('aria-selected'),'true');
+  assert.equal(await mode('Event sequences').getAttribute('aria-selected'),'true');
   await page.waitForFunction(()=>!document.querySelector('.hw-panel:not([hidden]) .analysis-result-head'));
   assert.equal(await panel().locator('.analysis-result-head').count(),0,'Obsolete native completion must not publish results after loading');
   assert.equal(await page.evaluate(()=>window.huntFixture.cancelled.length),cancelled+2,'Cross-mode load cancels source and target runs');
@@ -197,7 +199,7 @@ try {
   await panel().getByRole('button',{name:'▶ Run',exact:true}).click();
   await panel().getByText(/Unsupported fixture modifier/).waitFor();
   await panel().locator('.cm-content:visible').fill('title: Saved rule fixture');
-  await panel().getByRole('button',{name:'Rules ▾',exact:true}).click();
+  await panel().getByRole('button',{name:'Choose a rule ▾',exact:true}).click();
   page.once('dialog',dialog=>dialog.accept('Saved fixture rule'));
   await page.getByRole('button',{name:'＋ Save current rule…',exact:true}).click();
   await page.evaluate(()=>{window.huntFixture.fail=true});
@@ -225,7 +227,7 @@ try {
   }
   assert.deepEqual(errors,[]);
   console.log('PASS rule diagnostics/errors, local saved rules, rule/suite cancellation and late-response rejection');
-  await mode('Sequences').click();
+  await mode('Event sequences').click();
   for(const letter of ['C','D','E']) {
     await panel().getByRole('button',{name:'Add step',exact:true}).click();
     await panel().getByLabel(`Step ${letter} search`,{exact:true}).fill(`eventName="Step${letter}"`);

@@ -46,7 +46,7 @@ async function popoverRegression(page) {
   assert.equal(await page.locator('.workbench-page').isVisible(),false);
   await settle(page);
   assert.equal(await page.locator('.pop-menu, .pop-backdrop').count(),0,'Deactivated Workbench leaked its Columns portal/backdrop over Hunt');
-  await page.getByRole('button',{name:'Workbench',exact:true}).click();
+  await page.getByRole('button',{name:'Events',exact:true}).click();
   await settle(page);
   assert.equal(await page.locator('.pop-menu, .pop-backdrop').count(),0,'Columns must not reopen on reactivation');
 }
@@ -94,7 +94,7 @@ async function workbenchDialog(page,kind) {
   const eventID=JSON.parse(await page.locator('.ei-source').textContent()).eventID;
   if(kind==='raw') await page.getByRole('button',{name:'Open full JSON',exact:true}).click();
   if(kind==='evidence') await page.getByRole('button',{name:'Sources & hashes',exact:true}).click();
-  if(kind==='investigation') await page.getByRole('button',{name:'Around this event',exact:true}).click();
+  if(kind==='investigation') await page.getByRole('button',{name:'Related events',exact:true}).click();
   if(kind==='lineage') {
     await page.getByRole('tab',{name:'Context',exact:true}).click();
     await page.getByRole('button',{name:'Expand selected-event lineage',exact:true}).click();
@@ -105,7 +105,7 @@ async function workbenchDialog(page,kind) {
   await page.locator('.tbar-views button').filter({hasText:/^Hunt$/}).evaluate(button=>button.click());
   await settle(page);
   assert.equal(await portals.count(),0,`${kind}: Workbench-owned dialog leaked over Hunt`);
-  await page.getByRole('button',{name:'Workbench',exact:true}).click();
+  await page.getByRole('button',{name:'Events',exact:true}).click();
   await settle(page);
   assert.equal(await portals.count(),0,`${kind}: Workbench-owned dialog reopened on return`);
   await page.getByRole('tab',{name:'Original JSON',exact:true}).click();
@@ -157,7 +157,7 @@ async function rawNavigationRegression(page, owner, returnFirst) {
   await page.evaluate(()=>window.workspaceFixture.gate.deferNext());
   await page.getByRole('button',{name:'Original record',exact:true}).first().click();
   await page.waitForFunction(()=>window.workspaceFixture.gate.pending===1);
-  await page.getByRole('button',{name:'Workbench',exact:true}).click();
+  await page.getByRole('button',{name:'Events',exact:true}).click();
   if(returnFirst) await enterOwner(page,owner);
   await page.evaluate(()=>window.workspaceFixture.gate.release());
   await page.waitForFunction(before=>window.workspaceFixture.gate.completed===before+1,completedBefore);

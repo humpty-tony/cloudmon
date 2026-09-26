@@ -17,13 +17,14 @@ export interface EventOverviewProps {
   loading?: boolean;
   onPivot: (field: FilterField, value: string, op: QueryOp) => void;
   lineageAction?: ReactNode;
+  pivotLabel?: string;
   /** Parent-owned related activity, with its own explicit count/query scope. */
   reviewContext?: ReactNode;
   aroundAction?: ReactNode;
   evidenceActions?: ReactNode;
 }
 
-export function EventOverview({event: e, rawJSON, loading, onPivot, lineageAction, reviewContext, aroundAction, evidenceActions}: EventOverviewProps) {
+export function EventOverview({event: e, rawJSON, loading, onPivot, pivotLabel = "Filter current results", lineageAction, reviewContext, aroundAction, evidenceActions}: EventOverviewProps) {
   const source = useMemo(() => {
     // Overview never synchronously parses an unbounded record. Fields keeps its
     // worker-backed parser; Original always receives untouched source bytes.
@@ -71,10 +72,11 @@ export function EventOverview({event: e, rawJSON, loading, onPivot, lineageActio
   const renderValue = (value: string, field?: FilterField, label = value) => {
     const shown = label.length > 700 ? label.slice(0, 700) + "…" : label;
     return !value ? <span className="eo-missing">Not recorded</span> : field
-      ? <button className="eo-pivot" title={value} onClick={() => onPivot(field, value, "include")}>{shown}</button>
+      ? <button className="eo-pivot" aria-label={`${pivotLabel} by ${field}: ${value}`} title={`${pivotLabel} by ${field}: ${value}`} onClick={() => onPivot(field, value, "include")}>{shown}<svg aria-hidden="true" className="eo-filter-icon" viewBox="0 0 16 16"><path d="M2 3h12L9 8v5l-2-1V8z"/></svg></button>
       : <span title={value}>{shown}</span>;
   };
   return <div className="event-overview">
+    <div className="eo-filter-hint">{pivotLabel} using a <svg aria-hidden="true" className="eo-filter-icon" viewBox="0 0 16 16"><path d="M2 3h12L9 8v5l-2-1V8z"/></svg> value</div>
     <section className="eo-section" aria-label="Actor and session">
       <div className="eo-section-head"><h3>Actor</h3>{lineageAction}</div>
       <div className="eo-value-main">{actor ? renderValue(actor, actorArn ? "identityArn" : "principalId", presentation.name) : presentation.name}{presentation.session && <span className="eo-session"> / {renderValue(presentation.session)}</span>}<AliasBadge kind="arn" value={actorArn}/>{role && role !== actorArn && <AliasBadge kind="arn" value={role}/>}</div>

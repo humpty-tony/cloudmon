@@ -97,13 +97,15 @@ export function TitleBar({ connected, sourceLabel, canExport, canExportMatches, 
 
       {connected && (
         <div className="tbar-views">
-          <button className={`tbar-view ${view === "console" || view === "analysis" ? "on" : ""}`} onClick={() => onView("console")}>Workbench</button>
+          <button className={`tbar-view ${view === "console" || view === "analysis" ? "on" : ""}`} onClick={() => onView("console")}>Events</button>
           <button className={`tbar-view ${view === "hunts" || view === "sigma" ? "on" : ""}`} onClick={() => onView("hunts")}>Hunt</button>
         </div>
       )}
 
-      <button className="tbar-menubtn tbar-sources" aria-haspopup="dialog" onClick={onSources}>Sources</button>
-      {sourceLabel && <span className="tbar-source" title={sourceLabel}>{sourceLabel}</span>}
+      <div className="tbar-data" role="group" aria-label="Active evidence">
+        <button className="tbar-menubtn tbar-sources" aria-haspopup="dialog" onClick={onSources}>Data sources…</button>
+        {sourceLabel && <span className="tbar-source" title={sourceLabel}>{sourceLabel}</span>}
+      </div>
       <div className="tbar-drag" />
 
       <div className="tbar-winctl">

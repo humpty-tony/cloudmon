@@ -8,6 +8,20 @@
 .hw-panel { display:flex; flex:1; min-height:0; min-width:0; }
 .hunt-workspace [hidden] { display:none !important; }
 
+/* Compact input assistance stays beside, not instead of, expert authoring. */
+.hunt-indicator-add { display:grid; gap:7px; margin:6px 0 12px; }
+.hunt-indicator-add label { display:grid; grid-template-columns:42px minmax(0,1fr); align-items:center; gap:8px; font-size:12px; color:var(--tx-2); }
+.hunt-indicator-add input,.hunt-indicator-add select { min-width:0; width:100%; padding:6px 8px; border:1px solid var(--border-fn); border-radius:4px; background:var(--bg-0); color:var(--tx-1); font:inherit; }
+.hunt-indicator-add > button { justify-self:end; }
+.hunt-format-examples { display:grid; gap:5px; padding:8px 0; border-top:1px solid var(--line-struct); border-bottom:1px solid var(--line-struct); font-size:12px; color:var(--tx-2); }
+.hunt-format-examples code { font-size:12px; line-height:1.45; overflow-wrap:anywhere; }
+.hunt-format-examples button { justify-self:start; }
+.hunt-sequence-starter { display:grid; gap:7px; margin:6px 0 12px; font-size:12px; line-height:1.5; color:var(--tx-2); }
+.hunt-sequence-starter button { justify-self:start; }
+.hunt-workspace .sg-rule-controls { flex:none; }
+.hunt-workspace .sg-rule-controls .sg-ed-head { min-height:46px; }
+.hunt-workspace .sg-right[hidden] { display:none; }
+
 /* Independent scrolling authoring rail and bounded result/inspection dock. */
 .hunt-workspace .hunt-view { display:grid; grid-template-columns:330px minmax(0,1fr); padding:0; overflow:hidden; }
 .hunt-workspace .hunt-author { padding:14px 16px; overflow:auto; min-width:0; min-height:0; border-right:1px solid var(--line-struct); background:var(--bg-1); }

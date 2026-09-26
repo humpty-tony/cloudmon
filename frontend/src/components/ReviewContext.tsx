@@ -11,7 +11,7 @@ export interface ReviewContextScope {
   minutes: number;
 }
 export const REVIEW_RELATIONS = [
-  ["all", "Around this event"], ["credential", "Matching credential"],
+  ["all", "Related events"], ["credential", "Matching credential"],
   ["principal", "Same recorded principal"], ["ip", "Same source IP"],
   ["resources", "Shared resource ARN"],
 ] as const;
@@ -40,7 +40,7 @@ export function ReviewContext({scope, onChange, onClose, onInspect, tableProps}:
   const rows = result?.events.slice().reverse().map(item => rowToEvent(item.event)) ?? [];
   const selected = result?.events.find(item => item.event.seq === tableProps.selected?.seq);
   return <section className="workbench-results review-context" aria-label="Contextual event results">
-    <div className="workbench-context-scope"><span><strong>{REVIEW_RELATIONS.find(item => item[0] === scope.relation)?.[1]}</strong> · {scope.anchor.eventName}</span><button className="btn-ghost" onClick={onClose}>← Back to browsing</button></div>
+    <div className="workbench-context-scope"><span><strong>{REVIEW_RELATIONS.find(item => item[0] === scope.relation)?.[1]}</strong> · {scope.anchor.eventName}<time dateTime={scope.anchor.eventTime}> · {scope.anchor.eventTime}</time></span><button className="btn-ghost" onClick={onClose}>Back to Events</button></div>
     <div className="review-context-controls">
       <label>Window <select value={scope.minutes} onChange={event => onChange({...scope, minutes: Number(event.target.value)})}>{[1,2,5,15,60].map(n => <option key={n} value={n}>±{n} min</option>)}</select></label>
       <span>All evidence in this snapshot · browsing filters not applied</span>
@@ -49,7 +49,7 @@ export function ReviewContext({scope, onChange, onClose, onInspect, tableProps}:
       <div className="workbench-list-heading"><strong>{result.total.toLocaleString()} matching events</strong><button className="btn-ghost" onClick={() => onInspect(scope.anchor, scope.snapshot)} title={scope.anchor.eventID}>Inspect anchor · {scope.anchor.eventTime}</button><span className="workbench-order">Newest event time first</span></div>
       {result.total > result.events.length && <div className="search-notice" role="status">Showing {result.events.length} of {result.total.toLocaleString()} events nearest the anchor. Narrow the window to review more.</div>}
       {result.notes.length > 0 && <details className="review-context-notes"><summary>Evidence boundaries ({result.notes.length})</summary>{result.notes.map(note => <p key={note}>{note}</p>)}</details>}
-      <EventTable {...tableProps} events={rows} follow={false} onSelect={event => onInspect(event, result.snapshot)} onReachTop={() => {}} onDisengageFollow={() => {}} />
+      {rows.length ? <EventTable {...tableProps} events={rows} follow={false} onSelect={event => onInspect(event, result.snapshot)} onReachTop={() => {}} onDisengageFollow={() => {}} /> : <div className="review-context-empty"><strong>No related events in this window.</strong><p>Choose another relationship or widen the time window.</p>{scope.minutes < 60 && <button className="btn-ghost" onClick={() => onChange({...scope, minutes: scope.minutes < 15 ? 15 : 60})}>Widen time window</button>}</div>}
       <div className="workbench-list-footer">{selected?.reasons.map(reason => reason.label).join(" · ") || "Select an event to inspect its recorded context."}</div>
     </>}
     {!result && <div className="ei-state" role={failure ? "alert" : "status"}>{failure ? <><strong>Could not load contextual activity</strong><p>{failure}</p><button onClick={() => setRetry(n => n+1)}>Retry context</button></> : "Loading snapshot-bound activity…"}</div>}

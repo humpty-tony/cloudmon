@@ -878,6 +878,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.screenshot({path:path.join(output,'sigma-rule.png'),fullPage:true});
   await page.setViewportSize({width:960,height:720});
   assert.ok(await page.locator('.sigma-workbench').evaluate(el=>el.scrollWidth<=el.clientWidth),'Sigma spills at minimum width');
+  await page.getByRole('button',{name:'Edit YAML',exact:true}).click();
   const editor=page.locator('.sg-editor .cm-content');
   await editor.click();await page.keyboard.press('Control+End');await page.keyboard.press('Enter');await page.keyboard.type('# changed');
   await page.locator('.sg-pill.idle').getByText('Not run',{exact:true}).waitFor();

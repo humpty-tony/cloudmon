@@ -10,8 +10,10 @@ import "./hunt-workspace.css";
 export interface HuntWorkspaceProps extends SigmaViewProps { filter: QueryFilter }
 
 type Mode = "indicators" | "rules" | "sequence";
-const MODES: {id:Mode; label:string}[] = [
-  {id:"indicators",label:"Indicators"}, {id:"rules",label:"Rules"}, {id:"sequence",label:"Sequences"},
+const MODES: {id:Mode; label:string; purpose:string}[] = [
+  {id:"indicators",label:"Indicators",purpose:"Find known IPs, access keys, event IDs or ARNs in your evidence."},
+  {id:"rules",label:"Rules",purpose:"Choose a detection rule, run it, then inspect matching events."},
+  {id:"sequence",label:"Event sequences",purpose:"Find ordered events for the same principal or credential within a time window."},
 ];
 
 /** Keep mounted (hide, don't unmount) when returning to the Workbench. */
@@ -37,7 +39,7 @@ export function HuntWorkspace({filter,...sigma}: HuntWorkspaceProps) {
   return <main className="hunt-workspace" aria-label="Hunt workspace">
     <header className="hw-toolbar"><div role="tablist" aria-label="Hunt modes">
       {MODES.map((item,index)=><button key={item.id} ref={element=>{tabs.current[index]=element}} type="button" role="tab" id={`${id}-${item.id}`} aria-controls={`${id}-${item.id}-panel`} aria-selected={mode===item.id} tabIndex={mode===item.id?0:-1} onKeyDown={event=>navigate(event,index)} onClick={()=>setMode(item.id)}>{item.label}</button>)}
-    </div><span>On-demand searches · matches are not incidents</span></header>
+    </div><span>{MODES.find(item=>item.id===mode)?.purpose}</span></header>
     {MODES.map(item=><WorkspaceActivity.Provider key={item.id} value={active && mode===item.id}><section className="hw-panel" role="tabpanel" id={`${id}-${item.id}-panel`} aria-labelledby={`${id}-${item.id}`} hidden={mode!==item.id}>
       {item.id==="rules"?<SigmaView {...sigma}/>:<HuntView filter={filter} fixedMode={item.id} savedLoad={loads[item.id]} onLoadSaved={loadSaved} inspector={{timeZone:sigma.timeZone,onPivot:sigma.onPivot}}/>}
     </section></WorkspaceActivity.Provider>)}

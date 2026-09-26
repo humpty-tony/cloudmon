@@ -34,14 +34,14 @@ try{
  const pivotQuery=await page.evaluate(()=>window.reviewCalls.filter(c=>c.method==='QuerySearch').at(-1).args[0]);
  assert.deepEqual(pivotQuery.includes,{sourceIPAddress:['198.51.100.44']});assert.equal(pivotQuery.expr,null);
  await pivot.locator('.row').filter({hasText:'GetSecretValue'}).locator('.c-time').click();
- await pivot.getByRole('tab',{name:'Original',exact:true}).click();await pivot.locator('.ei-source').getByText(/soc-denied/).waitFor();
+ await pivot.getByRole('tab',{name:'Original JSON',exact:true}).click();await pivot.locator('.ei-source').getByText(/soc-denied/).waitFor();
  await page.screenshot({path:fileURLToPath(new URL('hunt-pivot-native.png',out))});
  await pivot.getByRole('button',{name:'Back to Hunt',exact:true}).click();await hunt.getByText('5 matched events · 108 events in scope',{exact:true}).waitFor();
- await page.getByRole('button',{name:'Workbench',exact:true}).click();await page.getByRole('region',{name:'Event results',exact:true}).getByText('96 events',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Events',exact:true}).click();await page.getByRole('region',{name:'Event results',exact:true}).getByText('96 events',{exact:true}).waitFor();
  await page.waitForTimeout(120);const after=await grid.evaluate(e=>({scroll:e.scrollTop,seq:e.querySelector('.row--selected')?.getAttribute('data-event-seq')}));
  assert.deepEqual(after,before);assert.equal(await page.locator('.qbar-input').inputValue(),'eventName=unapplied');
  await page.getByRole('button',{name:'Hunt',exact:true}).click();await hunt.getByRole('tab',{name:'Rules',exact:true}).click();
- const rules=hunt.locator('.hw-panel:visible');await rules.locator('.cm-content').fill('title: Review source IP\nlogsource:\n  product: aws\n  service: cloudtrail\ndetection:\n  selection:\n    sourceIPAddress: 198.51.100.44\n  condition: selection\nlevel: medium');
+ const rules=hunt.locator('.hw-panel:visible');await rules.getByRole('button',{name:'Edit YAML',exact:true}).click();await rules.locator('.cm-content').fill('title: Review source IP\nlogsource:\n  product: aws\n  service: cloudtrail\ndetection:\n  selection:\n    sourceIPAddress: 198.51.100.44\n  condition: selection\nlevel: medium');
  await rules.getByRole('button',{name:'▶ Run',exact:true}).click();await rules.getByText('✓ Ran · 5 matches',{exact:true}).waitFor();
  await rules.locator('.etbody').focus();await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');assert.equal(await rules.locator('.row--selected').count(),1);
  const first=await rules.locator('.row--selected').getAttribute('data-event-seq');await page.keyboard.press('ArrowDown');assert.notEqual(await rules.locator('.row--selected').getAttribute('data-event-seq'),first);
@@ -49,13 +49,13 @@ try{
  await rules.getByRole('tab',{name:'Original JSON',exact:true}).click();await rules.locator('.ei-source').getByText(/eventID/).waitFor();
  await page.setViewportSize({width:1280,height:800});await page.screenshot({path:fileURLToPath(new URL('rules-native-1280.png',out))});
  const ruleRaw=await rules.locator('.ei-source').textContent();
- await page.getByRole('button',{name:'Workbench',exact:true}).click();
+ await page.getByRole('button',{name:'Events',exact:true}).click();
  await page.locator('.qbar-input').fill('eventName=PutBucketPolicy');await page.locator('.qbar-input').press('Enter');
  await page.getByRole('region',{name:'Event results',exact:true}).getByText('2 events',{exact:true}).waitFor();
  const inspector=page.getByRole('complementary',{name:'Event inspector',exact:true});
  const originals=[];
  for(const [index,id,side] of [[1,'research-a','A'],[0,'research-b','B']]){
-  await rows.nth(index).locator('.c-time').click();await inspector.getByRole('tab',{name:'Original',exact:true}).click();
+  await rows.nth(index).locator('.c-time').click();await inspector.getByRole('tab',{name:'Original JSON',exact:true}).click();
   await inspector.locator('.ei-source').getByText(new RegExp(id)).waitFor();originals.push(await inspector.locator('.source-text').textContent());
   const pin=inspector.getByRole('button',{name:`Pin event ${side}`,exact:true});assert.ok(await pin.isVisible());assert.ok(await pin.isEnabled());
   assert.equal(await pin.evaluate(e=>!!e.closest('details')),false);await pin.click();
@@ -77,7 +77,7 @@ try{
   const original=page.getByRole('dialog',{name:'Raw JSON',exact:true});await original.locator('.source-text').waitFor();
   assert.equal(await original.locator('.source-text').textContent(),originals[index]);await page.keyboard.press('Escape');
  }
- await page.keyboard.press('Escape');await page.getByRole('button',{name:'Clear pins',exact:true}).click();
+ await page.keyboard.press('Escape');await page.getByRole('button',{name:'Clear comparison',exact:true}).click();
  assert.equal(await rows.count(),2);assert.deepEqual(errors,[]);
  await writeFile(new URL('verification.json',out),JSON.stringify({synthetic:true,nativeBackend:true,actorQuery,pivotQuery,workbenchBefore:before,workbenchAfter:after,ruleRaw,comparison:{path:action,swap:true,originalsUnchanged:true,visiblePins:true},calls:await page.evaluate(()=>window.reviewCalls),errors},null,2));
  console.log('PASS native App/DuckDB: all five review fixes; actor isolation, explicit Hunt scope/browse restoration, Rules keyboard, visible pins, exact comparison path values/swap/originals');

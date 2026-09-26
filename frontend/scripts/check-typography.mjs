@@ -41,7 +41,7 @@ try {
  const before=await actor.evaluate(e=>({weight:getComputedStyle(e).fontWeight,color:getComputedStyle(e).color}));
  await page.locator('.row[data-event-seq="1"] .c-time').click();await actor.hover();
  assert.deepEqual(await actor.evaluate(e=>({weight:getComputedStyle(e).fontWeight,color:getComputedStyle(e).color})),before,'Selection and hover must not change actor emphasis');
- await page.getByRole('tab',{name:'Original',exact:true}).click();
+ await page.getByRole('tab',{name:'Original JSON',exact:true}).click();
  const source=page.locator('.ei-source');await source.waitFor();
  assert.equal(JSON.parse(await source.textContent()).eventID,event.eventID);
  assert.match(await source.evaluate(e=>getComputedStyle(e).fontFamily),/^"?Fira Code"?,/);

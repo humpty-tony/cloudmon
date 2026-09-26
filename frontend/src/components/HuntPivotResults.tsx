@@ -41,20 +41,20 @@ export function HuntPivotResults({scope, tableProps, onReturn}: {scope: HuntPivo
     return () => {current = false;};
   }, [selected, snapshot, rawRetry]);
   return <section className="workbench-page" role="region" aria-label="Hunt pivot results">
-    <div className="workbench-context-scope"><span><strong>Hunt → Workbench</strong> · {scope.field} {scope.op === "exclude" ? "≠" : scope.op === "exists" ? "exists" : "="} <code>{scope.value || "(empty)"}</code></span><button className="btn-ghost" ref={back} onClick={() => onReturn("hunts")}>Back to Hunt</button><button className="btn-ghost" onClick={() => onReturn("console")}>Back to browsing</button></div>
-    <div className="review-context-controls">Scope: all currently loaded evidence at pivot time. Workbench filters are not applied; your previous browsing session is unchanged.</div>
+    <div className="workbench-context-scope"><span><strong>Hunt → Events</strong> · {scope.field} {scope.op === "exclude" ? "≠" : scope.op === "exists" ? "exists" : "="} <code>{scope.value || "(empty)"}</code></span><button className="btn-ghost" ref={back} onClick={() => onReturn("hunts")}>Back to Hunt</button><button className="btn-ghost" onClick={() => onReturn("console")}>Back to Events</button></div>
+    <div className="review-context-controls">Scope: all currently loaded evidence at pivot time. Event filters are not applied; your previous browsing session is unchanged.</div>
     <div className="workbench-body">
       <div className="workbench-results">
         {result && <>
           <div className="workbench-list-heading"><strong>{result.aggregates.total.toLocaleString()} matching events</strong><span className="workbench-order">Newest received first</span></div>
           {snapshot && <div className="review-context-controls">Fixed snapshot · {snapshot.capturedAt}</div>}
-          {result.aggregates.total > result.events.length && <div className="search-notice" role="status">Showing the first {result.events.length.toLocaleString()} of {result.aggregates.total.toLocaleString()} matches. Use Workbench search to narrow the query.</div>}
+          {result.aggregates.total > result.events.length && <div className="search-notice" role="status">Showing the first {result.events.length.toLocaleString()} of {result.aggregates.total.toLocaleString()} matches. Use Events search to narrow the query.</div>}
           <EventTable {...tableProps} keyboardNavigation detailMode="external" compact events={result.events} selected={selected} cursorSeq={cursor} follow={false}
             onSelect={event => {setCursor(event.seq); setSelected(event);}} onCursor={setCursor} onDisengageFollow={() => {}} onReachTop={() => {}} onRetryDetail={() => setRawRetry(n => n+1)} />
         </>}
         {!result && <div className="ei-state" role={error ? "alert" : "status"}>{error ? <><p>{error}</p><button onClick={() => setRetry(n => n+1)}>Retry pivot</button></> : "Loading pivot results…"}</div>}
       </div>
-      <EventInspector layout="review" event={selected} snapshot={snapshot ?? undefined} rawJSON={raw} rawLoading={!!selected && !raw && !rawError} rawError={rawError}
+      <EventInspector pivotLabel="Search all evidence" layout="review" event={selected} snapshot={snapshot ?? undefined} rawJSON={raw} rawLoading={!!selected && !raw && !rawError} rawError={rawError}
         onRetry={() => setRawRetry(n => n+1)} onPivot={tableProps.onPivot} onOpenLineage={setGraph} onClose={() => setSelected(null)} timeZone={tableProps.timeZone} />
     </div>
     {graph !== null && snapshot && <LineageView seq={graph} initialSnapshot={snapshot} onClose={() => setGraph(null)} onPivot={tableProps.onPivot} />}

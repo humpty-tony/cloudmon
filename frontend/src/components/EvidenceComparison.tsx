@@ -28,19 +28,19 @@ export function EvidenceComparisonProvider({children}:{children:ReactNode}){
 export function PinComparisonButton({event,json}:{event:CloudTrailEvent;json:string}){
   const {pins,pin}=useComparison();
   const index=pins.findIndex(p=>p.eventID===event.eventID&&p.json===json);
-  const label=index>=0?`Pinned as ${index===0?"A":"B"}`:pins.length===0?"Pin event A":pins.length===1?"Pin event B":"Replace event B";
+  const label=index>=0?`Selected as ${index===0?"A":"B"}`:pins.length===0?"Add to comparison":pins.length===1?"Add as second event":"Replace second event";
   return <button className="xd-raw-btn" disabled={index>=0} onClick={()=>pin(event,json)}>{label}</button>;
 }
 export function ComparisonBar(){
   const {pins,remove,clear,swap,show}=useComparison();
   if(!pins.length)return null;
-  return <div className="comparison-bar" aria-label="Pinned evidence">
-    <span>Pinned source copies</span>
+  return <div className="comparison-bar" role="region" aria-label="Event comparison">
+    <div className="comparison-progress"><strong>Compare events</strong><span role="status">{pins.length} of 2 selected</span></div>
     {pins.map((p,i)=><div className="comparison-pin" key={i}><b>{i===0?"A":"B"}</b><span title={`${p.eventName} · ${p.eventID}`}>{p.eventName} · {p.eventID}</span><button onClick={()=>remove(i)} aria-label={`Remove event ${i===0?"A":"B"}`}>×</button></div>)}
-    {pins.length===1&&<span>Pin another event to compare.</span>}
+    {pins.length===1&&<span>Select another event, then add it here.</span>}
     <button disabled={pins.length<2} onClick={show}>Compare events</button>
     <button disabled={pins.length<2} onClick={swap}>Swap A/B</button>
-    <button onClick={clear}>Clear pins</button>
+    <button onClick={clear}>Clear comparison</button>
   </div>;
 }
 function ComparisonView({left,right,onClose,onSwap}:{left:Pinned;right:Pinned;onClose:()=>void;onSwap:()=>void}){

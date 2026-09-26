@@ -53,7 +53,7 @@ try {
       await button('Load hunt').click();
       await page.waitForFunction(()=>document.querySelector('.hw-panel:not([hidden]) [aria-label="Typed indicators"]')?.value==='ip 192.0.2.10');
       assert.equal(await field('Hunt name').inputValue(),'Indicator A');
-      await mode('Sequences').click();
+      await mode('Event sequences').click();
       await field('Step A search').fill('eventName="CreateUser"');
       await field('Step B search').fill('eventName="CreateAccessKey"');
       await field('Sequence grouping').selectOption('principal');
@@ -66,10 +66,11 @@ try {
       const sequenceDraft=await field('Step B search').inputValue();
       const sequenceResult=await panel().locator('.analysis-result-head').innerText();
       await mode('Rules').click();
+      await panel().getByRole('button',{name:'Edit YAML',exact:true}).click();
       await panel().locator('.cm-content:visible').fill('title: Unrelated retained rule');
       await button('▶ Run').click();
       await panel().getByText('✓ Ran · 8 matches',{exact:true}).waitFor();
-      await mode('Sequences').click();
+      await mode('Event sequences').click();
       await page.getByRole('button',{name:'Change Workbench filter',exact:true}).click();
       const before=await stored();
       const a=before.find(item=>item.name==='Indicator A'),b=before.find(item=>item.name==='Indicator B');
@@ -108,11 +109,11 @@ try {
         await field('Hunt name').fill('Unsaved management name');
         await field('Typed indicators').fill('ip 203.0.113.40');
         await field('Hunt scope').selectOption('all');
-        await mode('Sequences').click();await mode('Indicators').click();
+        await mode('Event sequences').click();await mode('Indicators').click();
         check('manual choice is not reset by edits or navigation',await field('Saved hunt').inputValue(),a.id);
         check('manual name is not reset by edits or navigation',await field('Hunt name').inputValue(),'Unsaved management name');
         check('ordinary edited inputs survive',await field('Typed indicators').inputValue(),'ip 203.0.113.40');
-        await mode('Sequences').click();
+        await mode('Event sequences').click();
         await field('Saved hunt').selectOption(b.id);
         await button('Load hunt').click();
         await page.waitForFunction(()=>document.querySelector('.hw-panel:not([hidden]) [aria-label="Typed indicators"]')?.value==='ip 198.51.100.20');
@@ -140,7 +141,7 @@ try {
         check('only B is deleted',after.find(item=>item.id===b.id),undefined);
       }
       check('save actions do not run',await page.evaluate(()=>window.huntFixture.hunts.length),calls);
-      await mode('Sequences').click();
+      await mode('Event sequences').click();
       check('source draft survives cross-mode load',await field('Step B search').inputValue(),sequenceDraft);
       check('source results survive cross-mode load',await panel().locator('.analysis-result-head').innerText(),sequenceResult);
       await mode('Rules').click();

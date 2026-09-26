@@ -46,14 +46,14 @@ try{
  await page.getByRole('button',{name:'Hunt',exact:true}).click();await page.getByLabel('Typed indicators',{exact:true}).fill('ip 198.51.100.44');await page.getByRole('button',{name:'Run hunt',exact:true}).click();
  await page.getByText('2 matched events · 44 events in scope',{exact:true}).waitFor();
  const hunt=page.getByRole('main',{name:'Hunt workspace'});await hunt.getByRole('listitem').filter({hasText:'legacy-alice'}).click();
- await hunt.getByRole('button',{name:'198.51.100.44',exact:true}).click();await page.waitForTimeout(250);
+ await hunt.getByRole('button',{name:'Search all evidence by sourceIPAddress: 198.51.100.44',exact:true}).click();await page.waitForTimeout(250);
  const pivot=page.getByRole('region',{name:'Hunt pivot results',exact:true});
  assert.equal(await pivot.isVisible(),true,'Hunt pivot must visibly open a scoped Workbench result, not mutate hidden browsing');
- await pivot.getByText('2 matching events',{exact:true}).waitFor();assert.match(await pivot.innerText(),/Workbench filters are not applied/);
+ await pivot.getByText('2 matching events',{exact:true}).waitFor();assert.match(await pivot.innerText(),/Event filters are not applied/);
  const applied=await page.evaluate(()=>window.reviewQueries.at(-1));assert.deepEqual(applied.includes,{sourceIPAddress:['198.51.100.44']});assert.equal(applied.expr,null);
  await page.screenshot({path:fileURLToPath(new URL('hunt-pivot.png',out))});
  await pivot.getByRole('button',{name:'Back to Hunt',exact:true}).click();await hunt.getByText('2 matched events · 44 events in scope',{exact:true}).waitFor();
- await page.getByRole('button',{name:'Workbench',exact:true}).click();
+ await page.getByRole('button',{name:'Events',exact:true}).click();
  assert.equal(await page.locator('.qbar-input').inputValue(),'eventName=unapplied');assert.equal(await page.getByText('40 events',{exact:true}).count(),1);
  await page.waitForTimeout(120);assert.deepEqual(await grid.evaluate(e=>({scroll:e.scrollTop,selected:e.querySelector('.row--selected')?.getAttribute('data-event-seq')})),before,'Hunt pivot must preserve exact Workbench selection and nonzero scroll');
  assert.deepEqual(errors,[]);console.log('PASS IR-01: explicit full-evidence pivot, Hunt return and untouched Workbench query/draft/selection/scroll');

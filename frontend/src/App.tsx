@@ -969,7 +969,7 @@ export default function App() {
           onCursor: setCursorSeq, onPivot: reviewPivot, onResizeColumn: resizeColumn, onReorderColumns: moveColumn,
           onRetryDetail: retryDetail, onOpenLineage: setLineageSeq, isSensitive: isSensitiveFn, timeZone,
         }}/>}
-        <EventInspector layout="review" event={selected} snapshot={selectedSnapshot ?? undefined} rawJSON={selectedRaw}
+        <EventInspector layout="review" pivotLabel={reviewScope ? "Return and filter Events" : "Filter current results"} event={selected} snapshot={selectedSnapshot ?? undefined} rawJSON={selectedRaw}
           rawLoading={!!selected && !selectedRaw && !selectedRawErr}
           rawError={selectedRawErr ? "Could not load this event." : undefined}
           lineage={selectedLineage} lineageLoading={!!selected && hasCredentialLineage(selected) && !selectedLineage && !selectedLineageError}
@@ -977,10 +977,10 @@ export default function App() {
           onInvestigate={(event,snapshot) => beginContext(event,snapshot)}
           onPrevious={() => openAt(cursorIndex-1)} onNext={() => openAt(cursorIndex+1)}
           canPrevious={!reviewScope && cursorIndex>0} canNext={!reviewScope && cursorIndex>=0 && cursorIndex<events.length-1}
-          reviewContext={selected && selectedSnapshot ? <section className="review-related" aria-label="Related activity"><h3>Related activity</h3>
+          reviewContext={selected && selectedSnapshot ? <details className="review-related"><summary>Related event shortcuts</summary>
             {REVIEW_RELATIONS.filter(([relation]) => relation !== "all").map(([relation,label]) => <button key={relation} onClick={() => beginContext(selected,selectedSnapshot,relation)}>{label}<span>→</span></button>)}
-            <small>Query ±2 min in the selected snapshot · not just loaded rows</small>
-          </section> : undefined}
+            <small>Query ±2 min in the selected snapshot · browsing filters not applied</small>
+          </details> : undefined}
           onOpenLineage={setLineageSeq} onClose={closeInspector} timeZone={timeZone} />
       </div>
         </div>
