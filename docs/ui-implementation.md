@@ -4,7 +4,13 @@
 
 ## Current checkpoint
 
-**CURRENT CHECKPOINT — implemented and verified:** The approved discoverability flow and desktop polish are complete. Focused actual-App checks, parent visual critique, bounded independent review and the production native build pass. See [implementation verification](ui-reviews/flow-implementation.md) for exact evidence and limits. Earlier persona/lineage work is historical; do not restart those audits. No AWS, backend, dependency, push or release changes.
+**COMPLETE — hierarchy cleanup implemented and verified:** Hunt now defaults to a removable indicator list with explicit bulk editing; scope/Run controls share a consistent toolbar; Rules headers are consolidated; inspector actions are content-sized; repeated help is reduced. Engines, evidence, drafts, saved configurations and truthful scope are preserved. No AWS, backend, dependency, push or release changes.
+
+- [x] HIER-1: Indicator list and explicit bulk alternative; consistent Hunt scope/Run toolbar; compact Rules header. Committed as `4a6d2aa`.
+- [x] HIER-2: Content-sized inspector actions and concise optional help without losing evidence limitations. Committed as `25481d4`.
+- [x] HIER-3: Actual screenshots, focused regression checks, production native build and bounded independent review pass. Review `deleg_148759f5` found no blockers; the production diff matched the reviewed snapshot before committing. Checked handoff accompanies these commits. See [hierarchy cleanup verification](ui-reviews/hierarchy-cleanup.md). No unfinished hierarchy tasks; native-window E2E remains outside this pass.
+
+**Previous checkpoint:** The approved discoverability flow and desktop polish are complete. Focused actual-App checks, parent visual critique, bounded independent review and the production native build pass. See [implementation verification](ui-reviews/flow-implementation.md) for exact evidence and limits. Earlier persona/lineage work is historical; do not restart those audits. No AWS, backend, dependency, push or release changes.
 
 ### Discoverability / flow implementation
 
