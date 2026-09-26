@@ -68,7 +68,9 @@ Recovered original CloudTrail records may contain sensitive fields AWS logged; t
 are preserved exactly, not discarded or silently redacted. Settings and cached source
 evidence live under the OS config directory at `cloudmon/attribution/` with private
 0700 directories and 0600 files. Cache entries bind configuration, selected raw evidence,
-local competing observations and snapshot. Cached results reopen offline; refresh is
+local competing observations and snapshot. The 0700/0600 modes apply on POSIX systems;
+Windows access is governed by the user config directory's inherited ACLs, not Unix
+mode bits. The cross-platform cache tests do not certify those ACLs. Cached results reopen offline; refresh is
 explicit. Retention is capped at 32 result files / 256 MiB. Cache is not encrypted.
 
 ## Verification boundary

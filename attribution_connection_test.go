@@ -10,8 +10,7 @@ import (
 )
 
 func TestDynamicAttributionUsesConnectionAndLocalSSOConfig(t *testing.T) {
-	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
+	dir := isolateAttributionConfig(t)
 	file := filepath.Join(dir, "aws-config")
 	if err := os.WriteFile(file, []byte("[profile connected]\nsso_session = work\nsso_account_id = 111122223333\nsso_role_name = Audit\n[sso-session work]\nsso_region = eu-west-1\nsso_start_url = https://example.awsapps.com/start\n[profile chained]\nrole_arn = arn:aws:iam::111122223333:role/IR\nsource_profile = connected\n"), 0600); err != nil {
 		t.Fatal(err)

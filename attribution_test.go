@@ -7,11 +7,30 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
+func isolateAttributionConfig(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	// UserConfigDir reads different environment variables on each desktop OS.
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("HOME", dir)
+	t.Setenv("AppData", dir)
+	configDir, err := os.UserConfigDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	rel, err := filepath.Rel(dir, configDir)
+	if err != nil || !filepath.IsLocal(rel) {
+		t.Fatalf("config escaped test directory: %q (%v)", configDir, err)
+	}
+	return dir
+}
+
 func TestAttributionOfflineCacheAndDatasetIsolation(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	isolateAttributionConfig(t)
 	a := recoveryApp(t, filepath.Join(t.TempDir(), "events.duckdb"))
 	seed := `{"eventID":"use","eventTime":"2026-09-25T12:00:00Z","eventSource":"s3.amazonaws.com","eventName":"ListBuckets","userIdentity":{"type":"AssumedRole","accessKeyId":"ASIA_CHILD","arn":"arn:aws:sts::111122223333:assumed-role/ReadOnly/alice","sessionContext":{"sessionIssuer":{"arn":"arn:aws:iam::111122223333:role/ReadOnly","userName":"ReadOnly"}}}}`
 	issue := `{"eventID":"issue","eventTime":"2026-09-25T11:59:00Z","eventSource":"sts.amazonaws.com","eventName":"AssumeRole","sourceIPAddress":"198.51.100.24","userAgent":"aws-cli/2.17","userIdentity":{"type":"IAMUser","accessKeyId":"AKIA_ALICE","arn":"arn:aws:iam::111122223333:user/alice","userName":"alice"},"responseElements":{"credentials":{"accessKeyId":"ASIA_CHILD","expiration":"2026-09-25T13:00:00Z"}}}`
@@ -68,8 +87,14 @@ func TestAttributionOfflineCacheAndDatasetIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, entry := range entries {
-		info, _ := entry.Info()
-		if !entry.IsDir() && info.Mode().Perm() != 0600 {
+		info, err := entry.Info()
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Windows FileMode is not an ACL: Chmod only controls the read-only bit.
+		// Keep the POSIX permission assertion on Linux/macOS and run the complete
+		// cache, configuration and dataset-isolation assertions on every OS.
+		if runtime.GOOS != "windows" && !entry.IsDir() && info.Mode().Perm() != 0600 {
 			t.Fatalf("unsafe mode %s", info.Mode())
 		}
 	}

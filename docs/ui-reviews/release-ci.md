@@ -29,4 +29,10 @@ The production implementation and Linux native E2E were already verified. Before
 - [x] Independent test-diff review passed (`deleg_2c0928b0`): no security, logic or assertion-coverage blockers. The reviewed diff is verified unchanged before the accompanying commit.
 - [ ] Exact-head GitHub platform matrix and tagged publication; local checks do not substitute for those results.
 
+## Hosted CI follow-up
+
+PR #24's first platform run (`36269150903`, head `62745d4`) passed Linux and macOS. Windows reached the backend tests, then failed the cache test's `0600` POSIX-mode assertion because Go reports writable Windows files with non-POSIX mode semantics. This was not a compile failure.
+
+The follow-up keeps all cache/configuration/dataset-isolation checks on Windows, limits the Unix-mode assertion to POSIX systems, handles file-stat errors, and isolates the tests through all three platform config-directory variables (`XDG_CONFIG_HOME`, `HOME`, `AppData`). It also asserts that the resolved config directory remains under the test temporary root. Focused attribution tests pass locally; exact-head hosted CI must confirm the Windows result. Windows ACL enforcement is not certified by these tests.
+
 The earlier native evidence is documented separately in [native-e2e.md](native-e2e.md). Browser fixtures remain synthetic and must not be represented as live AWS or native-window behavior.
