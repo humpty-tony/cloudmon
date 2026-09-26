@@ -58,6 +58,11 @@ export function SigmaView(p: SigmaViewProps) {
   const [selectedRawError, setSelectedRawError] = useState(false);
   const [selectedLineageError, setSelectedLineageError] = useState(false);
   const detailReq = useRef(0);
+  const resultBody = useRef<HTMLDivElement>(null);
+  const closeDetail = () => {
+    ++detailReq.current; setSelected(null); setSelectedRaw(""); setSelectedLineage(null);
+    resultBody.current?.querySelector<HTMLElement>(".etbody")?.focus({preventScroll: true});
+  };
   useEffect(()=>()=>{++detailReq.current;++reqId.current;active.current?.abort()},[]);
   const [selectedLineage, setSelectedLineage] = useState<Lineage | null>(null);
   const [userRules, setUserRules] = useState<SigmaRuleEntry[]>(() => loadUserRules());
@@ -73,6 +78,7 @@ export function SigmaView(p: SigmaViewProps) {
     setRule(yaml);
     setOut(null);
     setSelected(null);
+    setCursorSeq(-1);
     setSelectedRaw("");
     setSelectedLineage(null);
   };
@@ -91,6 +97,7 @@ export function SigmaView(p: SigmaViewProps) {
     const id = ++reqId.current;
     setRunning(true);setError("");setOut(null);setGraphSeq(null);
     setSelected(null);
+    setCursorSeq(-1);
     backend
       .sigmaRun(ruleRef.current,abort.signal)
       .then((r) => {if(id===reqId.current)setOut(r)})
@@ -167,7 +174,7 @@ export function SigmaView(p: SigmaViewProps) {
         </div>
         {out?.snapshot&&<div className="sg-snapshot">Snapshot through event {out.snapshot.maxSeq.toLocaleString()} · {out.snapshot.capturedAt}</div>}
         {selected&&out?.explanations[selected.seq]&&<section className="sg-explanations" aria-label="Selection explanations"><strong>Why this event matched</strong><div>{out.explanations[selected.seq].map(reason=><span key={reason.name} className={reason.matched?"matched":"unmatched"}>{reason.matched?"✓":"−"} {reason.name}: {reason.matched?"matched":"did not match"}</span>)}</div><small>Selection results for this event. The rule condition combines these; count thresholds use the full snapshot.</small></section>}
-        <div className="sg-body">
+        <div className="sg-body" ref={resultBody}>
           {status === "idle" && (
             <div className="sg-empty">Press <b>Run</b> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) to test the rule.</div>
           )}
@@ -176,6 +183,7 @@ export function SigmaView(p: SigmaViewProps) {
           {status === "valid" && events.length > 0 && (
             <>
               <EventTable
+                keyboardNavigation
                 detailMode="external"
                 events={events}
                 columns={p.columns}
@@ -208,7 +216,8 @@ export function SigmaView(p: SigmaViewProps) {
             </>
           )}
         </div>
-        {selected&&<EventInspector event={selected} snapshot={out?.snapshot??undefined} rawJSON={selectedRaw} rawError={selectedRawError} lineage={selectedLineage} lineageError={selectedLineageError} onRetry={retryDetail} onPivot={p.onPivot} onOpenLineage={setGraphSeq} onClose={()=>{++detailReq.current;setSelected(null)}} timeZone={p.timeZone}/>}
+        {status === "valid" && events.length > 0 && <div className="workbench-list-footer">↑ ↓ Inspect matches · Home / End · Enter open</div>}
+        {selected&&<EventInspector event={selected} snapshot={out?.snapshot??undefined} rawJSON={selectedRaw} rawError={selectedRawError} lineage={selectedLineage} lineageError={selectedLineageError} onRetry={retryDetail} onPivot={p.onPivot} onOpenLineage={setGraphSeq} onClose={closeDetail} timeZone={p.timeZone}/>}
       </div>
 
       <div className="sg-divider" />

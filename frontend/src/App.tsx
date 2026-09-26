@@ -19,6 +19,7 @@ import {
 import { addTerm, applyPivot, removeTerm, timeTerm, toggleFieldTerm } from "./api/query";
 import { compileQuery } from "./api/queryLang";
 import { buildFilter } from "./api/searchFilter";
+import {HuntPivotResults, type HuntPivotScope} from "./components/HuntPivotResults";
 import { fmtClock, fmtStamp } from "./api/time";
 import { QUERY_FIELDS } from "./api/types";
 import { removalPrompt } from "./components/RecoveryCard";
@@ -137,6 +138,7 @@ export default function App() {
   const [selectedSnapshot, setSelectedSnapshot] = useState<EvidenceSnapshot | null>(null);
   const [sourcesOpen, setSourcesOpen] = useState(false);
   const [reviewScope, setReviewScope] = useState<ReviewContextScope | null>(null);
+  const [huntPivot, setHuntPivot] = useState<HuntPivotScope | null>(null);
   const browseSelection = useRef<{event: CloudTrailEvent | null; snapshot: EvidenceSnapshot | null; cursor: number} | null>(null);
   const [cursorSeq, setCursorSeq] = useState(-1); // anchored to event identity, not row position
   const [follow, setFollow] = useState(true);
@@ -160,6 +162,7 @@ export default function App() {
   const [uiView, setUiView] = useState<"console" | "sigma" | "analysis" | "hunts">("console");
   const [visitedViews, setVisitedViews] = useState<typeof uiView[]>(["console"]);
   const selectView = useCallback((view: typeof uiView) => {
+    setHuntPivot(null);
     setUiView(view);
     setVisitedViews(previous => previous.includes(view) ? previous : [...previous, view]);
   }, []);
@@ -271,7 +274,7 @@ export default function App() {
     streamVersion.current++;
     setConfig(cfg);setDatasetTotal(total);setSavedCapture(capture);setCapturing(active);
     setEvents([]);setTerms([]);setQueryText("");closeInspector();setCursorSeq(-1);setFollow(active);
-    setReviewScope(null);browseSelection.current=null;setSummaryOpen(false);
+    setReviewScope(null);setHuntPivot(null);browseSelection.current=null;setSummaryOpen(false);
     // Retain view state within a dataset, never across a source replacement.
     setDatasetSession(n => n + 1);setUiView("console");setVisitedViews(["console"]);setLineageSeq(null);
     setRefreshTick(n=>n+1);setConnected(true);maximizeWindow();
@@ -536,6 +539,10 @@ export default function App() {
   );
 
   const errorsOnly = terms.some((t) => t.kind === "field" && t.field === "errorCode" && t.op === "exists");
+  const pivotFromHunt = (field: FilterField, value: string, op: QueryOp) => {
+    selectView("console");
+    setHuntPivot({field, value, op});
+  };
   const hideReadOnly = terms.some((t) => t.kind === "field" && t.field === "readOnly" && t.op === "exclude" && t.value === "true");
 
   const toggleErrors = () => setTerms((prev) => toggleFieldTerm(prev, "errorCode", "exists", ""));
@@ -660,7 +667,7 @@ export default function App() {
     if (!connected) return;
     const onKey = (e: KeyboardEvent) => {
       if (settingsOpen || lineageSeq != null || document.querySelector('[aria-modal="true"]')) return; // overlays own their keyboard interactions
-      if (uiView !== "console") return; // vim-style shortcuts are console-only (don't hijack the Sigma editor)
+      if (uiView !== "console" || huntPivot) return; // Temporary results and authoring own their keys.
       const el = e.target as HTMLElement;
       const typing = el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -726,7 +733,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, lineageSeq, uiView, handleRowClick, closeInspector, cursorIndex, reviewScope]);
+  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, lineageSeq, uiView, handleRowClick, closeInspector, cursorIndex, reviewScope, huntPivot]);
 
   const toggleCapture = async () => {
     if(captureBusy)return;
@@ -851,11 +858,15 @@ export default function App() {
           onResizeColumn={resizeColumn}
           onReorderColumns={moveColumn}
           onToggleColumn={toggleColumn}
-          onPivot={pivot}
+          onPivot={pivotFromHunt}
           onOpenLineage={setLineageSeq}
         />
       </div></WorkspaceActivity.Provider>}
-      {connected && <WorkspaceActivity.Provider value={uiView === "console"}><main key={datasetSession} className="workbench-page" hidden={uiView !== "console"}>
+      {connected && huntPivot && uiView === "console" && <HuntPivotResults key={JSON.stringify(huntPivot)} scope={huntPivot} onReturn={selectView} tableProps={{
+        columns, colWidths, rowHeight: Math.max(rowH,42), onResizeColumn: resizeColumn, onReorderColumns: moveColumn,
+        isSensitive: isSensitiveFn, timeZone, onPivot: pivotFromHunt,
+      }}/>}
+      {connected && <WorkspaceActivity.Provider value={uiView === "console" && !huntPivot}><main key={datasetSession} className="workbench-page" hidden={uiView !== "console" || !!huntPivot}>
       <fieldset className="workbench-search" disabled={!!reviewScope}>
         <QueryBar terms={terms} queryText={queryText} error={compiled.error} inputRef={queryInputRef}
           onQueryChange={setQueryText} onRemove={removeQ} onClear={clearQ} />
@@ -902,7 +913,7 @@ export default function App() {
       {savedCapture && <div className="capture-status"><span>{capturing ? "Capture running" : savedCapture.phase === "ready" ? "Capture paused" : "Capture needs cleanup"} · {savedCapture.infra.account} · {savedCapture.infra.region}</span><button className="btn-ghost" onClick={() => setSourcesOpen(true)}>Manage Sources</button></div>}
 
       <div className="workbench-body">
-        <WorkspaceActivity.Provider value={uiView === "console" && !reviewScope}>
+        <WorkspaceActivity.Provider value={uiView === "console" && !reviewScope && !huntPivot}>
         <section className="workbench-results" aria-label="Event results" hidden={!!reviewScope}>
           <div className="workbench-list-heading">
             <strong>{agg.total.toLocaleString()} events</strong>
