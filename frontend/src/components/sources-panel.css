@@ -1,0 +1,12 @@
+.sources-panel{width:min(1060px,94vw);max-height:90vh;padding:0;border:1px solid var(--line-struct);border-radius:6px;background:var(--bg-0);color:var(--tx-1);overflow:hidden;box-shadow:0 16px 60px #0009}
+.sources-panel[open]{display:flex;flex-direction:column}
+.sources-panel::backdrop{background:#0009}
+.sources-head{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:13px 18px;border-bottom:1px solid var(--line-struct);flex:none}
+.sources-head h2{font-size:15px;margin:0 0 4px}.sources-head p{font-size:11px;color:var(--tx-2);margin:0}
+.sources-live{display:flex;justify-content:space-between;align-items:center;padding:8px 18px;border-bottom:1px solid var(--line-struct);font-size:12px;flex:none}
+.sources-error{padding:0 18px;color:var(--sev-err);font-size:12px}
+/* The dialog has an intrinsic height: inherit content size, not .connect's zero flex basis. */
+.sources-panel .connect--embedded{flex:1 1 auto;height:auto;min-height:0;padding:16px 18px;overflow:auto}
+.sources-panel .connect-head[hidden]{display:none}.sources-panel .mode-card{padding:12px}.sources-panel .mode-blurb{font-size:11px}
+.sources-panel .recovery-card{margin-bottom:14px}.sources-panel .connect-detail{flex-shrink:0}.sources-panel .mode-grid{flex-shrink:0}
+.tbar-sources{margin-left:12px}.review-context-status{padding:7px 12px;border-top:1px solid var(--line-struct);font-size:10px;color:var(--tx-2)}

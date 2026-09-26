@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import {mkdir} from 'node:fs/promises';
+import {fileURLToPath} from 'node:url';
+import {createServer} from 'vite';
+import {chromium} from 'playwright';
+import {installHuntBridge} from './fixtures/hunt-workspace-bridge.mjs';
+const root=fileURLToPath(new URL('..',import.meta.url));
+const out=new URL('../test-results/rule-keyboard/',import.meta.url);await mkdir(out,{recursive:true});
+const server=await createServer({root,cacheDir:fileURLToPath(new URL('vite-cache',out)),server:{host:'127.0.0.1',port:5252,strictPort:true},plugins:[{name:'rule-keyboard-fixture',configureServer(server){server.middlewares.use('/rule-keyboard-fixture',async(_req,res)=>{res.setHeader('Content-Type','text/html');res.end(await server.transformIndexHtml('/rule-keyboard-fixture','<!doctype html><html><body><div id="root"></div><script type="module" src="/scripts/fixtures/hunt-workspace.tsx"></script></body></html>'))})}}]});
+await server.listen();const browser=await chromium.launch({headless:true});const page=await browser.newPage({viewport:{width:1280,height:800}});page.setDefaultTimeout(6000);
+await page.addInitScript(installHuntBridge);const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+try{
+ await page.goto('http://127.0.0.1:5252/rule-keyboard-fixture');await page.getByRole('tab',{name:'Rules',exact:true}).click();
+ const panel=page.locator('.hw-panel:visible'),grid=panel.locator('.etbody'),selected=panel.locator('.row--selected');
+ await panel.getByRole('button',{name:'▶ Run',exact:true}).click();await panel.getByText('✓ Ran · 8 matches',{exact:true}).waitFor();
+ assert.match(await panel.innerText(),/↑ ↓ Inspect matches/, 'Rules must show its supported result navigation keys');
+ await grid.focus();await page.keyboard.press('ArrowDown');await page.keyboard.press('Enter');
+ assert.equal(await selected.count(),1,'Rules ArrowDown/Enter must inspect a result');
+ const first=await selected.getAttribute('data-event-seq');await panel.getByRole('complementary',{name:'Event inspector'}).waitFor();
+ await page.keyboard.press('ArrowDown');assert.notEqual(await selected.getAttribute('data-event-seq'),first,'ArrowDown must inspect the next result');
+ await page.keyboard.press('Home');assert.equal(await selected.getAttribute('data-event-seq'),first);
+ await page.keyboard.press('End');const last=await selected.getAttribute('data-event-seq');assert.notEqual(last,first);
+ await page.keyboard.press('ArrowDown');assert.equal(await selected.getAttribute('data-event-seq'),last,'ArrowDown clamps at the last match');
+ await page.keyboard.press('Enter');assert.equal(await selected.count(),1,'Enter must not toggle an already inspected result closed');
+ await panel.getByRole('button',{name:'Close inspector',exact:true}).click();
+ assert.equal(await grid.evaluate(e=>e===document.activeElement),true,'Closing Rules inspector must return focus to its result grid');
+ await page.keyboard.press('Enter');assert.equal(await selected.getAttribute('data-event-seq'),last);
+ await panel.getByRole('tab',{name:'Original JSON',exact:true}).click();await panel.locator('.ei-source').getByText(/9007199254740993/).waitFor();
+ assert.ok((await page.evaluate(()=>window.huntFixture.raw)).every(c=>c.snapshot.generation==='hunt-fixture'),'Keyboard inspection keeps the successful rule snapshot');
+ await page.screenshot({path:fileURLToPath(new URL('rules-keyboard-1280.png',out))});
+ assert.deepEqual(errors,[]);console.log('PASS IR-02: Rules arrow/Home/End/Enter navigation, boundary clamping, close-focus return and snapshot-bound original');
+}finally{await browser.close();await server.close()}

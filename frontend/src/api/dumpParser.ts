@@ -3,6 +3,7 @@
 // the preview can load a real export; the desktop app parses in Go instead.
 
 import type { CloudTrailEvent } from "./types";
+import { targetSummary } from "./targetSummary";
 
 type RawRecord = Record<string, unknown>;
 
@@ -18,6 +19,7 @@ function recordToEvent(raw: RawRecord): CloudTrailEvent {
   return {
     seq: 0,
     eventID: str(raw.eventID),
+    target: targetSummary(raw),
     eventTime: str(raw.eventTime),
     eventName: str(raw.eventName),
     eventSource: str(raw.eventSource),

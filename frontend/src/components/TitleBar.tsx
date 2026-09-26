@@ -4,18 +4,20 @@ import logo from "../assets/logo.png";
 
 interface Props {
   connected: boolean;
+  sourceLabel?: string;
   canExport: boolean;
   canExportMatches: boolean;
   view: "console" | "sigma" | "analysis" | "hunts";
   onView: (v: "console" | "sigma" | "analysis" | "hunts") => void;
   onOpenDataset: () => void;
+  onSources: () => void;
   onExport: () => void;
   onExportMatches: () => void;
   onHelp: (tab: string) => void;
   onSettings: () => void;
 }
 
-export function TitleBar({ connected, canExport, canExportMatches, view, onView, onOpenDataset, onExport, onExportMatches, onHelp, onSettings }: Props) {
+export function TitleBar({ connected, sourceLabel, canExport, canExportMatches, view, onView, onOpenDataset, onSources, onExport, onExportMatches, onHelp, onSettings }: Props) {
   const [menu, setMenu] = useState<null | "file" | "help">(null);
   const close = () => setMenu(null);
   const run = (fn: () => void) => () => {
@@ -95,13 +97,15 @@ export function TitleBar({ connected, canExport, canExportMatches, view, onView,
 
       {connected && (
         <div className="tbar-views">
-          <button className={`tbar-view ${view === "console" ? "on" : ""}`} onClick={() => onView("console")}>Workbench</button>
-          <button className={`tbar-view ${view === "sigma" ? "on" : ""}`} onClick={() => onView("sigma")}>⬡ Sigma</button>
-          <button className={`tbar-view ${view === "analysis" ? "on" : ""}`} onClick={() => onView("analysis")}>Analysis</button>
-          <button className={`tbar-view ${view === "hunts" ? "on" : ""}`} onClick={() => onView("hunts")}>Hunts</button>
+          <button className={`tbar-view ${view === "console" || view === "analysis" ? "on" : ""}`} onClick={() => onView("console")}>Events</button>
+          <button className={`tbar-view ${view === "hunts" || view === "sigma" ? "on" : ""}`} onClick={() => onView("hunts")}>Hunt</button>
         </div>
       )}
 
+      <div className="tbar-data" role="group" aria-label="Active evidence">
+        <button className="tbar-menubtn tbar-sources" aria-haspopup="dialog" onClick={onSources}>Data sources…</button>
+        {sourceLabel && <span className="tbar-source" title={sourceLabel}>{sourceLabel}</span>}
+      </div>
       <div className="tbar-drag" />
 
       <div className="tbar-winctl">

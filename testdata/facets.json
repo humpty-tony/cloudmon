@@ -1,0 +1,888 @@
+{
+  "records": [
+    {
+      "eventID": "facet-00",
+      "eventTime": "2026-09-24T09:00:00Z",
+      "eventName": "Operation00",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-00",
+        "userName": "session*?\"quoted\"\\suffix",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.1",
+      "eventSource": "s3.amazonaws.com",
+      "errorCode": "AccessDenied"
+    },
+    {
+      "eventID": "facet-01",
+      "eventTime": "2026-09-24T09:01:00Z",
+      "eventName": "Operation01",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-01",
+        "userName": "arn:aws:iam::111122223333:role/team/security/very-long-recorded-identity-for-investigation",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.2",
+      "eventSource": "s3.amazonaws.com",
+      "errorCode": "AccessDenied"
+    },
+    {
+      "eventID": "facet-02",
+      "eventTime": "2026-09-24T09:02:00Z",
+      "eventName": "Operation02",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-02",
+        "userName": "-",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.3",
+      "eventSource": "s3.amazonaws.com",
+      "errorCode": "AccessDenied"
+    },
+    {
+      "eventID": "facet-03",
+      "eventTime": "2026-09-24T09:03:00Z",
+      "eventName": "Operation03",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-03",
+        "userName": "operator-03",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.4",
+      "eventSource": "s3.amazonaws.com",
+      "errorCode": "AccessDenied"
+    },
+    {
+      "eventID": "facet-04",
+      "eventTime": "2026-09-24T09:04:00Z",
+      "eventName": "Operation04",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-04",
+        "userName": "operator-04",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.5",
+      "eventSource": "s3.amazonaws.com",
+      "errorCode": "AccessDenied"
+    },
+    {
+      "eventID": "facet-05",
+      "eventTime": "2026-09-24T09:05:00Z",
+      "eventName": "Operation05",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-05",
+        "userName": "operator-05",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.6",
+      "eventSource": "s3.amazonaws.com",
+      "errorCode": "AccessDenied"
+    },
+    {
+      "eventID": "facet-06",
+      "eventTime": "2026-09-24T09:06:00Z",
+      "eventName": "Operation06",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-06",
+        "userName": "operator-06",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.7",
+      "eventSource": "s3.amazonaws.com",
+      "errorCode": "AccessDenied"
+    },
+    {
+      "eventID": "facet-07",
+      "eventTime": "2026-09-24T09:07:00Z",
+      "eventName": "Operation07",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-07",
+        "userName": "operator-07",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.8",
+      "eventSource": "s3.amazonaws.com",
+      "errorCode": "Throttling"
+    },
+    {
+      "eventID": "facet-08",
+      "eventTime": "2026-09-24T09:08:00Z",
+      "eventName": "Operation08",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-08",
+        "userName": "operator-08",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.9",
+      "eventSource": "s3.amazonaws.com",
+      "errorCode": ""
+    },
+    {
+      "eventID": "facet-09",
+      "eventTime": "2026-09-24T09:09:00Z",
+      "eventName": "Operation09",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-09",
+        "userName": "operator-09",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.10",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-10",
+      "eventTime": "2026-09-24T09:10:00Z",
+      "eventName": "Operation10",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-10",
+        "userName": "operator-10",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.11",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-11",
+      "eventTime": "2026-09-24T09:11:00Z",
+      "eventName": "Operation11",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-11",
+        "userName": "operator-11",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.12",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-12",
+      "eventTime": "2026-09-24T09:12:00Z",
+      "eventName": "Operation12",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-12",
+        "userName": "operator-12",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.13",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-13",
+      "eventTime": "2026-09-24T09:13:00Z",
+      "eventName": "Operation13",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-13",
+        "userName": "operator-13",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.14",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-14",
+      "eventTime": "2026-09-24T09:14:00Z",
+      "eventName": "Operation14",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-14",
+        "userName": "operator-14",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.15",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-15",
+      "eventTime": "2026-09-24T09:15:00Z",
+      "eventName": "Operation15",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-15",
+        "userName": "operator-15",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.16",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-16",
+      "eventTime": "2026-09-24T09:16:00Z",
+      "eventName": "Operation16",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-16",
+        "userName": "operator-16",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.17",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-17",
+      "eventTime": "2026-09-24T09:17:00Z",
+      "eventName": "Operation17",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-17",
+        "userName": "operator-17",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.18",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-18",
+      "eventTime": "2026-09-24T09:18:00Z",
+      "eventName": "Operation18",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-18",
+        "userName": "operator-18",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.19",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-19",
+      "eventTime": "2026-09-24T09:19:00Z",
+      "eventName": "Operation19",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-19",
+        "userName": "operator-19",
+        "accountId": "111122223333",
+        "sessionContext": {
+          "sessionIssuer": {
+            "arn": "arn:aws:iam::111122223333:role/team/security/a-very-long-role-for-facet-tests"
+          }
+        }
+      },
+      "awsRegion": "us-east-1",
+      "sourceIPAddress": "192.0.2.20",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-20",
+      "eventTime": "2026-09-24T09:20:00Z",
+      "eventName": "Operation20",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-20",
+        "userName": "operator-20",
+        "accountId": "111122223333"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.21",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-21",
+      "eventTime": "2026-09-24T09:21:00Z",
+      "eventName": "Operation21",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-21",
+        "userName": "operator-21",
+        "accountId": "111122223333"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.22",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-22",
+      "eventTime": "2026-09-24T09:22:00Z",
+      "eventName": "Operation22",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-22",
+        "userName": "operator-22",
+        "accountId": "111122223333"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.23",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-23",
+      "eventTime": "2026-09-24T09:23:00Z",
+      "eventName": "Operation23",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-23",
+        "userName": "operator-23",
+        "accountId": "111122223333"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.24",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-24",
+      "eventTime": "2026-09-24T09:24:00Z",
+      "eventName": "Operation24",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-24",
+        "userName": "operator-24",
+        "accountId": "111122223333"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.25",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-25",
+      "eventTime": "2026-09-24T09:25:00Z",
+      "eventName": "Operation25",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-25",
+        "userName": "operator-25"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.26",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-26",
+      "eventTime": "2026-09-24T09:26:00Z",
+      "eventName": "Operation26",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-26",
+        "userName": "operator-26"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.27",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-27",
+      "eventTime": "2026-09-24T09:27:00Z",
+      "eventName": "Operation27",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-27",
+        "userName": "operator-27"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.28",
+      "eventSource": "s3.amazonaws.com"
+    },
+    {
+      "eventID": "facet-28",
+      "eventTime": "2026-09-24T09:28:00Z",
+      "eventName": "Operation28",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-28",
+        "userName": "operator-28"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.29",
+      "eventSource": "ec2.amazonaws.com"
+    },
+    {
+      "eventID": "facet-29",
+      "eventTime": "2026-09-24T09:29:00Z",
+      "eventName": "Operation29",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-29",
+        "userName": "operator-29"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.30",
+      "eventSource": "ec2.amazonaws.com"
+    },
+    {
+      "eventID": "facet-30",
+      "eventTime": "2026-09-24T09:30:00Z",
+      "eventName": "Operation30",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-30"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.31",
+      "eventSource": "ec2.amazonaws.com"
+    },
+    {
+      "eventID": "facet-31",
+      "eventTime": "2026-09-24T09:31:00Z",
+      "eventName": "Operation31",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-31"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.32",
+      "eventSource": "ec2.amazonaws.com"
+    },
+    {
+      "eventID": "facet-32",
+      "eventTime": "2026-09-24T09:32:00Z",
+      "eventName": "Operation32",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-32"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.33",
+      "eventSource": "ec2.amazonaws.com"
+    },
+    {
+      "eventID": "facet-33",
+      "eventTime": "2026-09-24T09:33:00Z",
+      "eventName": "Operation33",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-33"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.34",
+      "eventSource": "ec2.amazonaws.com"
+    },
+    {
+      "eventID": "facet-34",
+      "eventTime": "2026-09-24T09:34:00Z",
+      "eventName": "Operation34",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-34"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.35",
+      "eventSource": "ec2.amazonaws.com"
+    },
+    {
+      "eventID": "facet-35",
+      "eventTime": "2026-09-24T09:35:00Z",
+      "eventName": "Operation00",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-35"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.36",
+      "eventSource": "ec2.amazonaws.com"
+    },
+    {
+      "eventID": "facet-36",
+      "eventTime": "2026-09-24T09:36:00Z",
+      "eventName": "Operation01",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-36"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.37",
+      "eventSource": "ec2.amazonaws.com"
+    },
+    {
+      "eventID": "facet-37",
+      "eventTime": "2026-09-24T09:37:00Z",
+      "eventName": "Operation02",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-37"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.38",
+      "eventSource": "ec2.amazonaws.com"
+    },
+    {
+      "eventID": "facet-38",
+      "eventTime": "2026-09-24T09:38:00Z",
+      "eventName": "Operation03",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-38"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.39",
+      "eventSource": ""
+    },
+    {
+      "eventID": "facet-39",
+      "eventTime": "2026-09-24T09:39:00Z",
+      "eventName": "Operation04",
+      "userIdentity": {
+        "type": "AssumedRole",
+        "arn": "arn:aws:sts::111122223333:assumed-role/review/fallback-39"
+      },
+      "awsRegion": "us-west-2",
+      "sourceIPAddress": "192.0.2.40"
+    }
+  ],
+  "cases": [
+    {
+      "name": "complete",
+      "filter": {},
+      "ids": [
+        "facet-00",
+        "facet-01",
+        "facet-02",
+        "facet-03",
+        "facet-04",
+        "facet-05",
+        "facet-06",
+        "facet-07",
+        "facet-08",
+        "facet-09",
+        "facet-10",
+        "facet-11",
+        "facet-12",
+        "facet-13",
+        "facet-14",
+        "facet-15",
+        "facet-16",
+        "facet-17",
+        "facet-18",
+        "facet-19",
+        "facet-20",
+        "facet-21",
+        "facet-22",
+        "facet-23",
+        "facet-24",
+        "facet-25",
+        "facet-26",
+        "facet-27",
+        "facet-28",
+        "facet-29",
+        "facet-30",
+        "facet-31",
+        "facet-32",
+        "facet-33",
+        "facet-34",
+        "facet-35",
+        "facet-36",
+        "facet-37",
+        "facet-38",
+        "facet-39"
+      ]
+    },
+    {
+      "name": "literal wildcard quotes and slash",
+      "filter": {
+        "includes": {
+          "userName": [
+            "session*?\"quoted\"\\suffix"
+          ]
+        }
+      },
+      "ids": [
+        "facet-00"
+      ]
+    },
+    {
+      "name": "same-field OR different-field AND",
+      "filter": {
+        "includes": {
+          "awsRegion": [
+            "us-east-1",
+            "us-west-2"
+          ],
+          "accountId": [
+            "111122223333"
+          ]
+        },
+        "excludes": {
+          "errorCode": [
+            "AccessDenied"
+          ]
+        }
+      },
+      "ids": [
+        "facet-07",
+        "facet-08",
+        "facet-09",
+        "facet-10",
+        "facet-11",
+        "facet-12",
+        "facet-13",
+        "facet-14",
+        "facet-15",
+        "facet-16",
+        "facet-17",
+        "facet-18",
+        "facet-19",
+        "facet-20",
+        "facet-21",
+        "facet-22",
+        "facet-23",
+        "facet-24"
+      ]
+    },
+    {
+      "name": "applied own filter not self-excluding",
+      "filter": {
+        "includes": {
+          "eventSource": [
+            "ec2.amazonaws.com"
+          ]
+        }
+      },
+      "ids": [
+        "facet-28",
+        "facet-29",
+        "facet-30",
+        "facet-31",
+        "facet-32",
+        "facet-33",
+        "facet-34",
+        "facet-35",
+        "facet-36",
+        "facet-37"
+      ]
+    },
+    {
+      "name": "missing username no derived fallback",
+      "filter": {
+        "includes": {
+          "userName": [
+            ""
+          ]
+        }
+      },
+      "ids": [
+        "facet-30",
+        "facet-31",
+        "facet-32",
+        "facet-33",
+        "facet-34",
+        "facet-35",
+        "facet-36",
+        "facet-37",
+        "facet-38",
+        "facet-39"
+      ]
+    },
+    {
+      "name": "exclude keeps missing",
+      "filter": {
+        "excludes": {
+          "errorCode": [
+            "AccessDenied",
+            "Throttling"
+          ]
+        }
+      },
+      "ids": [
+        "facet-08",
+        "facet-09",
+        "facet-10",
+        "facet-11",
+        "facet-12",
+        "facet-13",
+        "facet-14",
+        "facet-15",
+        "facet-16",
+        "facet-17",
+        "facet-18",
+        "facet-19",
+        "facet-20",
+        "facet-21",
+        "facet-22",
+        "facet-23",
+        "facet-24",
+        "facet-25",
+        "facet-26",
+        "facet-27",
+        "facet-28",
+        "facet-29",
+        "facet-30",
+        "facet-31",
+        "facet-32",
+        "facet-33",
+        "facet-34",
+        "facet-35",
+        "facet-36",
+        "facet-37",
+        "facet-38",
+        "facet-39"
+      ]
+    },
+    {
+      "name": "missing source including empty",
+      "filter": {
+        "includes": {
+          "eventSource": [
+            ""
+          ]
+        }
+      },
+      "ids": [
+        "facet-38",
+        "facet-39"
+      ]
+    },
+    {
+      "name": "time bounds inclusive",
+      "filter": {
+        "fromMs": 1790240820000,
+        "toMs": 1790241120000
+      },
+      "ids": [
+        "facet-07",
+        "facet-08",
+        "facet-09",
+        "facet-10",
+        "facet-11",
+        "facet-12"
+      ]
+    },
+    {
+      "name": "empty filtered scope",
+      "filter": {
+        "includes": {
+          "eventName": [
+            "NoSuchOperation"
+          ]
+        }
+      },
+      "ids": []
+    }
+  ],
+  "aliases": [
+    {
+      "kind": "arn",
+      "value": "arn:aws:iam::111122223333:role/team/security/very-long-recorded-identity-for-investigation",
+      "label": "Friendly investigation role"
+    },
+    {
+      "kind": "account",
+      "value": "111122223333",
+      "label": "Production"
+    }
+  ]
+}

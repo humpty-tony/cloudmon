@@ -1,0 +1,188 @@
+import assert from "node:assert/strict";
+import fs from "node:fs/promises";
+import {chromium} from "playwright";
+import {createServer} from "vite";
+import {fileURLToPath} from "node:url";
+const url = process.env.FACETS_URL || "http://127.0.0.1:5192";
+const fixture = JSON.parse(await fs.readFile(new URL("../../testdata/facets.json",import.meta.url),"utf8"));
+const identityFixture = JSON.parse(await fs.readFile(new URL("../../testdata/facets-identity.json",import.meta.url),"utf8"));
+const server=process.env.FACETS_URL ? null : await createServer({root:fileURLToPath(new URL("..",import.meta.url)),cacheDir:"node_modules/.vite-vector-facets/browser",server:{host:"127.0.0.1",port:5192,strictPort:true}});
+await server?.listen();
+const browser = await chromium.launch({headless:true});
+const page = await browser.newPage({viewport:{width:1280,height:800}});
+const errors=[];
+page.on("pageerror",error=>errors.push(String(error)));
+try {
+ await page.goto(url);
+ const preview = await page.evaluate(async records=>{
+  if(window.go) throw new Error('Facet preview test must not run against a native capture bridge');
+  const {backend}=await import('/src/api/backend.ts');
+  const filter={includes:{},excludes:{},text:'',errorsOnly:false,hideReadOnly:false,fromMs:0,toMs:0,expr:null};
+  await backend.ingestText(JSON.stringify(records));
+  const first=await backend.querySearch(filter,2);
+  await backend.ingestText(JSON.stringify([{eventID:'replacement',eventName:'Replacement'}]));
+  const next=await backend.querySearch(filter,2);
+  return {first,next};
+ },fixture.records);
+ assert.equal(preview.first.events.length,2);
+ assert.equal(preview.first.aggregates.total,40);
+ assert.equal(preview.first.aggregates.facets.find(g=>g.field==='userName').metadata.presentEvents,30);
+ assert.equal(preview.next.aggregates.total,1);
+ assert.equal(preview.next.aggregates.facets.find(g=>g.field==='userName').metadata.missingEvents,1);
+ assert.notEqual(preview.first.aggregates.snapshot.generation,preview.next.aggregates.snapshot.generation);
+ // Render the real component and real filter/computation modules in isolation;
+ // App/layout changes belong to the integrating parent, not this facet slice.
+ await page.evaluate(async ({records,aliases})=>{
+  const {default:React} = await import('/node_modules/.vite-vector-facets/browser/deps/react.js');
+  const {default:{createRoot}} = await import('/node_modules/.vite-vector-facets/browser/deps/react-dom_client.js');
+  const {FacetSidebar} = await import('/src/components/FacetSidebar.tsx');
+  const {parseDump} = await import('/src/api/dumpParser.ts');
+  const {ALIAS_KEY} = await import('/src/api/aliases.ts');
+  localStorage.setItem(ALIAS_KEY,JSON.stringify({version:1,items:aliases}));
+  const {computeFacets} = await import('/src/api/facets.ts');
+  const {buildFilter,applyFilter} = await import('/src/api/searchFilter.ts');
+  const {applyPivot} = await import('/src/api/query.ts');
+  const initialData=parseDump(JSON.stringify(records));
+  document.getElementById('root').style.display='none';
+  const node=document.createElement('div');document.body.append(node);
+  function Harness(){
+   const [data,setData]=React.useState(initialData);
+   const [terms,setTerms]=React.useState([]),[collapsed,setCollapsed]=React.useState(false),[legacy,setLegacy]=React.useState(false);
+   const filter=buildFilter(terms,false,null,new Set());
+   const events=applyFilter(data,filter),facets=computeFacets(events).map(g=>legacy?{...g,metadata:undefined,total:999}:g);
+   window.facetHarness={terms,events:events.map(e=>e.eventID),setLegacy,setData};
+   return React.createElement('div',{style:{height:'calc(100vh - 134px)',marginTop:109,display:'flex',background:'var(--bg-0)',color:'var(--tx-1)'}},
+    React.createElement(FacetSidebar,{facets,collapsed,activeValues:new Set(terms.filter(t=>t.op==='include').map(t=>`${t.field} ${t.value}`)),activeExcludes:new Set(terms.filter(t=>t.op==='exclude').map(t=>`${t.field} ${t.value}`)),onToggleCollapse:()=>setCollapsed(v=>!v),onPick:(field,value,op)=>setTerms(prev=>applyPivot(prev,field,op,value))}),
+    React.createElement('main',{style:{padding:24}},React.createElement('h2',null,'Facet regression fixture'),React.createElement('p',null,`${events.length} matching events · same applied-query scope`)));
+  }
+  createRoot(node).render(React.createElement(Harness));
+ },{records:fixture.records,aliases:fixture.aliases});
+ const groups=page.locator('.facet-group:not([hidden])');
+ await page.locator('.facets').waitFor();
+ assert.deepEqual(await groups.locator('.facet-group-label').allTextContents(),['Service','User / issuer name','Source IP','Result']);
+ assert.match(await page.locator('.facet-scope').innerText(),/Counts: matching events/);
+ assert.match(await page.locator('.facet-scope').getAttribute('title'),/applied query, time filters and snapshot, not loaded rows/);
+ await groups.nth(0).locator('.facet-details-toggle').click();
+ await groups.nth(1).locator('.facet-details-toggle').click();
+ assert.match(await groups.nth(0).innerText(),/38\s*\/\s*40/);
+ assert.match(await groups.nth(1).innerText(),/userName/);
+ assert.match(await groups.nth(1).innerText(),/Normalized/);
+ assert.match(await groups.nth(1).locator('.facet-presence').innerText(),/30 \/ 40 events with a normalized user \/ issuer name/);
+ assert.equal(await groups.nth(1).locator('.facet-missing .facet-row').getAttribute('title'),'No nonempty userIdentity.userName or sessionIssuer.userName');
+ assert.match(await groups.nth(1).innerText(),/25 returned \/ 30 distinct/);
+ assert.equal(await groups.nth(1).locator(".facet-missing .facet-count").innerText(),"10");
+ await groups.nth(0).locator('.facet-details-toggle').click();
+ await groups.nth(1).locator('.facet-details-toggle').click();
+ await fs.mkdir(new URL('../test-results/facets/',import.meta.url),{recursive:true});
+ for(const [width,height] of [[1280,800],[1440,960]]){
+  await page.setViewportSize({width,height});
+  const geometry = await page.locator('.facets-scroll').evaluate(element=>({height:element.clientHeight,content:element.scrollHeight}));
+  if(geometry.content>geometry.height) console.log(JSON.stringify(await groups.evaluateAll(groups=>groups.map(group=>({field:group.dataset.field,height:group.getBoundingClientRect().height,children:[...group.querySelectorAll('.facet-group-head,.facet-note,.facet-search,.facet-row,.facet-more')].map(e=>({tag:e.className,height:e.getBoundingClientRect().height,margin:getComputedStyle(e).margin,lineHeight:getComputedStyle(e).lineHeight}))})))));
+  assert.ok(geometry.content <= geometry.height,`Default groups require scrolling at ${width}: ${JSON.stringify(geometry)}`);
+  await page.screenshot({path:new URL(`../test-results/facets/default-${width}.png`,import.meta.url).pathname});
+ }
+ const add = page.getByLabel('Add facet');
+ assert.deepEqual(await add.locator('option').evaluateAll(options=>options.filter(o=>o.value).map(o=>o.value)),['accountId','awsRegion','eventName','errorCode','roleArn','identityType']);
+ await add.selectOption('errorCode');
+ const errorGroup=page.locator('.facet-group[data-field="errorCode"]');
+ await errorGroup.locator('.facet-details-toggle').click();
+ assert.match(await errorGroup.innerText(),/8\s*\/\s*40/);
+ await errorGroup.getByRole('button',{name:'Include missing / empty',exact:true}).click();
+ assert.equal(await page.evaluate(()=>window.facetHarness.events.length),32);
+ assert.deepEqual(await page.evaluate(()=>window.facetHarness.terms.map(({field,value,op})=>({field,value,op}))),[{field:'errorCode',value:'',op:'include'}]);
+ await page.getByRole('button',{name:'Clear facet selections',exact:true}).click();
+ assert.equal(await page.evaluate(()=>window.facetHarness.events.length),40);
+ await errorGroup.getByRole('button',{name:'Exclude AccessDenied',exact:true}).click();
+ assert.equal(await page.evaluate(()=>window.facetHarness.events.length),33);
+ assert.equal(await errorGroup.getByRole('button',{name:'Exclude AccessDenied',exact:true}).getAttribute('aria-pressed'),'true');
+ assert.ok(await errorGroup.getByLabel('Count unavailable',{exact:true}).count()>0);
+ await errorGroup.getByRole('button',{name:'Clear Error code',exact:true}).click();
+ assert.equal(await page.evaluate(()=>window.facetHarness.events.length),40);
+ await errorGroup.getByRole('button',{name:'Remove Error code facet',exact:true}).click();
+ assert.equal(await errorGroup.isVisible(),false);
+ const identityGroup = page.locator('.facet-group[data-field="userName"]');
+ await identityGroup.locator('.facet-details-toggle').click();
+ const search = identityGroup.getByLabel('Find returned User / issuer name values');
+ assert.match(await identityGroup.innerText(),/userIdentity\.userName, falling back to sessionIssuer\.userName/);
+ assert.match(await identityGroup.innerText(),/Same names group together/);
+ assert.match(await identityGroup.innerText(),/not a verified human/);
+ assert.match(await identityGroup.innerText(),/not raw field presence/);
+ // Value search is local list state, not an event filter. It must remain
+ // visible and clearable when the rail remounts its uncontrolled details.
+ for(const [width,height] of [[1280,800],[1440,960]]){
+  await page.setViewportSize({width,height});
+  await search.fill('operator-03');
+  assert.deepEqual(await identityGroup.locator('.facet-row:not(.facet-missing .facet-row) .facet-include').allTextContents(),['operator-03']);
+  await page.getByRole('button',{name:'Collapse facets',exact:true}).click();
+  await page.getByRole('button',{name:'Expand facets',exact:true}).click();
+  assert.equal(await search.inputValue(),'operator-03','rail collapse must retain the value search');
+  const activeSearch=identityGroup.locator('.facet-value-search');
+  assert.equal(await activeSearch.isVisible(),true,'active value search must be visible after rail collapse/reopen even with Find closed');
+  assert.match(await activeSearch.innerText(),/Value search: operator-03/);
+  assert.match(await page.locator('.facet-search-scope').innerText(),/Returned values only/);
+  const clearSearch=identityGroup.getByRole('button',{name:'Clear User / issuer name value search',exact:true});
+  assert.equal(await clearSearch.isVisible(),true);
+  assert.match(await identityGroup.locator('.facet-search').innerText(),/25 returned \/ 30 distinct/);
+  assert.equal(await page.evaluate(()=>window.facetHarness.events.length),40);
+  assert.deepEqual(await page.evaluate(()=>window.facetHarness.terms),[]);
+  await page.screenshot({path:new URL(`../test-results/facets/active-search-${width}.png`,import.meta.url).pathname});
+  // Closing the group must not hide the narrowing state or its clear action.
+  await identityGroup.locator('.facet-group-head').click();
+  assert.equal(await clearSearch.isVisible(),true);
+  assert.match(await activeSearch.innerText(),/operator-03/);
+  await clearSearch.focus();
+  await page.keyboard.press('Enter');
+  assert.equal(await activeSearch.count(),0);
+  await identityGroup.locator('.facet-group-head').click();
+  assert.equal(await search.inputValue(),'');
+  assert.equal(await identityGroup.locator('.facet-row:not(.facet-missing .facet-row) .facet-include').count(),3);
+  assert.equal(await page.evaluate(()=>window.facetHarness.events.length),40);
+  assert.deepEqual(await page.evaluate(()=>window.facetHarness.terms),[]);
+ }
+ await search.fill('session*?"quoted"\\suffix');
+ assert.match(await identityGroup.innerText(),/Search only the returned values/);
+ assert.match(await identityGroup.innerText(),/No returned value matches/);
+ await identityGroup.getByRole('button',{name:'Include exact value',exact:true}).click();
+ assert.deepEqual(await page.evaluate(()=>window.facetHarness.events),['facet-00']);
+ assert.deepEqual(await page.evaluate(()=>window.facetHarness.terms.map(({field,value,op})=>({field,value,op}))),[{field:'userName',value:'session*?"quoted"\\suffix',op:'include'}]);
+ await page.getByRole('button',{name:'Clear facet selections',exact:true}).click();
+ await search.fill('');
+ await identityGroup.getByLabel('Wrap full User / issuer name values').check();
+ const longValue=identityGroup.getByRole('button',{name:fixture.records[1].userIdentity.userName,exact:true});
+ assert.equal(await longValue.evaluate(e=>getComputedStyle(e).whiteSpace),'normal');
+ assert.equal(await longValue.textContent(),fixture.records[1].userIdentity.userName);
+ assert.doesNotMatch(await identityGroup.innerText(),/Friendly investigation role/,"Aliases must not replace facet identifiers");
+ await longValue.click();
+ await page.waitForFunction(()=>{const row=document.querySelector('.facet-row.active');return row && getComputedStyle(row).backgroundColor !== 'rgba(0, 0, 0, 0)'});
+ assert.notEqual(await longValue.locator('..').evaluate(e=>getComputedStyle(e).backgroundColor),'rgba(0, 0, 0, 0)','Active facet needs a visible selection background');
+ assert.deepEqual(await page.evaluate(()=>window.facetHarness.events),['facet-01']);
+ await page.getByRole('button',{name:'Clear facet selections',exact:true}).click();
+ await identityGroup.getByLabel('Wrap full User / issuer name values').uncheck();
+ await identityGroup.locator('.facet-details-toggle').click();
+ await page.getByRole('button',{name:'Collapse facets',exact:true}).click();
+ assert.equal(await page.getByLabel('Facets collapsed').count(),1);
+ await page.getByRole('button',{name:'Expand facets',exact:true}).click();
+ await page.evaluate(()=>window.facetHarness.setLegacy(true));
+ await identityGroup.locator('.facet-details-toggle').click();
+ await identityGroup.getByText('Presence unavailable.',{exact:false}).waitFor();
+ assert.match(await identityGroup.innerText(),/Missing count, distinct count and completeness unavailable/);
+ assert.doesNotMatch(await identityGroup.innerText(),/999|30 \/ 40 present/);
+ await page.evaluate(async records=>{
+  const {parseDump}=await import('/src/api/dumpParser.ts');
+  window.facetHarness.setLegacy(false);
+  window.facetHarness.setData(parseDump(JSON.stringify(records)));
+ },identityFixture.records);
+ await identityGroup.getByRole('button',{name:'AdminRole',exact:true}).waitFor();
+ assert.match(await identityGroup.locator('.facet-presence').innerText(),/4 \/ 5/);
+ assert.match(await identityGroup.locator('.facet-presence').innerText(),/events with a normalized user \/ issuer name/);
+ assert.equal(await identityGroup.locator('.facet-missing .facet-count').innerText(),'1');
+ const sameName=identityGroup.getByRole('button',{name:'AdminRole',exact:true});
+ assert.equal(await sameName.locator('..').locator('.facet-count').innerText(),'3');
+ await sameName.click();
+ assert.deepEqual((await page.evaluate(()=>window.facetHarness.events)).sort(),identityFixture.cases[1].ids);
+ await page.getByRole('button',{name:'Clear facet selections',exact:true}).click();
+ await identityGroup.getByRole('button',{name:'Include missing / empty',exact:true}).click();
+ assert.deepEqual(await page.evaluate(()=>window.facetHarness.events),['missing-both']);
+ assert.deepEqual(errors,[]);
+ console.log('Facet UI checks passed: defaults, normalized user/issuer grouping and presence, scope/counts, add/remove, literal includes/excludes and missing, clear, active omitted values, limited search, visible/keyboard-clearable value search after rail/group collapse, full identifiers, alias safety, legacy unavailable counts, selection styles and both target sizes.');
+} finally {await browser.close();await server?.close()}

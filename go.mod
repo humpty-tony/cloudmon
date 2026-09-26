@@ -7,6 +7,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.31
 	github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.58.0
 	github.com/aws/aws-sdk-go-v2/service/eventbridge v1.48.0
+	github.com/aws/aws-sdk-go-v2/service/identitystore v1.39.0
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.46.0
 	github.com/aws/aws-sdk-go-v2/service/sts v1.45.0
 	github.com/bradleyjkemp/sigma-go v0.6.6

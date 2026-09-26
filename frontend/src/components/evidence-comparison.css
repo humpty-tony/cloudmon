@@ -1,0 +1,13 @@
+.comparison-progress { display: flex; flex-direction: column; gap: 2px; flex: none; }
+.comparison-progress strong { color: var(--tx-1); font-weight: 600; }
+.comparison-progress span { color: var(--tx-2); }
+.comparison-bar { flex-wrap: wrap; }
+.comparison-dialog .comparison-change pre { max-height: 38px; }
+.comparison-change .comparison-value-action { min-height: 24px; margin-top: 6px; padding: 3px 6px; font-size: var(--fs-cap); }
+.comparison-scrim.comparison-value-scrim { z-index: 171; }
+.comparison-dialog.comparison-value-dialog { width: min(860px, 100%); height: min(620px, 88vh); }
+.comparison-value-path { display: block; padding: 12px 16px 0; max-height: 90px; overflow: auto; overflow-wrap: anywhere; font: 12px/1.5 var(--mono); }
+.comparison-value-note { flex: none; margin: 8px 16px 12px; color: var(--tx-2); font-size: var(--fs-cap); line-height: 1.5; }
+.comparison-value-source { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; margin: 0; padding: 16px; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.7 var(--mono); background: var(--bg-0); user-select: text; }
+.comparison-value-dialog .source-pager { flex: none; padding: 0 16px 10px; font-size: var(--fs-cap); }
+.comparison-dialog button:focus-visible { outline: 2px solid var(--acc-text); outline-offset: 2px; }

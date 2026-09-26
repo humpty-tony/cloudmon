@@ -6,13 +6,19 @@ import {backend} from "../api/backend";
 import type {CloudTrailEvent, EvidenceSnapshot, InvestigationOptions, InvestigationResult} from "../api/types";
 import {RawJsonModal} from "./RawJsonModal";
 import {ThemedSelect} from "./ThemedSelect";
+import {WorkspaceOverlay} from "./WorkspaceActivity";
 
 type Anchor = {seq:number;eventID:string;eventName:string};
 type Match = InvestigationResult["events"][number];
 const relationships = [["all","All nearby events"],["related","Related events"],["shared","Shared AWS action"],["credential","Matching credential"],["resources","Shared resource ARN"],["principal","Same principal (context)"],["ip","Same IP (context)"],["request","Same scoped request ID"]];
 function offset(ms:number){if(!ms)return "0s";const seconds=Math.abs(ms)/1000;return `${ms<0?"−":"+"}${seconds>=60?`${(seconds/60).toFixed(1)}m`:`${seconds.toFixed(1)}s`}`}
 
-export function InvestigationView({event,onClose,initialSnapshot}:{event:CloudTrailEvent;onClose:()=>void;initialSnapshot?:EvidenceSnapshot}) {
+type Props = {event:CloudTrailEvent;onClose:()=>void;initialSnapshot?:EvidenceSnapshot};
+export function InvestigationView(props:Props) {
+  return <WorkspaceOverlay onClose={props.onClose}><InvestigationContent {...props}/></WorkspaceOverlay>;
+}
+
+function InvestigationContent({event,onClose,initialSnapshot}:Props) {
   const [anchor,setAnchor]=useState<Anchor>(event);
   const [history,setHistory]=useState<Anchor[]>([]);
   const [minutes,setMinutes]=useState(5);

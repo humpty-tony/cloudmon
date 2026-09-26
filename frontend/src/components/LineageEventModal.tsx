@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import type { FilterField, QueryOp } from "../api/types";
 import { FieldTree } from "./FieldTree";
 import { RawJsonModal } from "./RawJsonModal";
+import { WorkspaceOverlay } from "./WorkspaceActivity";
 
 interface Props {
   title: string;
@@ -12,7 +13,11 @@ interface Props {
 }
 
 /** The same bounded, lossless field inspector as the event table. */
-export function LineageEventModal({ title, json, onClose, onPivot }: Props) {
+export function LineageEventModal(props: Props) {
+  return <WorkspaceOverlay onClose={props.onClose}><LineageEventContent {...props}/></WorkspaceOverlay>;
+}
+
+function LineageEventContent({ title, json, onClose, onPivot }: Props) {
   const [original, setOriginal] = useState(false);
   const close = useRef<HTMLButtonElement>(null);
   const originalButton = useRef<HTMLButtonElement>(null);

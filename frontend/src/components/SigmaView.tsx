@@ -1,3 +1,4 @@
+import {WorkspaceActivity, useWorkspaceActive} from "./WorkspaceActivity";
 import { SigmaSuite } from "./SigmaSuite";
 import { LineageView } from "./LineageView";
 import { hasCredentialLineage } from "../api/types";
@@ -8,6 +9,7 @@ import type { TimeZonePref } from "../api/settings";
 import type { CloudTrailEvent, FilterField, Lineage, QueryOp } from "../api/types";
 import { CodeEditor } from "./CodeEditor";
 import { EventTable } from "./EventTable";
+import { EventInspector } from "./EventInspector";
 import { Popover, ColumnsMenu } from "./Toolbar";
 import { BUNDLED_RULES, deleteUserRule, loadUserRules, saveUserRule, type SigmaRuleEntry } from "../api/sigmaRules";
 
@@ -21,7 +23,7 @@ detection:
   condition: selection
 level: high`;
 
-interface Props {
+export interface SigmaViewProps {
   columns: ColumnDef[];
   visibleCols: string[];
   colWidths: Record<string, number>;
@@ -35,13 +37,16 @@ interface Props {
   onOpenLineage: (seq: number) => void;
 }
 
-export function SigmaView(p: Props) {
+export function SigmaView(p: SigmaViewProps) {
+  const workspaceActive = useWorkspaceActive();
   const [rule, setRule] = useState(STARTER);
   const [out, setOut] = useState<SigmaOutcome | null>(null);
   const [running, setRunning] = useState(false);
   const [showSql, setShowSql] = useState(false);
+  const [showEditor,setShowEditor]=useState(false);
   const [mode,setMode]=useState<"single"|"suite">("single");
   const [error,setError]=useState("");
+  useEffect(()=>{if(error)setShowEditor(true)},[error]);
   const [graphSeq,setGraphSeq]=useState<number|null>(null);
   const active=useRef<AbortController|null>(null);
   const reqId = useRef(0);
@@ -55,6 +60,11 @@ export function SigmaView(p: Props) {
   const [selectedRawError, setSelectedRawError] = useState(false);
   const [selectedLineageError, setSelectedLineageError] = useState(false);
   const detailReq = useRef(0);
+  const resultBody = useRef<HTMLDivElement>(null);
+  const closeDetail = () => {
+    ++detailReq.current; setSelected(null); setSelectedRaw(""); setSelectedLineage(null);
+    resultBody.current?.querySelector<HTMLElement>(".etbody")?.focus({preventScroll: true});
+  };
   useEffect(()=>()=>{++detailReq.current;++reqId.current;active.current?.abort()},[]);
   const [selectedLineage, setSelectedLineage] = useState<Lineage | null>(null);
   const [userRules, setUserRules] = useState<SigmaRuleEntry[]>(() => loadUserRules());
@@ -70,6 +80,7 @@ export function SigmaView(p: Props) {
     setRule(yaml);
     setOut(null);
     setSelected(null);
+    setCursorSeq(-1);
     setSelectedRaw("");
     setSelectedLineage(null);
   };
@@ -88,10 +99,11 @@ export function SigmaView(p: Props) {
     const id = ++reqId.current;
     setRunning(true);setError("");setOut(null);setGraphSeq(null);
     setSelected(null);
+    setCursorSeq(-1);
     backend
       .sigmaRun(ruleRef.current,abort.signal)
-      .then((r) => {if(id===reqId.current)setOut(r)})
-      .catch((e) => {if(id===reqId.current&&!abort.signal.aborted)setError(String(e))})
+      .then((r) => {if(id===reqId.current){setOut(r);if(!r.parsed||!r.supported||r.diagnostics.length)setShowEditor(true)}})
+      .catch((e) => {if(id===reqId.current&&!abort.signal.aborted){setError(String(e));setShowEditor(true)}})
       .finally(()=>{if(id===reqId.current){active.current=null;setRunning(false)}});
   }, []);
 
@@ -142,12 +154,51 @@ export function SigmaView(p: Props) {
 
   return (
     <div className="sigma-workbench">
-      <nav className="sg-mode" aria-label="Sigma mode"><button className="btn-ghost" aria-pressed={mode==="single"} onClick={()=>setMode("single")}>Single rule</button><button className="btn-ghost" aria-pressed={mode==="suite"} onClick={()=>{cancel();setMode("suite")}}>Rule suite</button><span>Matches are leads to investigate; they do not establish malicious activity.</span></nav>
-      {mode==="suite"?<SigmaSuite saved={userRules} onOpen={(yaml,result)=>{loadRule(yaml);setOut(result);setMode("single")}}/>:<div className="sigma">
+      <div className="hunt-commandbar sg-commandbar" role="group" aria-label="Rule controls">
+        <span className="sg-scope" title="Scope: all loaded evidence, across the full snapshot. Events filters are not applied; use rule conditions to narrow matches.">All evidence · Events filters not applied</span>
+        <button className="btn-ghost" onClick={()=>setMode(mode==="single"?"suite":"single")}>{mode==="single"?"Rule suite":"Rule editor"}</button>
+        <WorkspaceActivity.Provider value={workspaceActive && mode==="single"}><div hidden={mode!=="single"} className="sg-rule-controls">
+          <Popover label="Choose a rule" menuClass="colmenu">
+            {(close) => (
+              <>
+                {userRules.length > 0 && (
+                  <>
+                    <div className="menu-label">Saved</div>
+                    {userRules.map((r) => (
+                      <div key={r.name} className="menu-item">
+                        <button className="menu-item-main" onClick={() => { loadRule(r.yaml); close(); }}>{r.name}</button>
+                        <button className="menu-del" title="Delete" onClick={() => {try{setUserRules(deleteUserRule(r.name))}catch(e){setError(String(e))}}}>✕</button>
+                      </div>
+                    ))}
+                    <div className="menu-divider" />
+                  </>
+                )}
+                <div className="menu-label">Examples</div>
+                {BUNDLED_RULES.map((r) => (
+                  <button key={r.name} className="menu-item menu-item-main" onClick={() => { loadRule(r.yaml); close(); }}>{r.name}</button>
+                ))}
+                <div className="menu-divider" />
+                <button className="menu-item menu-action" onClick={() => { saveCurrent(); close(); }}>＋ Save current rule…</button>
+              </>
+            )}
+          </Popover>
+          <span className="sg-fname" title={rule.match(/^title:\s*(.+)$/m)?.[1]||"Untitled rule"}>{rule.match(/^title:\s*(.+)$/m)?.[1]||"Untitled rule"}</span>
+          <button className="btn-ghost" aria-expanded={showEditor} aria-controls="hunt-rule-yaml" onClick={()=>setShowEditor(value=>!value)}>{showEditor?"Hide YAML":"Edit YAML"}</button>
+          <span className={`sg-pill ${status}`}>{pill[status]}</span>
+          {running&&<button className="btn-ghost" onClick={cancel}>Cancel rule</button>}
+          <button className="sg-run" onClick={run} disabled={running} title="Run (Ctrl/Cmd+Enter)">
+            {running ? "…" : "▶ Run"}
+          </button>
+        </div></WorkspaceActivity.Provider>
+      </div>
+      <WorkspaceActivity.Provider value={workspaceActive && mode==="suite"}><div className="sg-suite-container" hidden={mode!=="suite"} style={{display:mode==="suite"?"flex":"none",flex:1,minHeight:0}}><SigmaSuite saved={userRules} onOpen={(yaml,result)=>{loadRule(yaml);setOut(result);setShowEditor(!result.parsed||!result.supported);setMode("single")}}/></div></WorkspaceActivity.Provider>
+      <WorkspaceActivity.Provider value={workspaceActive && mode==="single"}>
+      <div className="sigma" hidden={mode!=="single"} style={mode==="single"?undefined:{display:"none"}}>
       {/* LEFT - matches */}
       <div className="sg-pane sg-left">
         <div className="sg-head">
           <span className="sg-title">Matches</span>
+          {status==="valid"&&<span className="sg-caution">Investigative leads, not verdicts</span>}
           {status === "valid" && (
             <span className="sg-sub">
               <b>{out!.matches.toLocaleString()}</b> match · {out!.scanned.toLocaleString()} scanned
@@ -162,15 +213,17 @@ export function SigmaView(p: Props) {
         </div>
         {out?.snapshot&&<div className="sg-snapshot">Snapshot through event {out.snapshot.maxSeq.toLocaleString()} · {out.snapshot.capturedAt}</div>}
         {selected&&out?.explanations[selected.seq]&&<section className="sg-explanations" aria-label="Selection explanations"><strong>Why this event matched</strong><div>{out.explanations[selected.seq].map(reason=><span key={reason.name} className={reason.matched?"matched":"unmatched"}>{reason.matched?"✓":"−"} {reason.name}: {reason.matched?"matched":"did not match"}</span>)}</div><small>Selection results for this event. The rule condition combines these; count thresholds use the full snapshot.</small></section>}
-        <div className="sg-body">
+        <div className="sg-body" ref={resultBody}>
           {status === "idle" && (
-            <div className="sg-empty">Press <b>Run</b> (<kbd>Ctrl</kbd>+<kbd>Enter</kbd>) to test the rule.</div>
+            <div className="sg-empty">Choose a rule, then press <b>Run</b>.</div>
           )}
-          {status !== "valid" && status !== "idle" && <div className="sg-empty">Rule not run - fix the diagnostics on the right.</div>}
+          {status !== "valid" && status !== "idle" && <div className="sg-empty">Rule not run — open Edit YAML to review diagnostics.</div>}
           {status === "valid" && events.length === 0 && <div className="sg-empty">No events match this rule.</div>}
           {status === "valid" && events.length > 0 && (
             <>
               <EventTable
+                keyboardNavigation
+                detailMode="external"
                 events={events}
                 columns={p.columns}
                 colWidths={p.colWidths}
@@ -202,44 +255,14 @@ export function SigmaView(p: Props) {
             </>
           )}
         </div>
+        {status === "valid" && events.length > 0 && <div className="workbench-list-footer">↑ ↓ Inspect matches · Home / End · Enter open</div>}
+        {selected&&<EventInspector event={selected} snapshot={out?.snapshot??undefined} rawJSON={selectedRaw} rawError={selectedRawError} lineage={selectedLineage} lineageError={selectedLineageError} onRetry={retryDetail} onPivot={p.onPivot} pivotLabel="Search all evidence" onOpenLineage={setGraphSeq} onClose={closeDetail} timeZone={p.timeZone}/>}
       </div>
 
       <div className="sg-divider" />
 
       {/* RIGHT - editor */}
-      <div className="sg-pane sg-right">
-        <div className="sg-ed-head">
-          <Popover label="Rules" menuClass="colmenu">
-            {(close) => (
-              <>
-                {userRules.length > 0 && (
-                  <>
-                    <div className="menu-label">Saved</div>
-                    {userRules.map((r) => (
-                      <div key={r.name} className="menu-item">
-                        <button className="menu-item-main" onClick={() => { loadRule(r.yaml); close(); }}>{r.name}</button>
-                        <button className="menu-del" title="Delete" onClick={() => {try{setUserRules(deleteUserRule(r.name))}catch(e){setError(String(e))}}}>✕</button>
-                      </div>
-                    ))}
-                    <div className="menu-divider" />
-                  </>
-                )}
-                <div className="menu-label">Examples</div>
-                {BUNDLED_RULES.map((r) => (
-                  <button key={r.name} className="menu-item menu-item-main" onClick={() => { loadRule(r.yaml); close(); }}>{r.name}</button>
-                ))}
-                <div className="menu-divider" />
-                <button className="menu-item menu-action" onClick={() => { saveCurrent(); close(); }}>＋ Save current rule…</button>
-              </>
-            )}
-          </Popover>
-          <span className="sg-fname" title={out?.title||"rule.yml"}>{out?.title||"rule.yml"}</span>
-          <span className={`sg-pill ${status}`}>{pill[status]}</span>
-          {running&&<button className="btn-ghost" onClick={cancel}>Cancel rule</button>}
-          <button className="sg-run" onClick={run} disabled={running} title="Run (Ctrl/Cmd+Enter)">
-            {running ? "…" : "▶ Run"}
-          </button>
-        </div>
+      <div id="hunt-rule-yaml" className="sg-pane sg-right" hidden={!showEditor}>
         <div className="sg-editor">
           <CodeEditor value={rule} onChange={(value)=>{if(value!==ruleRef.current)loadRule(value)}} diagnostics={out?.diagnostics ?? []} onSubmit={run} />
         </div>
@@ -260,8 +283,8 @@ export function SigmaView(p: Props) {
           )}
         </div>
       </div>
-    </div>}
-    {graphSeq!=null&&out?.snapshot&&<LineageView seq={graphSeq} initialSnapshot={out.snapshot} onClose={()=>setGraphSeq(null)} onPivot={p.onPivot}/>}
+    </div>
+    {graphSeq!=null&&out?.snapshot&&<LineageView seq={graphSeq} initialSnapshot={out.snapshot} onClose={()=>setGraphSeq(null)} onPivot={p.onPivot}/>}</WorkspaceActivity.Provider>
     </div>
   );
 }

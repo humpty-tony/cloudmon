@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -35,6 +34,7 @@ type Row struct {
 	ReadOnly           bool   `json:"readOnly"`
 	ManagementEvent    bool   `json:"managementEvent"`
 	RawJSON            string `json:"rawJSON"`
+	Target             string `json:"target"`
 }
 
 // pageCols intentionally omits `raw` - the detail pane fetches it lazily via Raw(seq).
@@ -101,7 +101,7 @@ var queryFieldExpr = map[string]string{
 	"managementevent":    "CAST(managementEvent AS VARCHAR)",
 }
 
-var facetFields = []string{"eventSource", "eventName", "userName", "roleArn", "identityType", "sourceIPAddress", "awsRegion"}
+var facetFields = []string{"eventSource", "userName", "result", "accountId", "awsRegion", "sourceIPAddress", "eventName", "errorCode", "roleArn", "identityType"}
 
 // Free text searches each supported query field independently (never a joined
 // string that could invent a phrase spanning two unrelated fields).
@@ -357,7 +357,7 @@ func (s *Store) Page(f Filter, offset, limit int) ([]Row, error) {
 	if err != nil {
 		return nil, err
 	}
-	sql := fmt.Sprintf("SELECT %s FROM events%s ORDER BY seq DESC LIMIT %d OFFSET %d;", pageCols, where, limit, offset)
+	sql := fmt.Sprintf("SELECT %s FROM events%s ORDER BY seq DESC LIMIT %d OFFSET %d;", displayCols, where, limit, offset)
 	var rows []Row
 	if err := s.queryJSON(sql, &rows); err != nil {
 		return nil, err
@@ -386,7 +386,7 @@ func (s *Store) Newer(f Filter, sinceSeq int64, limit int) ([]Row, error) {
 	// If a burst produced more than `limit` new rows, this leaves the newer-still rows
 	// for the next tick so the append cursor advances contiguously - no permanent gap
 	// (a plain "ORDER BY seq DESC LIMIT n" would skip the middle band).
-	sql := fmt.Sprintf("SELECT * FROM (SELECT %s FROM events%s ORDER BY seq ASC LIMIT %d) ORDER BY seq DESC;", pageCols, where, limit)
+	sql := fmt.Sprintf("SELECT * FROM (SELECT %s FROM events%s ORDER BY seq ASC LIMIT %d) ORDER BY seq DESC;", displayCols, where, limit)
 	var rows []Row
 	if err := s.queryJSON(sql, &rows); err != nil {
 		return nil, err
@@ -399,6 +399,21 @@ type FacetValue struct {
 	Value string `json:"value"`
 	Count int    `json:"count"`
 }
+
+// FacetMetadata counts the complete applied-query snapshot, independently of
+// the bounded list. Empty and SQL NULL values are both missing, never values.
+type FacetMetadata struct {
+	TotalEvents    int  `json:"totalEvents"`
+	PresentEvents  int  `json:"presentEvents"`
+	MissingEvents  int  `json:"missingEvents"`
+	DistinctValues int  `json:"distinctValues"`
+	ReturnedValues int  `json:"returnedValues"`
+	Limit          int  `json:"limit"`
+	Truncated      bool `json:"truncated"`
+}
+
+const facetValueLimit = 25
+
 type Bucket struct {
 	T int64 `json:"t"` // bucket start, unix ms
 	N int   `json:"n"` // total events
@@ -416,14 +431,15 @@ type Stats struct {
 	MaxMs      int64 `json:"maxMs"`
 }
 type Aggregates struct {
-	Snapshot  *Snapshot               `json:"snapshot"`
-	Total     int                     `json:"total"`
-	Stats     Stats                   `json:"stats"`
-	Facets    map[string][]FacetValue `json:"facets"`
-	Histogram []Bucket                `json:"histogram"` // sparse: only non-empty buckets
-	HistStep  int64                   `json:"histStep"`  // bucket width, ms
-	HistFrom  int64                   `json:"histFrom"`  // first bucket start, ms
-	HistTo    int64                   `json:"histTo"`    // last bucket end, ms
+	Snapshot      *Snapshot                `json:"snapshot"`
+	Total         int                      `json:"total"`
+	Stats         Stats                    `json:"stats"`
+	Facets        map[string][]FacetValue  `json:"facets"`
+	FacetMetadata map[string]FacetMetadata `json:"facetMetadata"`
+	Histogram     []Bucket                 `json:"histogram"` // sparse: only non-empty buckets
+	HistStep      int64                    `json:"histStep"`  // bucket width, ms
+	HistFrom      int64                    `json:"histFrom"`  // first bucket start, ms
+	HistTo        int64                    `json:"histTo"`    // last bucket end, ms
 }
 
 // Aggregates computes total count, per-field facet counts, and the time histogram
@@ -447,7 +463,7 @@ func (s *Store) AggregatesContext(parent context.Context, f Filter) (Aggregates,
 }
 
 func aggregates(f Filter, query func(string, any) error) (Aggregates, error) {
-	agg := Aggregates{Facets: map[string][]FacetValue{}}
+	agg := Aggregates{Facets: map[string][]FacetValue{}, FacetMetadata: map[string]FacetMetadata{}}
 	where, err := f.where()
 	if err != nil {
 		return agg, err
@@ -478,31 +494,51 @@ func aggregates(f Filter, query func(string, any) error) (Aggregates, error) {
 		agg.Stats = Stats{Errors: st[0].Errors, Principals: st[0].Principals, Sources: st[0].Sources, Regions: st[0].Regions, MinMs: st[0].MinMs, MaxMs: st[0].MaxMs}
 	}
 
-	// GROUPING SETS applies the filter once for all seven facets, instead of
-	// rescanning events (and possibly parsing raw JSON) for each UNION branch.
+	// One filtered scan for all facets. Window totals are computed over ALL
+	// grouped values (including missing), before QUALIFY bounds the bridge data.
 	groups := make([]string, 0, len(facetFields))
 	labels := make([]string, 0, len(facetFields))
+	values := make([]string, 0, len(facetFields))
+	columns := make([]string, 0, len(facetFields))
 	for _, col := range facetFields {
 		agg.Facets[col] = []FacetValue{}
+		agg.FacetMetadata[col] = FacetMetadata{TotalEvents: agg.Total, Limit: facetValueLimit}
+		expr, err := queryColumn(col)
+		if err != nil {
+			return agg, err
+		}
+		columns = append(columns, expr+" AS "+col)
 		groups = append(groups, "("+col+")")
 		labels = append(labels, "WHEN GROUPING("+col+")=0 THEN '"+col+"'")
+		values = append(values, "WHEN GROUPING("+col+")=0 THEN "+col)
 	}
-	facetSQL := "SELECT f,value,count FROM (SELECT CASE " + strings.Join(labels, " ") + " END AS f, coalesce(" + strings.Join(facetFields, ",") + ") AS value, count(*) AS count FROM events" + where +
-		" GROUP BY GROUPING SETS (" + strings.Join(groups, ",") + ")) WHERE value IS NOT NULL AND value <> '' QUALIFY row_number() OVER (PARTITION BY f ORDER BY count DESC,value)<=25 ORDER BY f,count DESC,value"
+	facetSQL := "WITH grouped AS (SELECT CASE " + strings.Join(labels, " ") + " END AS f, CASE " + strings.Join(values, " ") + " END AS value, count(*) AS count FROM (SELECT " + strings.Join(columns, ",") + " FROM events" + where + ") GROUP BY GROUPING SETS (" + strings.Join(groups, ",") + ")) " +
+		"SELECT f,value,count, " +
+		"coalesce(sum(count) FILTER (WHERE value <> '') OVER (PARTITION BY f),0) AS present, " +
+		"coalesce(sum(count) FILTER (WHERE value = '') OVER (PARTITION BY f),0) AS missing, " +
+		"count(*) FILTER (WHERE value <> '') OVER (PARTITION BY f) AS distinctValues FROM grouped " +
+		fmt.Sprintf("QUALIFY row_number() OVER (PARTITION BY f ORDER BY value='',count DESC,value)<=%d ORDER BY f,count DESC,value", facetValueLimit)
 	var frows []struct {
-		F     string `json:"f"`
-		Value string `json:"value"`
-		Count int    `json:"count"`
+		F              string `json:"f"`
+		Value          string `json:"value"`
+		Count          int    `json:"count"`
+		Present        int    `json:"present"`
+		Missing        int    `json:"missing"`
+		DistinctValues int    `json:"distinctValues"`
 	}
 	if err := query(facetSQL, &frows); err != nil {
 		return agg, err
 	}
 	for _, r := range frows {
-		agg.Facets[r.F] = append(agg.Facets[r.F], FacetValue{Value: r.Value, Count: r.Count})
+		agg.FacetMetadata[r.F] = FacetMetadata{TotalEvents: agg.Total, PresentEvents: r.Present, MissingEvents: r.Missing, DistinctValues: r.DistinctValues, Limit: facetValueLimit, Truncated: r.DistinctValues > facetValueLimit}
+		if r.Value != "" {
+			agg.Facets[r.F] = append(agg.Facets[r.F], FacetValue{Value: r.Value, Count: r.Count})
+		}
 	}
-	for col := range agg.Facets {
-		vs := agg.Facets[col]
-		sort.Slice(vs, func(i, j int) bool { return vs[i].Count > vs[j].Count })
+	for col, values := range agg.Facets {
+		meta := agg.FacetMetadata[col]
+		meta.ReturnedValues = len(values)
+		agg.FacetMetadata[col] = meta
 	}
 
 	// histogram: derive a bucket size targeting ~120 buckets across the filtered span

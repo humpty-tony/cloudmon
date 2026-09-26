@@ -1,5 +1,6 @@
 import {AliasBadge} from "./AliasBadge";
-import {useEffect,useRef,useState} from "react";
+import {useEffect,useLayoutEffect,useRef,useState} from "react";
+import {useWorkspaceActive} from "./WorkspaceActivity";
 import {backend} from "../api/backend";
 import type {ActivityAnalysis,AnalysisDimension,AnalysisOptions,CloudTrailEvent,EventRow,QueryFilter} from "../api/types";
 import {rowToEvent} from "../api/types";
@@ -22,6 +23,10 @@ export function AnalysisView({filter}:{filter:QueryFilter}) {
   const active=useRef<AbortController|null>(null),request=useRef(0),rawRequest=useRef(0);
   const draft:AnalysisOptions={filter:useFilter?filter:allEvidence,dimension,compare,windowHours:hours,entity:null,snapshot:null};
   const changed=applied&&JSON.stringify({...applied,entity:null,snapshot:null})!==JSON.stringify(draft);
+  const workspaceActive=useWorkspaceActive();
+  useLayoutEffect(()=>{
+    if(!workspaceActive){rawRequest.current++;setRaw(null);setRawBusy(false);setRawError("");setInvestigation(null)}
+  },[workspaceActive]);
   useEffect(()=>()=>{active.current?.abort();request.current++;rawRequest.current++},[]);
   const run=async(options=draft)=>{
     if(active.current)return;
@@ -32,7 +37,7 @@ export function AnalysisView({filter}:{filter:QueryFilter}) {
     finally{if(id===request.current){active.current=null;setBusy(false);if(controller.signal.aborted)setError("Analysis cancelled. Run again when ready.")}}
   };
   const openRaw=async(event:EventRow)=>{
-    if(!result)return;const id=++rawRequest.current;setRawBusy(true);setRawError("");
+    if(!result||!workspaceActive)return;const id=++rawRequest.current;setRawBusy(true);setRawError("");
     try{const json=await backend.queryLineageRaw(event.seq,result.snapshot);if(id===rawRequest.current)setRaw({title:`${event.eventName} · ${event.eventID}`,json})}
     catch(e){if(id===rawRequest.current)setRawError(String(e))}
     finally{if(id===rawRequest.current)setRawBusy(false)}

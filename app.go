@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"cloudmon/internal/attribution"
 	"cloudmon/internal/awsflow"
 	"cloudmon/internal/capture"
 	"cloudmon/internal/config"
@@ -32,11 +33,13 @@ type App struct {
 	events []model.CloudTrailEvent
 	cfg    config.ConnectionConfig
 
-	db       *store.Store // DuckDB-backed engine for large dumps
-	dbErr    error        // set if the evidence database could not be opened
-	dataLock *os.File     // OS lock retained for this process lifetime
-	dbOnce   sync.Once    // guards one-time async initialization of the engine
-	queries  queryjob.Registry
+	db                 *store.Store // DuckDB-backed engine for large dumps
+	dbErr              error        // set if the evidence database could not be opened
+	dataLock           *os.File     // OS lock retained for this process lifetime
+	dbOnce             sync.Once    // guards one-time async initialization of the engine
+	queries            queryjob.Registry
+	attributionMu      sync.Mutex
+	resolveAttribution func(context.Context, string, []string, attribution.Config) (attribution.Result, error)
 
 	logMu sync.Mutex // guards the on-disk troubleshooting log
 	logW  *os.File   // cloudmon.log next to the exe (a blank WebView2 leaves no console)

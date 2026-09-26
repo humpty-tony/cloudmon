@@ -26,6 +26,7 @@ export interface CloudTrailEvent {
   errorMessage?: string;
   recipientAccountId: string;
   rawJSON: string;
+  target?: string; // bounded recorded display summary, not a resource correlation key
 }
 
 export type ConnectionMode = "create-infra" | "existing-sqs" | "import-dump";
@@ -115,6 +116,7 @@ export interface EventRow {
   readOnly: boolean;
   managementEvent: boolean;
   rawJSON: string;
+  target?: string; // bounded recorded display summary, not a resource correlation key
 }
 
 /** Comparison operators the query language compiles to (mirrors internal/store cmpSQL).
@@ -158,11 +160,22 @@ export interface AnalysisOptions { filter: QueryFilter; dimension: AnalysisDimen
 export interface ActivityStats { events: number; errors: number; writes: number; unknownReadOnly: number; credentialIDs: number; invalidTimes: number; firstMs: number | null; lastMs: number | null }
 export interface ActivityGroup { value: string; current: number; previous: number; errors: number; writes: number; totalGroups: number }
 export interface ActivityAnalysis { snapshot: EvidenceSnapshot; scope: ActivityStats; current: ActivityStats; previous: ActivityStats; groups: ActivityGroup[]; totalGroups: number; limit: number; fromMs: number; toMs: number; previousFromMs: number; hasWindow: boolean; breakdowns: Record<string, ActivityGroup[]>; events: EventRow[]; notes: string[] }
+/** Counts across the complete applied-query snapshot, not the returned page. */
+export interface FacetMetadata {
+  totalEvents: number;
+  presentEvents: number;
+  missingEvents: number;
+  distinctValues: number;
+  returnedValues: number;
+  limit: number;
+  truncated: boolean;
+}
 export interface EngineAggregates {
   snapshot: EvidenceSnapshot;
   total: number;
   stats: { errors: number; principals: number; sources: number; regions: number; minMs: number; maxMs: number };
   facets: Record<string, { value: string; count: number }[]>;
+  facetMetadata?: Record<string, FacetMetadata>; // absent in legacy/native fixtures
   histogram: { t: number; n: number; e: number }[];
   histStep: number;
   histFrom: number;
@@ -231,6 +244,10 @@ export interface GraphEdge {
   viaEvent: string;
   viaTime: string;
   viaIP: string;
+  viaUserAgent?: string;
+  viaRegion?: string;
+  viaEventId?: string;
+  viaMfa?: string;
   evidence?: string;
   evidenceSeqs?: number[];
   crossAccount?: boolean; // caller and role live in different accounts
@@ -292,6 +309,7 @@ export function rowToEvent(r: EventRow): CloudTrailEvent {
     errorCode: r.errorCode || undefined,
     errorMessage: r.errorMessage || undefined,
     recipientAccountId: r.recipientAccountId,
+    target: r.target || "",
     rawJSON: r.rawJSON || "", // lazy - fetched on expand
   };
 }

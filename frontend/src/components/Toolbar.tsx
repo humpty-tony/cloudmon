@@ -1,9 +1,11 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useWorkspaceActive } from "./WorkspaceActivity";
 import { COLUMNS, COLUMN_BY_KEY } from "../api/columns";
 import type { Preset } from "../api/presets";
 
 interface Props {
+  compact?: boolean;
   capturing: boolean;
   follow: boolean;
   live: boolean;
@@ -66,6 +68,8 @@ export function Popover({
   children: (close: () => void) => React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const workspaceActive = useWorkspaceActive();
+  useLayoutEffect(() => { if (!workspaceActive) setOpen(false); }, [workspaceActive]);
   const btnRef = useRef<HTMLButtonElement>(null);
   const [pos, setPos] = useState<Pos>({ top: 0, left: 0 });
 
@@ -76,13 +80,22 @@ export function Popover({
     }
   }, [open, align]);
 
+  useEffect(() => {
+    if (!open) return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault(); event.stopPropagation(); setOpen(false); btnRef.current?.focus();
+    };
+    document.addEventListener("keydown", escape, true);
+    return () => document.removeEventListener("keydown", escape, true);
+  }, [open]);
   const close = () => setOpen(false);
   return (
     <div className="pop">
-      <button ref={btnRef} className={`tb-btn ${open || active ? "active" : ""}`} onClick={() => setOpen((v) => !v)}>
+      <button ref={btnRef} aria-expanded={open} className={`tb-btn ${open || active ? "active" : ""}`} onClick={() => setOpen((v) => !v)}>
         {label} <span className="caret">▾</span>
       </button>
-      {open &&
+      {open && workspaceActive &&
         createPortal(
           <>
             <div className="pop-backdrop" onClick={close} />
@@ -255,7 +268,8 @@ export function ColumnsMenu({
 export function Toolbar(p: Props) {
   const isCustom = (k: string) => k.startsWith("custom-");
   return (
-    <div className="toolbar">
+    <div className={`toolbar ${p.compact ? "toolbar--review" : ""}`}>
+      <div className="toolbar-scope" role="group" aria-label="Search filters">
       {p.streaming && (
         <>
           <button
@@ -275,6 +289,8 @@ export function Toolbar(p: Props) {
         </>
       )}
 
+      {p.compact ? <Popover label="Quick filters" active={p.errorsOnly || p.hideReadOnly || p.sensitiveOnly}>
+        {() => <div className="review-lenses">
       <button className={`tb-btn ${p.errorsOnly ? "active sev-err" : ""}`} onClick={p.onToggleErrors}>
         Errors only
       </button>
@@ -284,14 +300,26 @@ export function Toolbar(p: Props) {
       <button className={`tb-btn ${p.sensitiveOnly ? "active sev-warn" : ""}`} onClick={p.onToggleSensitive}>
         Sensitive only
       </button>
+        </div>}
+      </Popover> : <>
+      <button className={`tb-btn ${p.errorsOnly ? "active sev-err" : ""}`} onClick={p.onToggleErrors}>
+        Errors only
+      </button>
+      <button className={`tb-btn ${p.hideReadOnly ? "active" : ""}`} onClick={p.onToggleReadOnly}>
+        Hide read-only
+      </button>
+      <button className={`tb-btn ${p.sensitiveOnly ? "active sev-warn" : ""}`} onClick={p.onToggleSensitive}>
+        Sensitive only
+      </button>
+      </>}
 
       <span className="tb-sep" />
 
       <TimeRangePopover onApply={p.onTimeRange} onClear={p.onClearTime} />
+      </div>
+      <div className="toolbar-display" role="group" aria-label="Display options">
 
-      <span className="tb-sep" />
-
-      <Popover label={`Preset: ${p.presets.find((x) => x.key === p.presetKey)?.label ?? "-"}`}>
+      <Popover label="Column layout">
         {(close) => (
           <>
             {p.presets.map((pr) => (
@@ -325,7 +353,8 @@ export function Toolbar(p: Props) {
         )}
       </Popover>
 
-      <div className="tb-right">
+      </div>
+      <div className="tb-right" hidden={p.compact}>
         <button className="tb-btn subtle" onClick={p.onOpenSettings} title="Settings">
           ⚙
         </button>

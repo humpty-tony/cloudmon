@@ -19,15 +19,19 @@ import {
 import { addTerm, applyPivot, removeTerm, timeTerm, toggleFieldTerm } from "./api/query";
 import { compileQuery } from "./api/queryLang";
 import { buildFilter } from "./api/searchFilter";
+import {HuntPivotResults, type HuntPivotScope} from "./components/HuntPivotResults";
 import { fmtClock, fmtStamp } from "./api/time";
 import { QUERY_FIELDS } from "./api/types";
-import { CaptureDescription, removalPrompt } from "./components/RecoveryCard";
+import { removalPrompt } from "./components/RecoveryCard";
 import { ConnectionScreen } from "./components/ConnectionScreen";
+import {SourcesPanel} from "./components/SourcesPanel";
 import { Toolbar } from "./components/Toolbar";
+import { WorkspaceActivity } from "./components/WorkspaceActivity";
 import { QueryBar } from "./components/QueryBar";
 import { FacetSidebar } from "./components/FacetSidebar";
 import { HistogramStrip } from "./components/HistogramStrip";
 import { EventInspector } from "./components/EventInspector";
+import {ReviewContext, REVIEW_RELATIONS, type ReviewContextScope} from "./components/ReviewContext";
 import "./workbench.css";
 import { EventTable } from "./components/EventTable";
 import { StatusBar } from "./components/StatusBar";
@@ -36,9 +40,8 @@ import { HelpModal } from "./components/HelpModal";
 import { DEFAULT_THEME } from "./api/themes";
 import { TitleBar } from "./components/TitleBar";
 import { LineageView } from "./components/LineageView";
-import { SigmaView } from "./components/SigmaView";
+import { HuntWorkspace } from "./components/HuntWorkspace";
 import { AnalysisView } from "./components/AnalysisView";
-import { HuntView } from "./components/HuntView";
 import { SettingsModal } from "./components/SettingsModal";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { installCrashLogging } from "./api/log";
@@ -97,6 +100,7 @@ const save = (k: string, v: unknown) => {
 
 export default function App() {
   const [connected, setConnected] = useState(false);
+  const [datasetSession, setDatasetSession] = useState(0);
   const [config, setConfig] = useState<ConnectionConfig | null>(null);
   const [events, setEvents] = useState<CloudTrailEvent[]>([]); // loaded window, oldest-first (the table flips to newest-on-top)
   const [datasetTotal, setDatasetTotal] = useState(0); // total ingested events (unfiltered)
@@ -132,20 +136,36 @@ export default function App() {
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
   const [selectedSnapshot, setSelectedSnapshot] = useState<EvidenceSnapshot | null>(null);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
+  const [reviewScope, setReviewScope] = useState<ReviewContextScope | null>(null);
+  const [huntPivot, setHuntPivot] = useState<HuntPivotScope | null>(null);
+  const browseSelection = useRef<{event: CloudTrailEvent | null; snapshot: EvidenceSnapshot | null; cursor: number} | null>(null);
   const [cursorSeq, setCursorSeq] = useState(-1); // anchored to event identity, not row position
   const [follow, setFollow] = useState(true);
   const [newCount, setNewCount] = useState(0);
 
   const [presetKey, setPresetKey] = useState<string>(() => load("workbench.preset", DEFAULT_PRESET.key));
-  const [visibleCols, setVisibleCols] = useState<string[]>(() => load("workbench.cols", DEFAULT_PRESET.columns));
+  const [visibleCols, setVisibleCols] = useState<string[]>(() => {
+    const saved = load<string[]>("workbench.cols", DEFAULT_PRESET.columns);
+    // Migrate only the former stock Workbench layouts, not custom column sets.
+    const previousDefaults = ["time,name,result", "time,name,identity,source,region,result", "time,name,identity,ip,result"];
+    return load("workbench.preset", DEFAULT_PRESET.key) === "workbench" && previousDefaults.includes(saved.join(",")) ? DEFAULT_PRESET.columns : saved;
+  });
   const [colWidths, setColWidths] = useState<Record<string, number>>(() => load("workbench.colw", {}));
   const [customPresets, setCustomPresets] = useState<Preset[]>(() => load("customPresets", []));
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => load("sidebar", false));
-  const [histCollapsed, setHistCollapsed] = useState<boolean>(() => load("workbench.hist", true));
+  const [histCollapsed, setHistCollapsed] = useState<boolean>(() => load("workbench.hist", false));
+  const [summaryOpen, setSummaryOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [help, setHelp] = useState<{ open: boolean; tab: string }>({ open: false, tab: "getting-started" });
   const [theme, setTheme] = useState<string>(() => load("theme", DEFAULT_THEME));
   const [uiView, setUiView] = useState<"console" | "sigma" | "analysis" | "hunts">("console");
+  const [visitedViews, setVisitedViews] = useState<typeof uiView[]>(["console"]);
+  const selectView = useCallback((view: typeof uiView) => {
+    setHuntPivot(null);
+    setUiView(view);
+    setVisitedViews(previous => previous.includes(view) ? previous : [...previous, view]);
+  }, []);
   // ---- user settings (config menu) ----
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sensitiveOverride, setSensitiveOverride] = useState<SensitiveOverride>(() => {
@@ -254,10 +274,14 @@ export default function App() {
     streamVersion.current++;
     setConfig(cfg);setDatasetTotal(total);setSavedCapture(capture);setCapturing(active);
     setEvents([]);setTerms([]);setQueryText("");closeInspector();setCursorSeq(-1);setFollow(active);
+    setReviewScope(null);setHuntPivot(null);browseSelection.current=null;setSummaryOpen(false);
+    // Retain view state within a dataset, never across a source replacement.
+    setDatasetSession(n => n + 1);setUiView("console");setVisitedViews(["console"]);setLineageSeq(null);
     setRefreshTick(n=>n+1);setConnected(true);maximizeWindow();
   };
   const connect = async (cfg: ConnectionConfig) => {
     if (cfg.mode === "import-dump") {
+      if (!backend.live) await backend.stopCapture();
       cfg.dumpPath ? await backend.ingestPath(cfg.dumpPath) : await backend.ingestText(cfg.dumpText);
     } else {
       await backend.setConnection(cfg);
@@ -276,8 +300,12 @@ export default function App() {
 
   const columns = useMemo(() => visibleCols.map((key) => COLUMN_BY_KEY[key]).filter(Boolean).map(column => {
     if (presetKey !== "workbench" || uiView !== "console") return column;
-    const width = column.key === "time" ? 88 : column.key === "name" ? 160 : column.key === "result" ? 108 : column.width;
-    return {...column, width, label: column.key === "time" ? "Time" : column.key === "name" ? "Action / principal" : column.key === "result" ? "Result" : column.label};
+    const defaults: Record<string, {width: number; label: string}> = {
+      time: {width: 76, label: "Time"}, name: {width: 145, label: "Event / service"},
+      identity: {width: 126, label: "Actor / session"}, target: {width: 128, label: "Target"}, ip: {width: 116, label: "Source IP"},
+      source: {width: 150, label: "Service"}, region: {width: 100, label: "Region"}, result: {width: 94, label: "Result"},
+    };
+    return {...column, ...defaults[column.key]};
   }), [visibleCols, presetKey, uiView]);
 
   // Invalid applied expressions fail closed; never discard an invalid predicate
@@ -491,6 +519,12 @@ export default function App() {
     return s;
   }, [terms]);
 
+  const activeExcludes = useMemo(() => {
+    const s = new Set<string>();
+    for (const t of terms) if (t.kind === "field" && t.op === "exclude") s.add(`${String(t.field)} ${t.value}`);
+    return s;
+  }, [terms]);
+
   // ---- query mutations ----
   const addQ = useCallback((t: QueryTerm) => setTerms((prev) => addTerm(prev, t)), []);
   const removeQ = useCallback((id: string) => setTerms((prev) => removeTerm(prev, id)), []);
@@ -505,6 +539,10 @@ export default function App() {
   );
 
   const errorsOnly = terms.some((t) => t.kind === "field" && t.field === "errorCode" && t.op === "exists");
+  const pivotFromHunt = (field: FilterField, value: string, op: QueryOp) => {
+    selectView("console");
+    setHuntPivot({field, value, op});
+  };
   const hideReadOnly = terms.some((t) => t.kind === "field" && t.field === "readOnly" && t.op === "exclude" && t.value === "true");
 
   const toggleErrors = () => setTerms((prev) => toggleFieldTerm(prev, "errorCode", "exists", ""));
@@ -582,11 +620,7 @@ export default function App() {
         if (id !== detailReq.current) return;
         if (raw) setSelectedRaw(raw); else setSelectedRawErr(true);
       }).catch(() => { if (id === detailReq.current) setSelectedRawErr(true); });
-      if (hasCredentialLineage(e)) {
-        void backend.queryLineage(e.seq, snapshot).then(lineage => {
-          if (id === detailReq.current) setSelectedLineage(lineage);
-        }).catch(() => { if (id === detailReq.current) setSelectedLineageError(true); });
-      }
+      // Credential resolution is on demand in the snapshot-bound graph popup.
     }).catch(() => {
       if (id !== detailReq.current) return;
       setSelectedRawErr(true); setSelectedLineageError(true);
@@ -606,15 +640,38 @@ export default function App() {
     fetchDetail(e);
   }, [selected?.seq, fetchDetail]);
 
+  const beginContext = (event: CloudTrailEvent, snapshot?: EvidenceSnapshot, relation = "all") => {
+    if (!snapshot) return;
+    if (!reviewScope) browseSelection.current = {event: selected, snapshot: selectedSnapshot, cursor: cursorSeq};
+    setFollow(false);
+    setReviewScope({anchor: event, snapshot, relation, minutes: 2});
+  };
+  const endContext = () => {
+    setReviewScope(null);
+    const previous = browseSelection.current; browseSelection.current = null;
+    if (previous) {
+      setSelected(previous.event); setCursorSeq(previous.cursor);
+      if (previous.event) fetchDetail(previous.event, previous.snapshot ?? undefined); else closeInspector();
+    }
+  };
+  const inspectContext = (event: CloudTrailEvent, snapshot: EvidenceSnapshot) => {
+    setSelected(event);setCursorSeq(event.seq);fetchDetail(event, snapshot);
+  };
+  const reviewPivot = (field: FilterField, value: string, op: QueryOp) => {
+    if (reviewScope) endContext();
+    pivot(field, value, op);
+  };
+
   // ---- keyboard ----
   useEffect(() => {
     if (!connected) return;
     const onKey = (e: KeyboardEvent) => {
       if (settingsOpen || lineageSeq != null || document.querySelector('[aria-modal="true"]')) return; // overlays own their keyboard interactions
-      if (uiView !== "console") return; // vim-style shortcuts are console-only (don't hijack the Sigma editor)
+      if (uiView !== "console" || huntPivot) return; // Temporary results and authoring own their keys.
       const el = e.target as HTMLElement;
       const typing = el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA");
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        if (reviewScope) return;
         e.preventDefault();
         setPaletteOpen((v) => !v);
         return;
@@ -635,6 +692,7 @@ export default function App() {
       // modifier combos - Ctrl+F, Cmd+F, Ctrl+G, Ctrl+J … belong to the
       // browser/OS, not to the pivot/move keys.
       if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (reviewScope) return;
       const d = cursorIndex;
       const moveTo = (nd: number) => {
         const ev = rowAtDisplay(nd);
@@ -675,7 +733,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, lineageSeq, uiView, handleRowClick, closeInspector, cursorIndex]);
+  }, [connected, events, cursorSeq, selected, terms.length, pivot, clearQ, help.open, settingsOpen, lineageSeq, uiView, handleRowClick, closeInspector, cursorIndex, reviewScope, huntPivot]);
 
   const toggleCapture = async () => {
     if(captureBusy)return;
@@ -735,8 +793,17 @@ export default function App() {
     finally { exportAbort.current=null;setExporting(false); }
   };
 
+  const sourcesRecovery = useCallback((state: RecoveryState) => {setSavedCapture(state.capture);setCapturing(state.active);}, []);
+  const restoreSource = async (state: RecoveryState, resume: boolean) => {
+    if (!connected) return restoreDataset(state, resume);
+    if (resume && !state.active) await backend.resumeCapture();
+    else if (!resume && state.active) await backend.stopCapture();
+    sourcesRecovery(await backend.getRecoveryState());
+  };
+
   const commands: Command[] = useMemo(
     () => [
+      { id: "sources", label: "Open Sources…", run: () => setSourcesOpen(true) },
       { id: "cap", label: capturing ? "Pause capture" : "Resume capture", hint: "", run: toggleCapture },
       ...(capInfra ? [{ id: "teardown", label: capInfra.owned ? "Remove capture infrastructure…" : "Disconnect queue…", run: teardownCapture }] : []),
       { id: "follow", label: follow ? "Stop following tail" : "Follow live tail", run: () => (follow ? setFollow(false) : repin()) },
@@ -760,25 +827,28 @@ export default function App() {
     <div className={`app ${connected && uiView === "console" ? "app--workbench" : ""}`}>
       <TitleBar
         connected={connected}
-        canExport={uiView === "console" && events.length > 0}
-        canExportMatches={uiView === "console" && !exporting && !querying && !queryFailure && resultsFilter.current === filter && !!agg.snapshot}
+        sourceLabel={connected ? (capInfra ? `${capInfra.account} · ${capInfra.region}` : config?.mode === "import-dump" ? "Imported CloudTrail evidence" : "CloudTrail activity") : undefined}
+        canExport={uiView === "console" && !reviewScope && events.length > 0}
+        canExportMatches={uiView === "console" && !reviewScope && !exporting && !querying && !queryFailure && resultsFilter.current === filter && !!agg.snapshot}
         onExportMatches={exportMatches}
         view={uiView}
-        onView={setUiView}
+        onView={selectView}
         onOpenDataset={openDataset}
+        onSources={() => setSourcesOpen(true)}
         onExport={exportSelection}
         onHelp={(t) => setHelp({ open: true, tab: t })}
         onSettings={() => setSettingsOpen(true)}
       />
       <ComparisonBar />
+      {connected && uiView === "analysis" && <div className="context-modebar"><button className="tb-btn" onClick={() => selectView("console")}>← Back to logs</button><span>Activity analysis · Workbench context</span></div>}
       {exportNotice && <div className="search-notice" role="status"><span>{exportNotice}</span>
         {exporting ? <button className="btn-ghost" onClick={()=>exportAbort.current?.abort()}>Cancel export</button>
           : <button className="btn-ghost" onClick={()=>setExportNotice("")}>Dismiss</button>}
       </div>}
-      {!connected ? (
-        <ConnectionScreen onConnect={connect} onRestore={restoreDataset} />
-      ) : uiView === "hunts" ? <HuntView filter={filter}/> : uiView === "analysis" ? <AnalysisView filter={filter}/> : uiView === "sigma" ? (
-        <SigmaView
+      {!connected && <ConnectionScreen onConnect={connect} onRestore={restoreDataset} />}
+      {connected && visitedViews.includes("analysis") && <WorkspaceActivity.Provider value={uiView === "analysis"}><div className="workspace-page" hidden={uiView !== "analysis"}><AnalysisView filter={filter}/></div></WorkspaceActivity.Provider>}
+      {connected && visitedViews.includes("hunts") && <WorkspaceActivity.Provider value={uiView === "hunts"}><div className="workspace-page" hidden={uiView !== "hunts"}>
+        <HuntWorkspace filter={filter}
           columns={columns}
           visibleCols={visibleCols}
           colWidths={colWidths}
@@ -788,16 +858,19 @@ export default function App() {
           onResizeColumn={resizeColumn}
           onReorderColumns={moveColumn}
           onToggleColumn={toggleColumn}
-          onPivot={pivot}
+          onPivot={pivotFromHunt}
           onOpenLineage={setLineageSeq}
         />
-      ) : (
-      <>
-      <div className="workbench-context">
-        <div><h1>Event workbench</h1><span>{capInfra ? `${capInfra.account} · ${capInfra.region}` : config?.mode === "import-dump" ? "Imported evidence" : "CloudTrail activity"}</span></div>
-        <span className="workbench-scope">{datasetTotal.toLocaleString()} recorded events · {backend.live ? "Local evidence" : "Browser preview"}</span>
-      </div>
-      <Toolbar
+      </div></WorkspaceActivity.Provider>}
+      {connected && huntPivot && uiView === "console" && <HuntPivotResults key={JSON.stringify(huntPivot)} scope={huntPivot} onReturn={selectView} tableProps={{
+        columns, colWidths, rowHeight: Math.max(rowH,42), onResizeColumn: resizeColumn, onReorderColumns: moveColumn,
+        isSensitive: isSensitiveFn, timeZone, onPivot: pivotFromHunt,
+      }}/>}
+      {connected && <WorkspaceActivity.Provider value={uiView === "console" && !huntPivot}><main key={datasetSession} className="workbench-page" hidden={uiView !== "console" || !!huntPivot}>
+      <fieldset className="workbench-search" disabled={!!reviewScope}>
+        <QueryBar terms={terms} queryText={queryText} error={compiled.error} inputRef={queryInputRef}
+          onQueryChange={setQueryText} onRemove={removeQ} onClear={clearQ} />
+      <Toolbar compact
         capturing={capturing}
         follow={follow}
         live={backend.live}
@@ -827,30 +900,32 @@ export default function App() {
         onTimeRange={applyTimeRange}
         onClearTime={clearTime}
       />
-      {savedCapture && <div className="capture-status">
-        <details><summary>{capturing ? "Capture running" : savedCapture.phase === "ready" ? "Capture paused" : "Capture needs cleanup"} · {savedCapture.infra.account} · {savedCapture.infra.region} <span>Resources retained after exit</span></summary><CaptureDescription capture={savedCapture} /></details>
-        <button className="btn-ghost" disabled={captureBusy} onClick={teardownCapture}>{savedCapture.infra.owned ? "Remove infrastructure…" : "Disconnect queue…"}</button>
-      </div>}
-      <div className="workbench-search">
-        <div className="workbench-search-tools">
-          <button className={`tb-btn ${!sidebarCollapsed ? "active" : ""}`} aria-expanded={!sidebarCollapsed} onClick={() => setSidebarCollapsed(v => !v)}>Filters</button>
-          <button className={`tb-btn ${!histCollapsed ? "active" : ""}`} aria-expanded={!histCollapsed} onClick={() => setHistCollapsed(v => !v)}>Histogram</button>
+      </fieldset>
+      <div className={`workbench-session ${sidebarCollapsed && !reviewScope ? "workbench-session--no-filters" : ""}`}>
+        <div className="workbench-facet-slot">
+          <div className="workbench-facet-holder" hidden={!!reviewScope}><FacetSidebar facets={facets} collapsed={sidebarCollapsed} activeValues={activeValues} activeExcludes={activeExcludes}
+            onToggleCollapse={() => setSidebarCollapsed(v => !v)} onPick={pivot} /></div>
+          {reviewScope && <aside className="review-context-facets" aria-label="Context relationships"><h3>Related activity</h3><p>±{reviewScope.minutes} min · full snapshot</p>{REVIEW_RELATIONS.map(([relation,label]) => <button key={relation} aria-pressed={reviewScope.relation === relation} onClick={() => setReviewScope({...reviewScope, relation})}>{label}</button>)}<p>Counts appear in the results after querying. Browsing facets are retained for your return.</p></aside>}
         </div>
-        <QueryBar terms={terms} queryText={queryText} error={compiled.error} inputRef={queryInputRef}
-          onQueryChange={setQueryText} onRemove={removeQ} onClear={clearQ} />
-      </div>
+        <div className="workbench-main">
+
+
+      {savedCapture && <div className="capture-status"><span>{capturing ? "Capture running" : savedCapture.phase === "ready" ? "Capture paused" : "Capture needs cleanup"} · {savedCapture.infra.account} · {savedCapture.infra.region}</span><button className="btn-ghost" onClick={() => setSourcesOpen(true)}>Manage Sources</button></div>}
+
+      <div className="workbench-body">
+        <WorkspaceActivity.Provider value={uiView === "console" && !reviewScope && !huntPivot}>
+        <section className="workbench-results" aria-label="Event results" hidden={!!reviewScope}>
+          <div className="workbench-list-heading">
+            <strong>{agg.total.toLocaleString()} events</strong>
+            <span>{stats.errors.toLocaleString()} errors · {stats.principals.toLocaleString()} principals</span>
+            <span className="workbench-order">Newest received first · {timeZone === "utc" ? "UTC" : "Local time"}</span>
+            <button className="tb-btn" aria-expanded={!histCollapsed} onClick={() => setHistCollapsed(v => !v)}>Activity</button>
+            <button className="tb-btn" aria-expanded={summaryOpen} onClick={() => setSummaryOpen(v => !v)}>Summarize</button>
+          </div>
       {!histCollapsed && <HistogramStrip hist={hist} collapsed={false} timeZone={timeZone}
         onToggleCollapse={() => setHistCollapsed(true)}
         onBrush={(from, to) => addQ(timeTerm(from, to, `${fmtClock(from, timeZone)}–${fmtClock(to, timeZone)}`))} />}
-      <div className={`workbench-body ${sidebarCollapsed ? "workbench-body--no-filters" : ""}`}>
-        {!sidebarCollapsed && <FacetSidebar facets={facets} collapsed={false} activeValues={activeValues}
-          onToggleCollapse={() => setSidebarCollapsed(true)} onPick={pivot} />}
-        <section className="workbench-results" aria-label="Event results">
-          <div className="workbench-list-heading">
-            <strong>{agg.total.toLocaleString()} matches</strong>
-            <span>{stats.errors.toLocaleString()} errors · {stats.principals.toLocaleString()} principals</span>
-            <span className="workbench-order">Newest received first · {timeZone === "utc" ? "UTC" : "Local time"}</span>
-          </div>
+          {summaryOpen && <section className="workbench-summary" aria-label="Activity summary"><AnalysisView filter={filter}/></section>}
           {queryFailure ? (
             <div className="search-notice search-notice--error" role="alert">
               <div><strong>Search failed.</strong> Displayed results have not been updated. Retry to refresh them.
@@ -867,9 +942,9 @@ export default function App() {
             events={events}
             columns={columns}
             colWidths={colWidths}
-            rowHeight={presetKey === "workbench" ? Math.max(rowH, 52) : rowH}
-            selected={selected}
-            cursorSeq={cursorSeq}
+            rowHeight={presetKey === "workbench" ? Math.max(rowH, 42) : rowH}
+            selected={reviewScope ? browseSelection.current?.event ?? null : selected}
+            cursorSeq={reviewScope ? browseSelection.current?.cursor ?? -1 : cursorSeq}
             follow={follow}
             onSelect={handleRowClick}
             onCursor={setCursorSeq}
@@ -888,14 +963,29 @@ export default function App() {
           />
           <div className="workbench-list-footer">↑ ↓ Inspect events · / Search · {events.length.toLocaleString()} loaded</div>
         </section>
-        <EventInspector key={selected?.seq ?? "empty"} event={selected} snapshot={selectedSnapshot ?? undefined} rawJSON={selectedRaw}
+        </WorkspaceActivity.Provider>
+        {reviewScope && <ReviewContext scope={reviewScope} onChange={setReviewScope} onClose={endContext} onInspect={inspectContext} tableProps={{
+          detailMode: "external", compact: presetKey === "workbench", columns, colWidths, rowHeight: Math.max(rowH,42), selected, cursorSeq,
+          onCursor: setCursorSeq, onPivot: reviewPivot, onResizeColumn: resizeColumn, onReorderColumns: moveColumn,
+          onRetryDetail: retryDetail, onOpenLineage: setLineageSeq, isSensitive: isSensitiveFn, timeZone,
+        }}/>}
+        <EventInspector layout="review" pivotLabel={reviewScope ? "Return and filter Events" : "Filter current results"} event={selected} snapshot={selectedSnapshot ?? undefined} rawJSON={selectedRaw}
           rawLoading={!!selected && !selectedRaw && !selectedRawErr}
           rawError={selectedRawErr ? "Could not load this event." : undefined}
           lineage={selectedLineage} lineageLoading={!!selected && hasCredentialLineage(selected) && !selectedLineage && !selectedLineageError}
-          lineageError={selectedLineageError} onRetry={retryDetail} onPivot={pivot}
+          lineageError={selectedLineageError} onRetry={retryDetail} onPivot={reviewPivot}
+          onInvestigate={(event,snapshot) => beginContext(event,snapshot)}
+          onPrevious={() => openAt(cursorIndex-1)} onNext={() => openAt(cursorIndex+1)}
+          canPrevious={!reviewScope && cursorIndex>0} canNext={!reviewScope && cursorIndex>=0 && cursorIndex<events.length-1}
+          reviewContext={selected && selectedSnapshot ? <details className="review-related"><summary>Related event shortcuts</summary>
+            {REVIEW_RELATIONS.filter(([relation]) => relation !== "all").map(([relation,label]) => <button key={relation} onClick={() => beginContext(selected,selectedSnapshot,relation)}>{label}<span>→</span></button>)}
+            <small>Query ±2 min in the selected snapshot · browsing filters not applied</small>
+          </details> : undefined}
           onOpenLineage={setLineageSeq} onClose={closeInspector} timeZone={timeZone} />
       </div>
-      <StatusBar
+        </div>
+      </div>
+      {reviewScope ? <div className="review-context-status">Contextual activity · fixed evidence snapshot · browsing filters retained</div> : <StatusBar
         streaming={!captureBusy && (savedCapture?.phase === "ready" || (!savedCapture && config?.mode !== "import-dump"))}
         following={follow}
         live={backend.live}
@@ -907,21 +997,26 @@ export default function App() {
         source={capInfra ? `sqs · ${capInfra.region} · ${capInfra.account}` : undefined}
         loading={querying}
         onRepin={repin}
-      />
-      </>
-      )}
+      />}
+      </main></WorkspaceActivity.Provider>}
+      {sourcesOpen && <SourcesPanel capturing={capturing}
+        onPause={async () => {await backend.stopCapture(); sourcesRecovery(await backend.getRecoveryState());}}
+        onConnect={connect} onRestore={restoreSource} onRecovery={sourcesRecovery} onClose={() => setSourcesOpen(false)} />}
       {lineageSeq != null && (
+        <WorkspaceActivity.Provider value={uiView === "console"}>
         <ErrorBoundary label="Lineage view" onReset={() => setLineageSeq(null)}>
           <LineageView
             seq={lineageSeq}
+            eventLabel={lineageSeq === selected?.seq ? `${selected.eventName} · ${selected.eventID}` : undefined}
             initialSnapshot={uiView === "console" && lineageSeq === selected?.seq ? selectedSnapshot ?? undefined : undefined}
             onClose={() => setLineageSeq(null)}
             onPivot={(f, v, o) => {
-              pivot(f, v, o);
+              reviewPivot(f, v, o);
               setLineageSeq(null);
             }}
           />
         </ErrorBoundary>
+        </WorkspaceActivity.Provider>
       )}
       <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
       <HelpModal

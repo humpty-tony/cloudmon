@@ -108,7 +108,7 @@ func investigateUsing(ctx context.Context, tx *sql.Tx, options InvestigationOpti
 		}
 		q := fmt.Sprintf(`SELECT %s,accessKeyId,json_extract_string(raw,'$.sharedEventID') AS sharedID,json_extract_string(raw,'$.requestID') AS requestID,
    (SELECT count(DISTINCT o.raw) FROM observations o WHERE o.eventKey=events.eventKey) AS variants
-   FROM events WHERE seq=%d AND seq<=%d`, pageCols, options.Seq, result.Snapshot.MaxSeq)
+   FROM events WHERE seq=%d AND seq<=%d`, displayCols, options.Seq, result.Snapshot.MaxSeq)
 		if err = query(q, &seeds); err != nil {
 			return err
 		}
@@ -196,7 +196,7 @@ func investigateUsing(ctx context.Context, tx *sql.Tx, options InvestigationOpti
    FROM window_events e), retained AS (
    SELECT *,count(*) OVER () AS total FROM flags WHERE seq=%d OR (%s)
    ORDER BY (seq=%d) DESC,abs(eventMs-%d),eventMs,seq LIMIT %d)
-   SELECT * FROM retained ORDER BY eventMs,seq`, pageCols, shared, credential, principal, network, request, options.Seq, options.Seq, predicate, options.Seq, anchorTime.UnixMilli(), investigationLimit)
+   SELECT * FROM retained ORDER BY eventMs,seq`, displayCols, shared, credential, principal, network, request, options.Seq, options.Seq, predicate, options.Seq, anchorTime.UnixMilli(), investigationLimit)
 		if err = query(q, &rows); err != nil {
 			return err
 		}

@@ -7,7 +7,7 @@ export interface Preset {
 }
 
 export const PRESETS: Preset[] = [
-  { key: "workbench", label: "Workbench", columns: ["time", "name", "result"] },
+  { key: "workbench", label: "Workbench", columns: ["time", "name", "identity", "target", "ip", "result"] },
   { key: "triage", label: "Triage", columns: ["time", "identity", "name", "source", "region", "ip", "result"] },
   { key: "identity", label: "Identity", columns: ["time", "identity", "identityType", "name", "account", "result"] },
   { key: "network", label: "Network", columns: ["time", "ip", "identity", "name", "source", "region", "result"] },

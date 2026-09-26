@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { SourceText } from "./SourceText";
+import { WorkspaceOverlay } from "./WorkspaceActivity";
 
 interface Props {
   title: string;
@@ -8,7 +9,11 @@ interface Props {
   onClose: () => void;
 }
 
-export function RawJsonModal({ title, json, onClose }: Props) {
+export function RawJsonModal(props: Props) {
+  return <WorkspaceOverlay onClose={props.onClose}><RawJsonContent {...props}/></WorkspaceOverlay>;
+}
+
+function RawJsonContent({ title, json, onClose }: Props) {
   const [status, setStatus] = useState<"idle" | "ok" | "fail">("idle");
   const close=useRef<HTMLButtonElement>(null);
   useEffect(()=>{

@@ -6,8 +6,10 @@ import { filterFieldValue, eventUser, identityGlyph, truncateArn } from "../api/
 import type { ColumnDef } from "../api/columns";
 import type { TimeZonePref } from "../api/settings";
 import { InlineDetail } from "./InlineDetail";
+import { useWorkspaceActive } from "./WorkspaceActivity";
 
 interface Props {
+  keyboardNavigation?: boolean; // opt in where the owner has no grid key handler
   detailMode?: "inline" | "external";
   compact?: boolean;
   events: CloudTrailEvent[]; // newest-first; rendered newest-on-top (index 0 = top row)
@@ -55,10 +57,14 @@ function TimeCell({ e, tz }: { e: CloudTrailEvent; tz: TimeZonePref }) {
   );
 }
 
-function IdentityCell({ e }: { e: CloudTrailEvent }) {
+function IdentityCell({ e, compact }: { e: CloudTrailEvent; compact?: boolean }) {
   const ui = e.userIdentity;
+  if (compact) return <span className="workbench-action" title={ui.arn || ui.principalId}>
+    <span className="workbench-action-name">{ui.userName || ui.roleArn?.split("/").pop() || eventUser(e)}<AliasBadge kind="arn" value={ui.arn || ""}/></span>
+    <span className="workbench-action-meta">{ui.sessionName || ui.type}</span>
+  </span>;
   return (
-    <span className="c-ident">
+    <span className="c-ident" title={ui.arn || ui.principalId || eventUser(e)}>
       <span className={`c-ident-glyph t-${ui.type}`}>{identityGlyph(ui.type)}</span>
       <span className="c-ident-name">{eventUser(e)}</span>
       {ui.arn && <span className="c-ident-arn">{truncateArn(ui.arn, 22)}</span>}
@@ -79,7 +85,7 @@ function ResultCell({ e }: { e: CloudTrailEvent }) {
   return (
     <span className="c-result">
       <span className="dot-sev ok" />
-      <span className="c-result-ok">Success</span>
+      <span className="c-result-ok" title="No error code recorded; not a benignness verdict">No error</span>
     </span>
   );
 }
@@ -112,18 +118,21 @@ const EventRow = memo(function EventRow({
       }}
     >
       {columns.map((c) => {
-        const rawVal = filterFieldValue(e, c.field);
+        // The actor label can be derived from an ARN even when its indexed
+        // principal ID is absent. Missing IDs are not an identity grouping.
+        const pivotField = c.key === "identity" && !e.userIdentity.principalId ? "identityArn" : c.field;
+        const rawVal = filterFieldValue(e, pivotField);
         const displayValue = c.get(e);
         let content;
         if (c.key === "time") content = <TimeCell e={e} tz={timeZone} />;
-        else if (c.key === "identity") content = <IdentityCell e={e} />;
+        else if (c.key === "identity") content = <IdentityCell e={e} compact={compact} />;
         else if (c.key === "result") content = <ResultCell e={e} />;
         else if (c.key === "name" && compact) content = <span className="workbench-action">
           <span className="workbench-action-name">{e.eventName}</span>
-          <span className="workbench-action-meta">{eventUser(e)}<AliasBadge kind="arn" value={e.userIdentity.arn || ""} /></span>
+          <span className="workbench-action-meta">{columns.some(column => column.key === "identity") ? e.eventSource.replace(/\.amazonaws\.com$/, "") : eventUser(e)}</span>
         </span>;
         else content = displayValue;
-        const pivotable = c.field !== "eventTime";
+        const pivotable = c.field !== "eventTime" && c.pivotable !== false && (c.key !== "identity" || !!rawVal);
         return (
           <div key={c.key} role="cell" className={`cell ${c.mono ? "mono" : ""} c-${c.key}`} title={displayValue}>
             <span className="cell-inner">{content}{c.key!=="identity"&&<AliasBadge field={c.field} value={rawVal}/>}</span>
@@ -134,7 +143,7 @@ const EventRow = memo(function EventRow({
                   title={`Filter for ${rawVal}`}
                   onClick={(ev) => {
                     ev.stopPropagation();
-                    onPivot(c.field, rawVal, "include");
+                    onPivot(pivotField, rawVal, "include");
                   }}
                 >
                   <span className="pv-loupe">⌕</span>
@@ -145,7 +154,7 @@ const EventRow = memo(function EventRow({
                   title={`Filter out ${rawVal}`}
                   onClick={(ev) => {
                     ev.stopPropagation();
-                    onPivot(c.field, rawVal, "exclude");
+                    onPivot(pivotField, rawVal, "exclude");
                   }}
                 >
                   <span className="pv-loupe">⌕</span>
@@ -161,6 +170,7 @@ const EventRow = memo(function EventRow({
 });
 
 export const EventTable = memo(function EventTable({
+  keyboardNavigation = false,
   detailMode = "inline",
   compact = false,
   events,
@@ -223,12 +233,16 @@ export const EventTable = memo(function EventTable({
   const getItemKey = useCallback((index: number) => events[index].seq, [events]);
   const getScrollElement = useCallback(() => parentRef.current, []);
   const estimateSize = useCallback(() => rowHeight, [rowHeight]);
+  const workspaceActive = useWorkspaceActive();
   const rowVirtualizer = useVirtualizer({
     count: n,
     getScrollElement,
     estimateSize,
     overscan: 10,
     getItemKey,
+    // display:none reports zero-height rows. Keep their measured sizes so the
+    // same scroll offset still identifies the same events when returning.
+    useCachedMeasurements: !workspaceActive,
   });
 
   useEffect(() => {
@@ -309,7 +323,10 @@ export const EventTable = memo(function EventTable({
   const virtualItems = rowVirtualizer.getVirtualItems();
   const totalSize = rowVirtualizer.getTotalSize();
   const padTop = virtualItems.length ? virtualItems[0].start : 0;
-  const padBottom = virtualItems.length ? totalSize - virtualItems[virtualItems.length - 1].end : 0;
+  // A hidden retained workspace has no virtual range. Keep its full spacer so
+  // restoring the pane cannot clamp the native scroll offset to zero before
+  // ResizeObserver repopulates the visible rows.
+  const padBottom = virtualItems.length ? totalSize - virtualItems[virtualItems.length - 1].end : totalSize;
 
   return (
     <div className={`etable ${compact ? "etable--compact" : ""}`} role="table" aria-label="CloudTrail events" aria-rowcount={n}>
@@ -354,7 +371,20 @@ export const EventTable = memo(function EventTable({
           ))}
         </div>
       </div>
-      <div className="etbody" ref={parentRef} onScroll={onScroll} tabIndex={0} aria-label="Event list; use arrow keys to inspect events">
+      <div className="etbody" ref={parentRef} onScroll={onScroll} tabIndex={0} aria-label="Event list; use arrow keys to inspect events" onKeyDown={event => {
+        if (!keyboardNavigation || !workspaceActive || !n || event.ctrlKey || event.metaKey || event.altKey) return;
+        if ((event.target as HTMLElement).closest('button, a, input, textarea, select, [contenteditable="true"]')) return;
+        const index = events.findIndex(item => item.seq === cursorSeq);
+        const next = event.key === "ArrowDown" ? Math.min(n-1, index+1)
+          : event.key === "ArrowUp" ? Math.max(0, index-1)
+          : event.key === "Home" ? 0 : event.key === "End" ? n-1
+          : event.key === "Enter" ? Math.max(0, index) : -1;
+        if (next < 0) return;
+        event.preventDefault(); event.stopPropagation();
+        const item = events[next];
+        onCursor(item.seq);
+        if (selected?.seq !== item.seq) onSelect(item);
+      }}>
         {n === 0 && (
           <div className="et-empty">
             No events to show - adjust filters, widen the time range, or import a dump. Press <kbd>?</kbd> for help.
@@ -371,7 +401,6 @@ export const EventTable = memo(function EventTable({
               "row",
               ri % 2 === 0 ? "row--zebra" : "",
               sev,
-              e.readOnly ? "row--readonly" : "",
               expanded ? "row--selected" : "",
               e.seq === cursorSeq ? "row--cursor" : "",
             ].join(" ");

@@ -97,7 +97,7 @@ func pageOn(ctx context.Context, tx *sql.Tx, f Filter, snapshot Snapshot, before
 	}
 	limit = min(limit, 2000)
 	var rows []Row
-	err = queryJSONOn(ctx, tx, fmt.Sprintf("SELECT %s FROM events%s ORDER BY seq DESC LIMIT %d", pageCols, where, limit), &rows)
+	err = queryJSONOn(ctx, tx, fmt.Sprintf("SELECT %s FROM events%s ORDER BY seq DESC LIMIT %d", displayCols, where, limit), &rows)
 	return rows, err
 }
 
