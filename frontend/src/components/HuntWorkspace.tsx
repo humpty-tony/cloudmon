@@ -38,8 +38,8 @@ export function HuntWorkspace({filter,...sigma}: HuntWorkspaceProps) {
   };
   return <main className="hunt-workspace" aria-label="Hunt workspace">
     <header className="hw-toolbar"><div role="tablist" aria-label="Hunt modes">
-      {MODES.map((item,index)=><button key={item.id} ref={element=>{tabs.current[index]=element}} type="button" role="tab" id={`${id}-${item.id}`} aria-controls={`${id}-${item.id}-panel`} aria-selected={mode===item.id} tabIndex={mode===item.id?0:-1} onKeyDown={event=>navigate(event,index)} onClick={()=>setMode(item.id)}>{item.label}</button>)}
-    </div><span>{MODES.find(item=>item.id===mode)?.purpose}</span></header>
+      {MODES.map((item,index)=><button key={item.id} title={item.purpose} ref={element=>{tabs.current[index]=element}} type="button" role="tab" id={`${id}-${item.id}`} aria-controls={`${id}-${item.id}-panel`} aria-selected={mode===item.id} tabIndex={mode===item.id?0:-1} onKeyDown={event=>navigate(event,index)} onClick={()=>setMode(item.id)}>{item.label}</button>)}
+    </div></header>
     {MODES.map(item=><WorkspaceActivity.Provider key={item.id} value={active && mode===item.id}><section className="hw-panel" role="tabpanel" id={`${id}-${item.id}-panel`} aria-labelledby={`${id}-${item.id}`} hidden={mode!==item.id}>
       {item.id==="rules"?<SigmaView {...sigma}/>:<HuntView filter={filter} fixedMode={item.id} savedLoad={loads[item.id]} onLoadSaved={loadSaved} inspector={{timeZone:sigma.timeZone,onPivot:sigma.onPivot}}/>}
     </section></WorkspaceActivity.Provider>)}

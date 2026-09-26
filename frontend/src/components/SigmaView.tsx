@@ -154,11 +154,10 @@ export function SigmaView(p: SigmaViewProps) {
 
   return (
     <div className="sigma-workbench">
-      <div className="sg-snapshot">Scope: all loaded evidence. Current event filters are not applied; the Sigma engine evaluates the full snapshot. Use rule conditions to narrow matches.</div>
-      <div className="sg-mode"><button className="btn-ghost" onClick={()=>setMode(mode==="single"?"suite":"single")}>{mode==="single"?"Rule suite":"Rule editor"}</button><span>Matches are leads to investigate; they do not establish malicious activity.</span></div>
-      <WorkspaceActivity.Provider value={workspaceActive && mode==="suite"}><div className="sg-suite-container" hidden={mode!=="suite"} style={{display:mode==="suite"?"flex":"none",flex:1,minHeight:0}}><SigmaSuite saved={userRules} onOpen={(yaml,result)=>{loadRule(yaml);setOut(result);setShowEditor(!result.parsed||!result.supported);setMode("single")}}/></div></WorkspaceActivity.Provider>
-      <WorkspaceActivity.Provider value={workspaceActive && mode==="single"}><div hidden={mode!=="single"} className="sg-rule-controls">
-        <div className="sg-ed-head">
+      <div className="hunt-commandbar sg-commandbar" role="group" aria-label="Rule controls">
+        <span className="sg-scope" title="Scope: all loaded evidence, across the full snapshot. Events filters are not applied; use rule conditions to narrow matches.">All evidence · Events filters not applied</span>
+        <button className="btn-ghost" onClick={()=>setMode(mode==="single"?"suite":"single")}>{mode==="single"?"Rule suite":"Rule editor"}</button>
+        <WorkspaceActivity.Provider value={workspaceActive && mode==="single"}><div hidden={mode!=="single"} className="sg-rule-controls">
           <Popover label="Choose a rule" menuClass="colmenu">
             {(close) => (
               <>
@@ -190,13 +189,16 @@ export function SigmaView(p: SigmaViewProps) {
           <button className="sg-run" onClick={run} disabled={running} title="Run (Ctrl/Cmd+Enter)">
             {running ? "…" : "▶ Run"}
           </button>
-        </div>
+        </div></WorkspaceActivity.Provider>
       </div>
+      <WorkspaceActivity.Provider value={workspaceActive && mode==="suite"}><div className="sg-suite-container" hidden={mode!=="suite"} style={{display:mode==="suite"?"flex":"none",flex:1,minHeight:0}}><SigmaSuite saved={userRules} onOpen={(yaml,result)=>{loadRule(yaml);setOut(result);setShowEditor(!result.parsed||!result.supported);setMode("single")}}/></div></WorkspaceActivity.Provider>
+      <WorkspaceActivity.Provider value={workspaceActive && mode==="single"}>
       <div className="sigma" hidden={mode!=="single"} style={mode==="single"?undefined:{display:"none"}}>
       {/* LEFT - matches */}
       <div className="sg-pane sg-left">
         <div className="sg-head">
           <span className="sg-title">Matches</span>
+          {status==="valid"&&<span className="sg-caution">Investigative leads, not verdicts</span>}
           {status === "valid" && (
             <span className="sg-sub">
               <b>{out!.matches.toLocaleString()}</b> match · {out!.scanned.toLocaleString()} scanned
@@ -213,7 +215,7 @@ export function SigmaView(p: SigmaViewProps) {
         {selected&&out?.explanations[selected.seq]&&<section className="sg-explanations" aria-label="Selection explanations"><strong>Why this event matched</strong><div>{out.explanations[selected.seq].map(reason=><span key={reason.name} className={reason.matched?"matched":"unmatched"}>{reason.matched?"✓":"−"} {reason.name}: {reason.matched?"matched":"did not match"}</span>)}</div><small>Selection results for this event. The rule condition combines these; count thresholds use the full snapshot.</small></section>}
         <div className="sg-body" ref={resultBody}>
           {status === "idle" && (
-            <div className="sg-empty">Choose a rule above, then press <b>Run</b> to test it. No rule runs automatically.</div>
+            <div className="sg-empty">Choose a rule, then press <b>Run</b>.</div>
           )}
           {status !== "valid" && status !== "idle" && <div className="sg-empty">Rule not run — open Edit YAML to review diagnostics.</div>}
           {status === "valid" && events.length === 0 && <div className="sg-empty">No events match this rule.</div>}

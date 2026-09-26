@@ -42,7 +42,7 @@ async function popoverRegression(page) {
   }
   assert.ok(reached,'Hunt navigation must be reachable with the Columns menu open');
   await page.keyboard.press('Enter');
-  await page.getByRole('textbox',{name:'Typed indicators',exact:true}).waitFor();
+  await openIndicatorBulk(page);await page.getByRole('textbox',{name:'Typed indicators',exact:true}).waitFor();
   assert.equal(await page.locator('.workbench-page').isVisible(),false);
   await settle(page);
   assert.equal(await page.locator('.pop-menu, .pop-backdrop').count(),0,'Deactivated Workbench leaked its Columns portal/backdrop over Hunt');
@@ -139,7 +139,7 @@ async function sourceFocusRegression(page) {
 async function prepareRaw(page, owner) {
   await enterOwner(page,owner);
   if(owner==='Hunt') {
-    await page.getByRole('textbox',{name:'Typed indicators',exact:true}).fill('ip 198.51.100.24');
+    await openIndicatorBulk(page);await page.getByRole('textbox',{name:'Typed indicators',exact:true}).fill('ip 198.51.100.24');
     await page.getByRole('button',{name:'Run hunt',exact:true}).click();
     await page.locator('.hunt-detail code').waitFor();
   } else {
@@ -211,3 +211,10 @@ async function rawNavigationRegression(page, owner, returnFirst) {
     if(failures.length) throw new AggregateError(failures,`${failures.length} workspace overlay regression(s)`);
   } finally {await browser?.close();await server.close();}
 })().catch(error=>{console.error(error);process.exitCode=1});
+
+async function openIndicatorBulk(page) {
+  const choices=page.getByRole('button',{name:/^(Paste multiple indicators|Back to indicator list)$/});
+  await choices.waitFor();
+  const toggle=page.getByRole('button',{name:'Paste multiple indicators',exact:true});
+  if(await toggle.isVisible())await toggle.click();
+}

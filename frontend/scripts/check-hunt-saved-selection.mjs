@@ -43,10 +43,10 @@ try {
         await panel().getByText('Hunt saved on this device with a copy of its filter scope.').waitFor();
       };
       await page.goto('http://127.0.0.1:5194/hunt-saved-selection-fixture');
-      await field('Typed indicators').fill('ip 192.0.2.10');
+      await openIndicatorBulk(page);await field('Typed indicators').fill('ip 192.0.2.10');
       await panel().getByText(/^Saved hunts \(/).click();
       await create('Indicator A');
-      await field('Typed indicators').fill('ip 198.51.100.20');
+      await openIndicatorBulk(page);await field('Typed indicators').fill('ip 198.51.100.20');
       await field('Hunt scope').selectOption('workbench');
       await create('Indicator B');
       await field('Saved hunt').selectOption({label:'Indicator A'});
@@ -107,7 +107,7 @@ try {
         // A manual management choice/name must survive ordinary authoring edits.
         await field('Saved hunt').selectOption(a.id);
         await field('Hunt name').fill('Unsaved management name');
-        await field('Typed indicators').fill('ip 203.0.113.40');
+        await openIndicatorBulk(page);await field('Typed indicators').fill('ip 203.0.113.40');
         await field('Hunt scope').selectOption('all');
         await mode('Event sequences').click();await mode('Indicators').click();
         check('manual choice is not reset by edits or navigation',await field('Saved hunt').inputValue(),a.id);
@@ -119,7 +119,7 @@ try {
         await page.waitForFunction(()=>document.querySelector('.hw-panel:not([hidden]) [aria-label="Typed indicators"]')?.value==='ip 198.51.100.20');
         check('a repeated load of the same B resynchronizes selection',await field('Saved hunt').inputValue(),b.id);
         check('a repeated load of the same B resynchronizes name',await field('Hunt name').inputValue(),'Indicator B');
-        await field('Typed indicators').fill('ip 203.0.113.30');
+        await openIndicatorBulk(page);await field('Typed indicators').fill('ip 203.0.113.30');
         check('ordinary input edits keep B selected',await field('Saved hunt').inputValue(),b.id);
         await button('Update saved hunt').click();
       } else if(action==='Rename') {
@@ -157,4 +157,11 @@ try {
   await writeFile(new URL('observations.json',output),JSON.stringify({observations,failures,errors},null,2));
   if(browser)await browser.close();
   await server.close();
+}
+
+async function openIndicatorBulk(page) {
+  const choices=page.getByRole('button',{name:/^(Paste multiple indicators|Back to indicator list)$/});
+  await choices.waitFor();
+  const toggle=page.getByRole('button',{name:'Paste multiple indicators',exact:true});
+  if(await toggle.isVisible())await toggle.click();
 }

@@ -43,7 +43,7 @@ try{
  const grid=page.locator('.workbench-results .etbody');await grid.evaluate(e=>e.scrollTop=440);await page.waitForTimeout(120);await rows.nth(7).locator('.c-time').click();
  await page.locator('.qbar-input').fill('eventName=unapplied');
  const before=await grid.evaluate(e=>({scroll:e.scrollTop,selected:e.querySelector('.row--selected')?.getAttribute('data-event-seq')}));
- await page.getByRole('button',{name:'Hunt',exact:true}).click();await page.getByLabel('Typed indicators',{exact:true}).fill('ip 198.51.100.44');await page.getByRole('button',{name:'Run hunt',exact:true}).click();
+ await page.getByRole('button',{name:'Hunt',exact:true}).click();await openIndicatorBulk(page);await page.getByLabel('Typed indicators',{exact:true}).fill('ip 198.51.100.44');await page.getByRole('button',{name:'Run hunt',exact:true}).click();
  await page.getByText('2 matched events · 44 events in scope',{exact:true}).waitFor();
  const hunt=page.getByRole('main',{name:'Hunt workspace'});await hunt.getByRole('listitem').filter({hasText:'legacy-alice'}).click();
  await hunt.getByRole('button',{name:'Search all evidence by sourceIPAddress: 198.51.100.44',exact:true}).click();await page.waitForTimeout(250);
@@ -58,3 +58,10 @@ try{
  await page.waitForTimeout(120);assert.deepEqual(await grid.evaluate(e=>({scroll:e.scrollTop,selected:e.querySelector('.row--selected')?.getAttribute('data-event-seq')})),before,'Hunt pivot must preserve exact Workbench selection and nonzero scroll');
  assert.deepEqual(errors,[]);console.log('PASS IR-01: explicit full-evidence pivot, Hunt return and untouched Workbench query/draft/selection/scroll');
 }finally{await browser.close();await server.close()}
+
+async function openIndicatorBulk(page) {
+  const choices=page.getByRole('button',{name:/^(Paste multiple indicators|Back to indicator list)$/});
+  await choices.waitFor();
+  const toggle=page.getByRole('button',{name:'Paste multiple indicators',exact:true});
+  if(await toggle.isVisible())await toggle.click();
+}

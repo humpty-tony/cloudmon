@@ -27,7 +27,7 @@ try{
  await page.locator('.qbar-input').fill('eventName=unapplied');
  const before=await grid.evaluate(e=>({scroll:e.scrollTop,seq:e.querySelector('.row--selected')?.getAttribute('data-event-seq')}));
  await page.getByRole('button',{name:'Hunt',exact:true}).click();const hunt=page.getByRole('main',{name:'Hunt workspace'});
- await hunt.getByLabel('Typed indicators',{exact:true}).fill('ip 198.51.100.44');await hunt.getByRole('button',{name:'Run hunt',exact:true}).click();
+ await hunt.getByRole('button',{name:'Paste multiple indicators',exact:true}).click();await hunt.getByLabel('Typed indicators',{exact:true}).fill('ip 198.51.100.44');await hunt.getByRole('button',{name:'Run hunt',exact:true}).click();
  await hunt.getByText('5 matched events · 108 events in scope',{exact:true}).waitFor();
  await hunt.getByRole('listitem').filter({hasText:'GetSecretValue'}).click();await hunt.getByRole('button',{name:'198.51.100.44',exact:true}).click();
  const pivot=page.getByRole('region',{name:'Hunt pivot results',exact:true});await pivot.getByText('5 matching events',{exact:true}).waitFor();

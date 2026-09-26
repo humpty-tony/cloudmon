@@ -37,7 +37,7 @@ try{
   await page.getByRole('dialog',{name:'Compare original records',exact:true}).locator('.comparison-change').first().waitFor();
   observations.screens.at(-1).comparison=await page.locator('.comparison-dialog').evaluate(e=>({radius:getComputedStyle(e).borderTopLeftRadius,target:e.querySelector('.comparison-value-action').getBoundingClientRect().height}));
   await page.screenshot({path:fileURLToPath(new URL(`comparison-${width}.png`,out))});await page.keyboard.press('Escape');await page.getByRole('button',{name:'Clear comparison',exact:true}).click();
-  await page.getByRole('button',{name:'Hunt',exact:true}).click();await page.getByLabel('Typed indicators',{exact:true}).fill('ip 198.51.100.44');await page.screenshot({path:fileURLToPath(new URL(`hunt-${width}.png`,out))});
+  await page.getByRole('button',{name:'Hunt',exact:true}).click();await page.getByLabel('Indicator value',{exact:true}).fill('198.51.100.44');await page.getByRole('button',{name:'Add indicator',exact:true}).click();await page.screenshot({path:fileURLToPath(new URL(`hunt-${width}.png`,out))});
   const actionStyle=e=>{const s=getComputedStyle(e);return {background:s.backgroundColor,color:s.color,radius:s.borderTopLeftRadius,height:e.getBoundingClientRect().height}};
   observations.screens.at(-1).huntAction=await page.getByRole('button',{name:'Run hunt',exact:true}).evaluate(actionStyle);
   await page.getByRole('tab',{name:'Rules',exact:true}).click();await page.getByRole('button',{name:'Edit YAML',exact:true}).waitFor();await page.screenshot({path:fileURLToPath(new URL(`rules-${width}.png`,out))});

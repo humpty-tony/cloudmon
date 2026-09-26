@@ -949,7 +949,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.deepEqual(errors,[]);
   await page.getByRole('button',{name:'Hunt',exact:true}).click();
   assert.ok(await page.getByRole('button',{name:'Run hunt',exact:true}).isDisabled());
-  await page.getByLabel('Typed indicators',{exact:true}).fill('ip 192.0.2.1\narn arn:aws:s3:::evidence-bucket/audit/events.json');
+  await openIndicatorBulk(page);await page.getByLabel('Typed indicators',{exact:true}).fill('ip 192.0.2.1\narn arn:aws:s3:::evidence-bucket/audit/events.json');
   await page.getByRole('button',{name:'Run hunt',exact:true}).click();
   await page.getByText('600 matched events · 900 events in scope',{exact:true}).waitFor();
   assert.ok(await page.locator('.hunt-card').count()<20,'hunt rendered every result');
@@ -1073,7 +1073,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByLabel('Use console filters',{exact:true}).check();
   const originalHuntIndicators='ip 192.0.2.1\narn arn:aws:s3:::evidence-bucket/audit/events.json';
   const revisedHuntIndicators='ip 198.51.100.10\narn arn:aws:s3:::evidence-bucket/audit/events.json';
-  await page.getByLabel('Typed indicators',{exact:true}).fill(originalHuntIndicators);
+  await openIndicatorBulk(page);await page.getByLabel('Typed indicators',{exact:true}).fill(originalHuntIndicators);
   await page.locator('summary').filter({hasText:/^Saved hunts \(0\)$/}).click();
   await page.getByLabel('Hunt name',{exact:true}).fill('Scoped network triage');
   await page.getByRole('button',{name:'Save new hunt',exact:true}).click();
@@ -1110,7 +1110,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.deepEqual(await page.evaluate(()=>window.captureTest.huntCalls.at(-1).filter),currentHuntScope,'explicit scope replacement did not use current console filters');
   await page.getByRole('button',{name:'Load hunt',exact:true}).click();
   assert.equal(await page.locator('.hunt-card').count(),0,'loading retained old results');
-  await page.getByLabel('Typed indicators',{exact:true}).fill(revisedHuntIndicators);
+  await openIndicatorBulk(page);await page.getByLabel('Typed indicators',{exact:true}).fill(revisedHuntIndicators);
   await page.getByRole('button',{name:'Update saved hunt',exact:true}).click();
   await page.waitForFunction(value=>JSON.parse(localStorage.getItem('cloudmon.savedHunts')).items[0].config.indicatorText===value,revisedHuntIndicators);
   await page.getByLabel('Hunt name',{exact:true}).fill('Production network review');
@@ -1131,7 +1131,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
       return state.savedHuntCancel(id);
     };
   });
-  await page.getByLabel('Typed indicators',{exact:true}).fill(originalHuntIndicators);
+  await openIndicatorBulk(page);await page.getByLabel('Typed indicators',{exact:true}).fill(originalHuntIndicators);
   await page.getByRole('button',{name:'Run hunt',exact:true}).click();
   await page.waitForFunction(()=>!!window.captureTest.finishSavedHunt);
   await page.getByRole('button',{name:'Load hunt',exact:true}).click();
@@ -1381,3 +1381,10 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture','invalid search stays unapplied','failed search shows stale results and retries','clear resets unapplied draft'],errors}));
  } finally {await browser.close();await server.close()}
 })().catch(e=>{console.error(e);process.exit(1)});
+
+async function openIndicatorBulk(page) {
+  const choices=page.getByRole('button',{name:/^(Paste multiple indicators|Back to indicator list)$/});
+  await choices.waitFor();
+  const toggle=page.getByRole('button',{name:'Paste multiple indicators',exact:true});
+  if(await toggle.isVisible())await toggle.click();
+}

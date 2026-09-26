@@ -96,7 +96,7 @@ async function repeatedNavigation(page) {
     assert.ok(scrollBefore>0,'Retention must start from a nonzero scroll position');
     assert.ok(rowsBefore.includes(selectedSeq),`Selection must be in the visible scroll window: ${JSON.stringify({selectedSeq,scrollBefore,rowsBefore})}`);
     await page.getByRole('button',{name:'Hunt',exact:true}).click();
-    await page.getByRole('textbox',{name:'Typed indicators',exact:true}).fill('ip 198.51.100.24');
+    await openIndicatorBulk(page);await page.getByRole('textbox',{name:'Typed indicators',exact:true}).fill('ip 198.51.100.24');
     await page.getByRole('button',{name:'Workbench',exact:true}).click();
     assert.equal(await page.locator('.qbar-input').inputValue(),draft,'Leaving Workbench must retain an unapplied query draft');
     await settle(page);
@@ -106,7 +106,7 @@ async function repeatedNavigation(page) {
     assert.deepEqual(await visibleRows(page),rowsBefore,'Return must restore the same visible row identities, not an empty virtual range');
     assert.equal(await page.locator('.workbench-results .row[aria-selected="true"]').getAttribute('data-event-seq'),selectedSeq,'Selected seq changed after return');
     await page.getByRole('button',{name:'Hunt',exact:true}).click();
-    assert.equal(await page.getByRole('textbox',{name:'Typed indicators',exact:true}).inputValue(),'ip 198.51.100.24','Hunt draft was lost');
+    assert.equal(await page.getByLabel('Typed indicators',{exact:true}).inputValue(),'ip 198.51.100.24','Hunt draft was lost');
     await page.getByRole('button',{name:'Workbench',exact:true}).click();
     await repeatedNavigation(page);
     await page.getByRole('button',{name:'Hunt',exact:true}).click();
@@ -120,7 +120,7 @@ async function repeatedNavigation(page) {
     assert.match(await page.getByRole('button',{name:'Workbench',exact:true}).getAttribute('class'),/\bon\b/,'A new dataset must open in Workbench');
     assert.equal(await page.locator('.qbar-input').inputValue(),'','New dataset retained the previous unapplied query draft');
     await page.getByRole('button',{name:'Hunt',exact:true}).click();
-    assert.equal(await page.getByRole('textbox',{name:'Typed indicators',exact:true}).inputValue(),'','New dataset retained the previous unsaved hunt session');
+    assert.equal(await page.getByLabel('Typed indicators',{exact:true}).inputValue(),'','New dataset retained the previous unsaved hunt session');
     await page.getByRole('button',{name:'Workbench',exact:true}).click();
     assert.deepEqual(errors,[]);
     await page.screenshot({path:path.join(output,`navigation-${viewport.width}.png`)});
@@ -129,3 +129,10 @@ async function repeatedNavigation(page) {
     }
   } finally {await browser.close();await server.close();}
 })().catch(error=>{console.error(error);process.exitCode=1});
+
+async function openIndicatorBulk(page) {
+  const choices=page.getByRole('button',{name:/^(Paste multiple indicators|Back to indicator list)$/});
+  await choices.waitFor();
+  const toggle=page.getByRole('button',{name:'Paste multiple indicators',exact:true});
+  if(await toggle.isVisible())await toggle.click();
+}

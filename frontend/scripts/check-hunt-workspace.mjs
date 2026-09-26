@@ -23,9 +23,9 @@ const panel=()=>page.locator('.hw-panel:visible');
 await page.addInitScript(installHuntBridge);
 try {
   await page.goto('http://127.0.0.1:5194/hunt-workspace-fixture');
-  await page.getByLabel('Typed indicators',{exact:true}).waitFor();
+  await openIndicatorBulk(page);await page.getByLabel('Typed indicators',{exact:true}).waitFor();
   assert.equal(await page.getByRole('tablist',{name:'Hunt modes'}).count(),1,'Hunt must have one consolidated mode strip');
-  await page.getByLabel('Typed indicators',{exact:true}).fill('ip 192.0.2.10');
+  await openIndicatorBulk(page);await page.getByLabel('Typed indicators',{exact:true}).fill('ip 192.0.2.10');
   await mode('Event sequences').click();
   await page.getByLabel('Step A search',{exact:true}).fill('eventName="CreateUser"');
   await page.getByLabel('Step B search',{exact:true}).fill('eventName="CreateAccessKey"');
@@ -89,8 +89,8 @@ try {
   assert.equal(await mode('Event sequences').getAttribute('aria-selected'),'true');
   assert.equal(await panel().getByLabel('Step B search',{exact:true}).inputValue(),'eventName="CreateAccessKey"');
   await mode('Rules').click();
-  assert.match(await panel().innerText(),/Scope: all loaded evidence/,'Sigma must disclose its actual engine scope');
-  assert.match(await panel().innerText(),/Current event filters are not applied/,'Sigma must not pretend to accept the Workbench filter');
+  assert.match(await panel().innerText(),/All evidence/,'Sigma must disclose its actual engine scope');
+  assert.match(await panel().innerText(),/Events filters not applied/,'Sigma must not pretend to accept the Workbench filter');
   console.log('PASS scope forwarding, saved cross-mode routing, exact copied filters, no autorun, result retention');
   await panel().getByRole('button',{name:'▶ Run',exact:true}).click();
   await panel().getByText('✓ Ran · 8 matches',{exact:true}).waitFor();
@@ -256,7 +256,7 @@ try {
   try {
     await preview.goto('http://127.0.0.1:5194/hunt-workspace-fixture');
     assert.equal(await preview.evaluate(()=>!!window.go),false);
-    await preview.getByLabel('Typed indicators',{exact:true}).fill('ip 192.0.2.10');
+    await openIndicatorBulk(preview);await preview.getByLabel('Typed indicators',{exact:true}).fill('ip 192.0.2.10');
     await preview.getByRole('button',{name:'Run hunt',exact:true}).click();
     await preview.getByRole('alert').filter({hasText:'Investigation hunts require the desktop query engine.'}).waitFor();
     await preview.getByRole('tab',{name:'Rules',exact:true}).click();
@@ -267,4 +267,11 @@ try {
 } finally {
   await writeFile(new URL('browser-errors.json',output),JSON.stringify(errors,null,2));
   await browser.close();await server.close();
+}
+
+async function openIndicatorBulk(page) {
+  const choices=page.getByRole('button',{name:/^(Paste multiple indicators|Back to indicator list)$/});
+  await choices.waitFor();
+  const toggle=page.getByRole('button',{name:'Paste multiple indicators',exact:true});
+  if(await toggle.isVisible())await toggle.click();
 }
