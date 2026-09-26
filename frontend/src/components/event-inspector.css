@@ -68,6 +68,9 @@
 /* Analyst review only. Side / dock callers retain their existing composition. */
 .event-inspector--review .ei-head { align-items: center; min-height: 38px; gap: 7px; padding: 4px 14px; border-bottom: 1px solid var(--line-struct); }
 .event-inspector--review .ei-heading { flex: 1; }
+.event-inspector--review .ei-selected-pin { flex: none; }
+.event-inspector--review .ei-selected-pin button { padding: 4px 6px; border: 1px solid var(--border-fn); border-radius: 4px; background: var(--bg-1); color: var(--tx-1); white-space: nowrap; cursor: pointer; font: 11px/1.2 var(--sans); }
+.event-inspector--review .ei-selected-pin button:hover:not(:disabled) { background: var(--bg-3); border-color: var(--acc); }
 .event-inspector--review .ei-eyebrow { font-size: 9px; letter-spacing: 1.1px; }
 .event-inspector--review .ei-event-nav { display: flex; gap: 5px; }
 .event-inspector--review .ei-event-nav button { width: 27px; height: 27px; padding: 0; border: 0; border-radius: 3px; background: transparent; color: var(--tx-2); cursor: pointer; font: 16px var(--sans); }

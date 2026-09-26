@@ -136,11 +136,11 @@ function SelectedInspector({ event: e, layout = "side", snapshot, rawJSON, rawLo
       {e.errorMessage && <p className="ei-error-message" title={`${e.errorCode || "Error"}: ${e.errorMessage}`}>{e.errorMessage}</p>}
     </div>;
   const aroundAction = <button className="ei-investigate" disabled={!snapshot} title={`Around selected event: ${e.eventName} · ${e.eventID}`} onClick={() => onInvestigate ? handOff(() => onInvestigate(e, snapshot)) : setDialog("investigate")}>{dock || review || onInvestigate ? "Around this event" : "Investigate"}{review && <span aria-hidden="true"> →</span>}</button>;
+  const pinAction = <span className="ei-comparison">{hasRaw ? <PinComparisonButton event={e} json={rawJSON} /> : <button disabled title="Load the original record before pinning">Pin comparison</button>}</span>;
   const evidenceActions = <>
     <button disabled={!snapshot} title={`Sources / versions for selected event: ${e.eventName} · ${e.eventID}`} onClick={() => { setSourceSeq(e.seq); setDialog("sources"); }}>Sources &amp; hashes</button>
-    <span className="ei-comparison">{hasRaw ? <PinComparisonButton event={e} json={rawJSON} /> : <button disabled title="Load the original record before pinning">Pin comparison</button>}</span>
   </>;
-  const actions = <div className="ei-actions" aria-label={`Selected event actions: ${e.eventName} · ${e.eventID}`}>{aroundAction}{evidenceActions}</div>;
+  const actions = <div className="ei-actions" aria-label={`Selected event actions: ${e.eventName} · ${e.eventID}`}>{aroundAction}{evidenceActions}{pinAction}</div>;
   const lineageAction = <button className="ei-lineage-action" disabled={!snapshot} aria-haspopup="dialog" onClick={() => onOpenLineage ? handOff(() => onOpenLineage(e.seq)) : setDialog("lineage")}>View lineage <span aria-hidden="true">↗</span></button>;
   const details = <>
     <div className="ei-tabs" role="tablist" aria-label="Event details">
@@ -171,6 +171,7 @@ function SelectedInspector({ event: e, layout = "side", snapshot, rawJSON, rawLo
   return <>
     <header className="ei-head">
       <div className="ei-heading"><span className="ei-eyebrow">{dock || review ? "Selected event" : "Event inspector"}</span>{!review && <h2 title={`${e.eventName} · ${e.eventID}`}>{e.eventName}</h2>}</div>
+      {review && <div className="ei-selected-pin" aria-label={`Selected event comparison: ${e.eventName} · ${e.eventID}`}>{pinAction}</div>}
       {review && (onPrevious || onNext) && <div className="ei-event-nav" aria-label="Selected event navigation">
         <button onClick={onPrevious} disabled={!onPrevious || canPrevious === false} aria-label="Previous event" title="Previous event">↑</button>
         <button onClick={onNext} disabled={!onNext || canNext === false} aria-label="Next event" title="Next event">↓</button>

@@ -25,6 +25,34 @@ function summary(value:Value):ComparedValue {
   const [preview,truncated]=shorten(text,512);
   return {kind:type,text:preview,truncated};
 }
+// Deliberate, worker-only path inspection. Keep numeric lexemes exact and never
+// trust source objects impersonating LosslessNumber. Original text is untouched.
+export function readComparisonValue(json:string,path:string[]):string {
+  if(json.length>COMPARE_MAX_CHARS)throw Error(COMPARE_SIZE_ERROR);
+  const limit="Value inspection reached the 50,000-node, 64-level, or 8-million-character bound. Open the original record to inspect it.";
+  if(path.length>64)throw Error(limit);
+  let value=parseEvidence(json);
+  for(const key of path){
+    if(value===null||typeof value!=="object"||value instanceof LosslessNumber||!Object.hasOwn(value,key))throw Error("Field is not present in this source.");
+    value=(value as Record<string,unknown>)[key];
+  }
+  const parts:string[]=[];let visited=0,chars=0;
+  const append=(text:string)=>{chars+=text.length;if(chars>COMPARE_MAX_CHARS)throw Error(limit);parts.push(text)};
+  const write=(item:unknown,depth:number)=>{
+    if(++visited>COMPARE_MAX_NODES||depth>64)throw Error(limit);
+    if(item instanceof LosslessNumber){append(item.value);return}
+    if(item===null||typeof item!=="object"){append(JSON.stringify(item));return}
+    const array=Array.isArray(item);append(array?"[":"{");
+    let first=true;
+    for(const key of Object.keys(item)){
+      if(!first)append(",");first=false;
+      if(!array)append(JSON.stringify(key)+":");
+      write((item as Record<string,unknown>)[key],depth+1);
+    }
+    append(array?"]":"}");
+  };
+  write(value,path.length);return parts.join("");
+}
 function scalar(value:unknown):unknown {return value instanceof LosslessNumber?value.value:value}
 function pointer(path:string[]):string {return path.length?"/"+path.map(p=>p.replaceAll("~","~0").replaceAll("/","~1")).join("/"):"(root)"}
 
