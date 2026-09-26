@@ -189,6 +189,9 @@ kbd { font: var(--fs-cap) var(--mono); border: 1px solid var(--kbd-line); border
 
 /* ============ Query bar ============ */
 .qbar-wrap { flex-shrink: 0; background: var(--bg-2); border-bottom: 1px solid var(--line-struct); padding: 9px 12px; display: flex; flex-direction: column; gap: 5px; }
+.qbar-row { display: flex; align-items: stretch; gap: 8px; min-width: 0; }
+.qbar-row > .qbar { flex: 1; min-width: 0; }
+.qbar-row > .qbar-search { flex: none; }
 .qbar { display: flex; align-items: center; gap: 9px; background: var(--bg-1); border: 1px solid var(--line-struct); border-radius: var(--radius); padding: 0 11px; min-height: 42px; }
 .qbar:focus-within { border-color: var(--acc); }
 .qbar--err { border-color: var(--sev-err); }

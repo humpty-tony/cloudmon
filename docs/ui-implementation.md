@@ -17,7 +17,11 @@
 
 Earlier five persona fixes are committed. Desktop palette/type/target checks and native build already passed before this flow work; reuse that evidence and verify the integrated result rather than restarting broad audits.
 
-### Final persona-review fixes (active)
+### Search action placement follow-up
+
+- [x] Move Search immediately outside the query input border with an 8px gap and matching height. Preserve the existing click/Enter handlers, clear action, draft validation, syntax overlay and filter chips. Focused RED→GREEN check passes at 1280/1440 for external placement, spacing/alignment, click/Enter submission and malformed-draft disabling. Native build and parent screenshot review pass. Bounded independent review (`deleg_7c218b8c`) approved the supplied delta and screenshot with no security, logic or placement blockers; this follow-up is included in the accompanying local commit. No push/release.
+
+### Final persona-review fixes (historical)
 
 Approved scope: all five findings from the September 26 review of `818b5cb`. Review bundle: `~/.hermes/reports/cloudmon/2026-09-26-ux-review/`. Parent owns actor/navigation/Rules fixes; one bounded worker owns comparison/inspector files. No push/release or AWS work.
 

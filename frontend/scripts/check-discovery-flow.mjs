@@ -20,6 +20,14 @@ try{
    assert.equal(await page.getByRole('button',{name:'Data sources…',exact:true}).isVisible(),true);
    await page.getByRole('button',{name:/^Quick filters/}).click();assert.equal(await page.getByRole('button',{name:'Errors only',exact:true}).isVisible(),true);await page.keyboard.press('Escape');
    await page.getByRole('group',{name:'Display options'}).getByRole('button',{name:/^Columns/}).click();assert.equal(await page.getByText('Shown - grip to reorder, click to hide',{exact:true}).isVisible(),true);await page.keyboard.press('Escape');
+   const search=page.getByRole('button',{name:'Search',exact:true}),query=page.getByRole('textbox',{name:'Search query',exact:true});
+   assert.equal(await search.evaluate(e=>!!e.closest('.qbar')),false,'Search must sit outside the input border');
+   const inputBox=await page.locator('.qbar').boundingBox(),buttonBox=await search.boundingBox();
+   assert.ok(buttonBox.x>=inputBox.x+inputBox.width+6,'Search needs a visible gap to the right');
+   assert.ok(Math.abs(buttonBox.y-inputBox.y)<=1&&Math.abs(buttonBox.height-inputBox.height)<=1,'Search and input should align in height');
+   await query.fill('eventName=GetObject');await search.click();await page.getByRole('region',{name:'Event results',exact:true}).getByText('24 events',{exact:true}).waitFor();
+   await query.fill('(');assert.equal(await search.isDisabled(),true,'Invalid drafts must not submit');
+   await query.fill('');await query.press('Enter');await page.getByRole('region',{name:'Event results',exact:true}).getByText('48 events',{exact:true}).waitFor();
    await page.screenshot({path:fileURLToPath(new URL(`browse-${width}.png`,out))});
   }
   await rows.first().locator('.c-time').click();const inspector=page.getByRole('complementary',{name:'Event inspector'});await inspector.locator('.ei-review-intro h2').waitFor();

@@ -98,36 +98,38 @@ export function QueryBar({ terms, queryText, error, inputRef, onQueryChange, onR
 
   return (
     <div className="qbar-wrap">
-      <div className={`qbar ${draftError ? "qbar--err" : dirty ? "qbar--dirty" : ""}`}>
-        <span className="qbar-icon">⌕</span>
-        <div className="qbar-field">
-          <div className="qbar-hl" ref={hlRef} aria-hidden="true">
-            {segs.map((s, i) => (s.cls ? <span key={i} className={s.cls}>{s.text}</span> : s.text))}
+      <div className="qbar-row">
+        <div className={`qbar ${draftError ? "qbar--err" : dirty ? "qbar--dirty" : ""}`}>
+          <span className="qbar-icon">⌕</span>
+          <div className="qbar-field">
+            <div className="qbar-hl" ref={hlRef} aria-hidden="true">
+              {segs.map((s, i) => (s.cls ? <span key={i} className={s.cls}>{s.text}</span> : s.text))}
+            </div>
+            <input
+              ref={inputRef}
+              className="qbar-input"
+              aria-label="Search query"
+              aria-invalid={!!draftError}
+              aria-describedby="query-status"
+              value={draft}
+              onChange={(e) => {
+                setDraft(e.target.value);
+                requestAnimationFrame(syncScroll);
+              }}
+              onKeyDown={onKeyDown}
+              onScroll={syncScroll}
+              placeholder={'Search events · eventName="AssumeRole"'}
+              spellCheck={false}
+              autoComplete="off"
+            />
           </div>
-          <input
-            ref={inputRef}
-            className="qbar-input"
-            aria-label="Search query"
-            aria-invalid={!!draftError}
-            aria-describedby="query-status"
-            value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value);
-              requestAnimationFrame(syncScroll);
-            }}
-            onKeyDown={onKeyDown}
-            onScroll={syncScroll}
-            placeholder={'Search events · eventName="AssumeRole"'}
-            spellCheck={false}
-            autoComplete="off"
-          />
+          {active && (
+            <button className="qbar-clear" onClick={() => { setDraft(""); onClear(); }} title="Clear all filters">
+              clear
+            </button>
+          )}
         </div>
         <button className="qbar-search" onClick={() => { if (!draftError) onQueryChange(draft.trim()); }} disabled={!!draftError}>Search</button>
-        {active && (
-          <button className="qbar-clear" onClick={() => { setDraft(""); onClear(); }} title="Clear all filters">
-            clear
-          </button>
-        )}
       </div>
 
       {terms.length > 0 && (
