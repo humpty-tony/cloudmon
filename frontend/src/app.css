@@ -1050,10 +1050,11 @@ body { font-feature-settings: "liga" 0, "calt" 0; font-variant-ligatures: none; 
 .lgv-edge-time { fill: var(--tx-2); font-size: 10px; }
 .lgv-link.ev { stroke: var(--acc-text); }
 .lgv-link.unproven { stroke: var(--sev-warn); stroke-dasharray: 6 4; }
+.lgv-link.association { stroke: #c98bff; stroke-dasharray: 6 4; }
 .lgv-edge-hit { fill: none; stroke: transparent; stroke-width: 20; pointer-events: stroke; }
 .lgv-connection { cursor: pointer; }
 .lgv-connection:focus .lgv-link,.lgv-connection:hover .lgv-link { stroke-width: 3; }
-.lgv-connection[data-relationship="identity"] .lgv-edge-time { fill: var(--sev-warn); }
+.lgv-connection[data-relationship="identity"] .lgv-edge-time { fill: var(--tx-2); }
 .lgv-kind { fill: var(--tx-2); font: 10px var(--mono); letter-spacing: .05em; }
 .lgv-rect.k-unknown { stroke: var(--sev-warn); stroke-dasharray: 5 4; }
 .lgv-rect.k-identity { stroke: #c98bff; }

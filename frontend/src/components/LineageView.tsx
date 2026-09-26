@@ -57,7 +57,9 @@ function label(n: StoryNode): { primary: string; secondary: string } {
     case "Root": return { primary: "root", secondary: n.accountId };
     case "IAMUser": return { primary: n.userName || tail(n.arn), secondary: n.accountId };
     case "AWSService": return { primary: n.invokedBy || n.arn || "AWS service", secondary: "service" };
-    case "FederatedUser": return { primary: n.userName || tail(n.arn), secondary: n.accountId };
+    case "FederatedUser": return { primary: tail(n.arn) || n.userName || "Federated session", secondary: n.accountId };
+    case "SAMLUser":
+    case "WebIdentityUser": return { primary: n.userName || tail(n.arn) || n.identityType, secondary: n.accountId };
     default: return { primary: n.roleName || tail(n.roleArn) || "role", secondary: n.sessionName ? `⋯ ${n.sessionName}` : n.accountId };
   }
 }
@@ -315,7 +317,7 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
         <g key={i} className="lgv-connection" data-relationship={edge?.relationship} role="button" tabIndex={0} aria-label={`Inspect connection: ${edge?.label||"Activity"}`} onClick={inspect} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();inspect()}}}>
           <path className="lgv-edge-hit" d={path}/>
           <path
-            className={`lgv-link ${isActivity ? "ev" : ""} ${edge?.relationship==="identity"||edge?.relationship==="gap"?"unproven":""} ${edge?.crossAccount ? "xacct" : ""}`}
+            className={`lgv-link ${isActivity ? "ev" : ""} ${edge?.relationship==="identity"?"association":edge?.relationship==="gap"?"unproven":""} ${edge?.crossAccount ? "xacct" : ""}`}
             d={path}
             markerEnd={`url(#${arrowId})`}
           />
@@ -323,6 +325,7 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
             <title>{`${edge.label} · ${edge.detail}\n${edge.evidence || "Recorded activity"}`}</title>
             <text textAnchor="middle" y={-12} className="lgv-edge-method">{edge.label}</text>
             {edge.detail&&<text textAnchor="middle" y={18} className="lgv-edge-time">{edge.detail}</text>}
+            {edge.relationship==="issuance"&&edge.viaTime&&<text textAnchor="middle" y={34} className="lgv-edge-time">{edge.viaTime.replace('T',' ')}</text>}
           </g>}
         </g>
       );
@@ -357,7 +360,7 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
           <title>{n.arn||n.identityNote||n.userName}</title>
           <rect className={`lgv-rect ${state}`} width={NODE_W} height={NODE_H} rx={8} />
           <text x={16} y={NODE_H / 2 + 5} className={`lgv-gl ${GL_FILL[n.identityType] || "gl-other"}`}>{identityGlyph(n.identityType)}</text>
-          <text x={32} y={17} className="lgv-kind">{n.storyKind==='identity'?'USER':n.storyKind==='gap'?'EVIDENCE GAP':n.identityType==='AssumedRole'?'ROLE SESSION':n.identityType==='AWSService'?'AWS SERVICE':'IDENTITY'}</text>
+          <text x={32} y={17} className="lgv-kind">{n.storyKind==='identity'?'USER':n.storyKind==='gap'?'EVIDENCE GAP':n.identityType==='AssumedRole'?'ROLE SESSION':n.identityType==='AWSService'?'AWS SERVICE':n.identityType==='FederatedUser'?'FEDERATED SESSION':n.identityType==='IAMUser'?(n.accessKeyId.startsWith('ASIA')?'TEMPORARY USER SESSION':'IAM USER'):'IDENTITY'}</text>
           <text x={32} y={42} className="lgv-nm">{trunc(lab.primary, 33)}</text>
           {lab.secondary && <text x={32} y={59} className="lgv-sb">{trunc(lab.secondary, 40)}</text>}
           {n.events > 0 && <text x={NODE_W - 12} y={76} textAnchor="end" className="lgv-ct">{n.events} {n.events===1?'event':'events'}</text>}

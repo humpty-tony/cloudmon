@@ -27,12 +27,12 @@ try{
   const dialog=page.getByRole('dialog',{name:'Credential lineage',exact:true});await dialog.getByRole('button',{name:/Inspect identity:/}).waitFor();
   assert.equal(await dialog.locator('.lgv-g').count(),3);assert.equal(await dialog.locator('.lgv-link').count(),2);assert.equal(await dialog.locator('[data-relationship=issuance]').count(),0);
   assert.equal(await dialog.locator('.lgv-detail,.lgv-notes,.la-message,.la-source').count(),0);
-  assert.match(await dialog.locator('[data-relationship=identity]').textContent(),/SSO role access.*issuance not recovered/s);
+  assert.match(await dialog.locator('[data-relationship=identity]').textContent(),/onBehalfOf.*Identity Store \+ user ID/s);
   await dialog.getByRole('button',{name:'Inspect credential: AdministratorAccess',exact:true}).waitFor();await dialog.getByRole('button',{name:'Inspect activity: ListBuckets',exact:true}).waitFor();assert.match(await dialog.locator('.lgv-canvas').textContent(),/aws s3 ls/);
   const geometry=await dialog.locator('.lgv-canvas').evaluate(svg=>{const r=svg.getBoundingClientRect();return [...svg.querySelectorAll('.lgv-g')].map(n=>{const b=n.getBoundingClientRect();return {inside:b.x>=r.x&&b.y>=r.y&&b.right<=r.right&&b.bottom<=r.bottom,width:b.width}})});
   assert(geometry.every(n=>n.inside&&n.width>260),'All three nodes fit at readable scale');
   await page.mouse.move(1,1);await dialog.screenshot({path:path.join(dir,`graph-first-s3-${width}.png`)});
-  await dialog.getByRole('button',{name:'Inspect connection: SSO role access',exact:true}).focus();await page.keyboard.press('Enter');await dialog.locator('.lgv-detail').getByText(/exact event-recorded Identity Store/).waitFor();await dialog.getByRole('button',{name:'Close details',exact:true}).click();
+  await dialog.getByRole('button',{name:'Inspect connection: onBehalfOf',exact:true}).focus();await page.keyboard.press('Enter');await dialog.locator('.lgv-detail').getByText(/exact event-recorded Identity Store/).waitFor();await dialog.getByRole('button',{name:'Close details',exact:true}).click();
   await dialog.getByRole('button',{name:'Inspect activity: ListBuckets',exact:true}).click();await dialog.getByRole('button',{name:'Open activity event',exact:true}).click();
   const fields=page.getByRole('dialog',{name:'Lineage event',exact:true});await fields.getByRole('button',{name:'Original JSON',exact:true}).click();const original=page.getByRole('dialog',{name:'Raw JSON',exact:true});await original.getByText(seed.eventID,{exact:false}).waitFor();await page.keyboard.press('Escape');await original.waitFor({state:'detached'});await page.keyboard.press('Escape');await fields.waitFor({state:'detached'});
   await dialog.getByRole('button',{name:'Close details',exact:true}).click();await dialog.getByRole('button',{name:'Show lookup details',exact:true}).click();assert.match(await dialog.innerText(),/CloudTrail/);await dialog.getByRole('button',{name:'Hide lookup details',exact:true}).click();

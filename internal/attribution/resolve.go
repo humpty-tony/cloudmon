@@ -30,6 +30,10 @@ const (
 
 var regionPattern = regexp.MustCompile(`^[a-z]{2}(-[a-z]+){1,3}-[0-9]{1,2}$`)
 
+// Shared by retrieval planning and candidate parsing; do not infer a method
+// from a role label or omit less common temporary-credential issuance APIs.
+var supportedIssuanceAPIs = [...]string{"AssumeRole", "AssumeRoleWithSAML", "AssumeRoleWithWebIdentity", "AssumeRoot", "GetSessionToken", "GetFederationToken"}
+
 type cloudtrailAPI interface {
 	LookupEvents(context.Context, *cloudtrail.LookupEventsInput, ...func(*cloudtrail.Options)) (*cloudtrail.LookupEventsOutput, error)
 }
@@ -109,9 +113,10 @@ func (e trailEvent) issuedKey() string {
 	if e.Source != "sts.amazonaws.com" || e.ErrorCode != "" || e.ErrorMessage != "" {
 		return ""
 	}
-	switch e.Name {
-	case "AssumeRole", "AssumeRoleWithSAML", "AssumeRoleWithWebIdentity", "AssumeRoot", "GetSessionToken", "GetFederationToken":
-		return e.Response.Credentials.Key
+	for _, name := range supportedIssuanceAPIs {
+		if e.Name == name {
+			return e.Response.Credentials.Key
+		}
 	}
 	return ""
 }
@@ -188,7 +193,7 @@ func resolveWith(parent context.Context, raw string, local []string, cfg Config,
 	if err := ctx.Err(); err != nil {
 		return r, err
 	}
-	fetched := fetchCloudTrail(ctx, seed, regions, cfg, d, &r)
+	fetched := fetchCloudTrail(ctx, seed, events, regions, cfg, d, &r)
 	all := append(append([]trailEvent{}, events...), fetched...)
 	selected, truncated := selectAncestors(events, all)
 	if truncated {

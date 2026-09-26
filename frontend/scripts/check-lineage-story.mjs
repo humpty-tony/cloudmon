@@ -9,8 +9,10 @@ const story=buildLineageStory(graph,[evidence],1,action);
 assert.equal(story.nodes.length,3);assert.equal(story.edges.length,2);
 assert.equal(story.nodes.find(n=>n.storyKind==='identity').userName,'casey');
 assert.equal(story.nodes.find(n=>n.storyKind==='activity').eventName,'ListBuckets');
-assert.equal(story.edges.find(e=>e.relationship==='identity').label,'SSO role access');
-assert.match(story.edges.find(e=>e.relationship==='identity').detail,/issuance not recovered/i);
+assert.equal(story.edges.find(e=>e.relationship==='identity').label,'onBehalfOf');
+assert.equal(story.edges.find(e=>e.relationship==='identity').detail,'Identity Store + user ID');
+assert.equal(story.edges.find(e=>e.relationship==='activity').label,'accessKeyId');
+assert.equal(story.edges.find(e=>e.relationship==='activity').detail,'Recorded on this event');
 assert.equal(story.edges.filter(e=>e.relationship==='issuance').length,0,'Directory association is NOT issuance proof');
 assert.equal(graph.nodes.length,1,'Presentation must not mutate native graph');assert.equal(graph.edges.length,0);
 for(const bad of [{...evidence,nodeKey:'another-key'},{...evidence,method:'name-match'},{...evidence,source:'source-identity'}]){

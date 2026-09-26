@@ -43,7 +43,7 @@ try {
   const issuance=dialog.locator('[data-relationship=issuance]');assert.match(await issuance.textContent(),/AssumeRole/);
   assert.equal(await issuance.locator('.lgv-edge-method').evaluate(el=>{const r=el.getBoundingClientRect();return el.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}),true,'Issuance label must receive hover events');assert.match(await issuance.locator('.lgv-link').getAttribute('marker-end'),/^url\(#/);
   assert.equal(await dialog.locator('.lgv-detail').count(),0);assert.equal(await dialog.locator('.lgv-notes,.la-message').count(),0);
-  assert.match(await dialog.locator('[data-relationship=identity]').textContent(),/issuance not recovered/);
+  assert.match(await dialog.locator('[data-relationship=identity]').textContent(),/onBehalfOf/);
   await page.screenshot({path:fileURLToPath(new URL(`lineage-enriched-${width}.png`,out))});
   await issuance.click();await dialog.getByText('198.51.100.24',{exact:true}).first().waitFor();await dialog.getByText(issued.userAgent,{exact:true}).first().waitFor();
   assert.equal(await dialog.locator('.la-source').count(),0,'Source details stay closed by default');

@@ -24,8 +24,8 @@ export function buildLineageStory(graph: LineageTree, evidence: AttributionEvide
   const nodeMap = new Map(nodes.map(n=>[n.id,n]));
   const edges: StoryEdge[] = graph.edges.map(e=>({...e,
     relationship:nodeMap.get(e.child)?.kind==='event'?'activity':'issuance',
-    label:nodeMap.get(e.child)?.kind==='event'?'Performed':e.viaEvent,
-    detail:nodeMap.get(e.child)?.kind==='event'?'':e.viaTime.replace('T',' '),
+    label:nodeMap.get(e.child)?.kind==='event'?(nodeMap.get(e.parent)?.accessKeyId?'accessKeyId':'userIdentity'):e.viaEvent,
+    detail:nodeMap.get(e.child)?.kind==='event'?'Recorded on this event':'Issued accessKeyId match',
   }));
   let rootId = graph.rootId;
   const root = nodeMap.get(rootId);
@@ -40,8 +40,8 @@ export function buildLineageStory(graph: LineageTree, evidence: AttributionEvide
     nodes.push(person ? {...empty,id,kind:'identity',storyKind:'identity',identityType:'IdentityCenterUser',userName:person.userName||person.displayName||person.subjectId,identityEvidence:person}
       : {...empty,id,kind:'unknown',storyKind:'gap',identityNote:distinct.size>1?'Conflicting recorded identities; no single origin selected.':graph.notes.join('\n')});
     edges.push({parent:id,child:root.id,viaSeq:0,viaEvent:'',viaTime:'',viaIP:'',
-      relationship:person?'identity':'gap',label:person?'SSO role access':'Issuance missing',detail:person?'issuance not recovered':'',
-      evidence:person?'Identity linked by the exact event-recorded Identity Store/user IDs. The credential issuance event has not been recovered.':graph.notes.join('\n'),
+      relationship:person?'identity':'gap',label:person?'onBehalfOf':'Issuance missing',detail:person?'Identity Store + user ID':'',
+      evidence:person?'Identity linked by the exact event-recorded Identity Store/user IDs: userIdentity.onBehalfOf.identityStoreArn + userIdentity.onBehalfOf.userId, resolved with DescribeUser. This association does not recover the credential issuance event.':graph.notes.join('\n'),
     });
     rootId=id;
   }
@@ -51,7 +51,8 @@ export function buildLineageStory(graph: LineageTree, evidence: AttributionEvide
     let selected = nodes.find(n=>n.kind==='event'&&n.seq===seq);
     if (!selected) {
       selected={...empty,id:`story:activity:${seq}`,kind:'event',seq};nodes.push(selected);
-      edges.push({parent:graph.currentId,child:selected.id,viaSeq:seq,viaEvent:'',viaTime:activity?.eventTime||'',viaIP:activity?.sourceIPAddress||'',relationship:'activity',label:'Performed',detail:''});
+      const field=nodeMap.get(graph.currentId)?.accessKeyId?'accessKeyId':'userIdentity';
+      edges.push({parent:graph.currentId,child:selected.id,viaSeq:seq,viaEvent:'',viaTime:activity?.eventTime||'',viaIP:activity?.sourceIPAddress||'',relationship:'activity',label:field,detail:'Recorded on this event',evidence:field==='accessKeyId'?'The selected event records this session in userIdentity.accessKeyId.':'The selected event records this actor in userIdentity.'});
     }
     Object.assign(selected,{storyKind:'activity',activity,eventName:activity?.eventName||selected.eventName||`Event #${seq}`,eventSource:activity?.eventSource||selected.eventSource||'',eventTime:activity?.eventTime||selected.eventTime||'',errorCode:activity?.errorCode||selected.errorCode||''});
   }

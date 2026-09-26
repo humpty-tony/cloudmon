@@ -52,11 +52,14 @@ func testDeps(ct *fakeCT) dependencies {
 func TestCloudTrailExactIssuedKeyRecursiveCandidates(t *testing.T) {
 	a, b, c := issuance("a", "ASIAchild", "ASIAparent"), issuance("b", "ASIAparent", "AKIAroot"), issuance("ambiguous", "ASIAchild", "AKIAother")
 	ct := &fakeCT{fn: func(in *cloudtrail.LookupEventsInput) (*cloudtrail.LookupEventsOutput, error) {
-		if len(in.LookupAttributes) != 1 || in.LookupAttributes[0].AttributeKey != ctTypes.LookupAttributeKeyEventSource || aws.ToString(in.LookupAttributes[0].AttributeValue) != "sts.amazonaws.com" {
+		if len(in.LookupAttributes) != 1 || in.LookupAttributes[0].AttributeKey != ctTypes.LookupAttributeKeyEventName {
 			t.Fatalf("wrong lookup: %+v", in)
 		}
 		if !in.StartTime.Equal(testNow.Add(-90*24*time.Hour)) || in.EndTime.Format(time.RFC3339) != "2026-09-25T11:00:00Z" {
 			t.Fatal("unbounded window")
+		}
+		if aws.ToString(in.LookupAttributes[0].AttributeValue) != "AssumeRole" {
+			return ctPage(), nil
 		}
 		if in.NextToken == nil {
 			p := ctPage(b, issuance("unrelated", "ASIAunrelated", "ASIAchild"))
@@ -66,7 +69,7 @@ func TestCloudTrailExactIssuedKeyRecursiveCandidates(t *testing.T) {
 		return ctPage(a, c), nil
 	}}
 	r, err := resolveWith(context.Background(), testSeed, nil, Config{AWSRegions: []string{"eu-west-1"}}, testDeps(ct))
-	if err != nil || len(r.Records) != 3 || ct.calls != 2 {
+	if err != nil || len(r.Records) != 3 || ct.calls != 7 {
 		t.Fatalf("records=%+v calls=%d err=%v", r.Records, ct.calls, err)
 	}
 	for _, rec := range r.Records {
@@ -74,7 +77,7 @@ func TestCloudTrailExactIssuedKeyRecursiveCandidates(t *testing.T) {
 			t.Fatal("changed raw or unrelated record")
 		}
 	}
-	if r.Sources[0].AccountID != "123456789012" || r.Sources[0].Status != "candidate" || r.Sources[0].Pages != 2 {
+	if r.Sources[0].AccountID != "123456789012" || r.Sources[0].Status != "candidate" || r.Sources[0].Pages != 7 {
 		t.Fatalf("scope/status: %+v", r.Sources)
 	}
 	if len(r.Evidence) != 3 || r.Evidence[0].Initiator.IP != "192.0.2.8" || r.Evidence[0].Initiator.MFA != "true" {
