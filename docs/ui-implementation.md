@@ -12,6 +12,8 @@
 - [x] Increase Workbench event/query text to 13px with matched highlight/input metrics.
 - [x] Typography RED-to-GREEN, two-size actual-App layout checks and final native build passed; same-data browser comparison captured.
 - [x] Bounded independent CSS/font review passed without blockers. Details: `ui-reviews/fira-code-trial.md`.
+- [x] Follow-up: remove implicit read/write row dimming; actor/role names now use consistent regular weight and brightness. Expanded regression and native rebuild passed.
+- [x] Follow-up bounded CSS/class review passed; final native rebuild also passed.
 - Running capture remains untouched; user visual approval of the trial is still open.
 
 ### Native overlay correction

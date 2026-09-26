@@ -229,7 +229,6 @@ kbd { font: var(--fs-cap) var(--mono); border: 1px solid var(--kbd-line); border
 .etbody { flex: 1; overflow: auto; background: var(--bg-1); }
 .row { height: var(--row-h); display: grid; align-items: center; border-bottom: 1px solid var(--line-row); cursor: pointer; color: var(--tx-1); transition: background var(--dur) var(--ease), box-shadow var(--dur) var(--ease); }
 .row--zebra { background: var(--line-zebra); }
-.row--readonly { color: var(--tx-2); }
 .row--err { background: var(--err-tint); box-shadow: inset 2px 0 0 var(--sev-err); }
 .row--sensitive { box-shadow: inset 2px 0 0 var(--sev-warn); }
 .row:hover { background: #313d4d; }
@@ -238,7 +237,6 @@ kbd { font: var(--fs-cap) var(--mono); border: 1px solid var(--kbd-line); border
 .cell { position: relative; padding: 0 10px; overflow: hidden; white-space: nowrap; display: flex; align-items: center; font-family: var(--mono); font-size: var(--fs-row); line-height: 1; color: var(--tx-1); }
 .cell.mono { color: var(--tx-2); font-variant-numeric: tabular-nums; }
 .cell-inner { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-.row--readonly .cell { color: var(--tx-2); }
 .c-name .cell-inner { color: var(--tx-1); }
 .row--err .c-name .cell-inner { color: var(--sev-err); }
 /* time */

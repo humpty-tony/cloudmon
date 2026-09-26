@@ -67,6 +67,8 @@
 .etable--compact .c-time-main{font-size:10px;color:var(--tx-2)}
 .workbench-action{display:flex;flex-direction:column;gap:4px;min-width:0;overflow:hidden}
 .workbench-action-name{font-size:13px;font-weight:550;overflow:hidden;text-overflow:ellipsis}
+/* Recorded identities keep one treatment across event types and states. */
+.workbench-results .c-identity .workbench-action-name{font-weight:400;color:var(--tx-1)}
 .workbench-action-meta{display:flex;gap:5px;align-items:center;color:var(--tx-2);font-size:10px;font-weight:400;overflow:hidden;text-overflow:ellipsis}
 .etable--compact .c-result{font-size:10px}
 .etable--compact .c-ident-arn{display:none}

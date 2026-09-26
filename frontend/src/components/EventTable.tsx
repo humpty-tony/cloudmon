@@ -383,7 +383,6 @@ export const EventTable = memo(function EventTable({
               "row",
               ri % 2 === 0 ? "row--zebra" : "",
               sev,
-              e.readOnly ? "row--readonly" : "",
               expanded ? "row--selected" : "",
               e.seq === cursorSeq ? "row--cursor" : "",
             ].join(" ");

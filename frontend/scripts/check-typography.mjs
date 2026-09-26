@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
 import {createServer} from 'vite';
 import {chromium} from 'playwright';
@@ -12,8 +13,10 @@ try {
  await page.goto('http://127.0.0.1:5197');
  assert.equal(await page.evaluate(()=>!!window.go),false);
  const event={eventVersion:'1.09',eventID:'typography-fixture',eventTime:'2026-09-26T00:47:30Z',eventSource:'secretsmanager.amazonaws.com',eventName:'GetSecretValue',awsRegion:'us-east-1',sourceIPAddress:'203.0.113.42',userIdentity:{type:'IAMUser',userName:'typography-fixture',principalId:'AIDAEXAMPLE',accountId:'111122223333'},requestParameters:{secretId:'prod/payments'},responseElements:null,readOnly:true};
+ const identities=[event.userIdentity,{type:'AssumedRole',principalId:'AROAEXAMPLE:review-session',arn:'arn:aws:sts::111122223333:assumed-role/ReviewRole/review-session',accountId:'111122223333',sessionContext:{sessionIssuer:{type:'Role',userName:'ReviewRole',arn:'arn:aws:iam::111122223333:role/ReviewRole'}}},{type:'AWSService',invokedBy:'lambda.amazonaws.com',accountId:'111122223333'}];
+ const records=identities.flatMap((userIdentity,i)=>[true,false].map(readOnly=>({...event,eventName:readOnly?'GetSecretValue':'PutSecretValue',eventID:i===0&&readOnly?event.eventID:`actor-weight-${i}-${readOnly}`,userIdentity,readOnly,...(!readOnly&&i===1?{errorCode:'AccessDenied'}:{})})));
  await page.getByRole('button',{name:/^Import a dump/}).click();
- await page.locator('input[type=file]').setInputFiles({name:'typography-fixture.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({Records:[event]}))});
+ await page.locator('input[type=file]').setInputFiles({name:'typography-fixture.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({Records:records}))});
  await page.getByRole('button',{name:'Load dump',exact:true}).click();
  await page.locator('.workbench-results .row').first().waitFor();
  const fonts=await page.evaluate(async()=>{const result=[];for(const w of [400,500,600])result.push((await document.fonts.load(`${w} 13px "Fira Code"`)).length);return result;});
@@ -25,12 +28,24 @@ try {
   assert.equal(c.ligatures,'none',selector);
   assert.match(c.features,/"calt" 0/,selector);
  }
- await page.locator('.row .c-time').first().click();
+ const actorStyles=await page.locator('.workbench-results .c-identity .workbench-action-name').evaluateAll(elements=>elements.map(e=>({name:e.textContent,weight:getComputedStyle(e).fontWeight,color:getComputedStyle(e).color,row:e.closest('.row').className})));
+ assert.equal(actorStyles.length,records.length);
+ const rowColors=await page.locator('.workbench-results .row').evaluateAll(rows=>rows.map(e=>({row:getComputedStyle(e).color,identity:getComputedStyle(e.querySelector('.c-identity')).color})));
+ assert.equal(new Set(rowColors.map(c=>c.row)).size,1,'Read-only status must not implicitly dim entire rows');
+ assert.equal(new Set(rowColors.map(c=>c.identity)).size,1,'Read-only status must not implicitly dim data cells');
+ assert.ok(actorStyles.every(a=>a.weight==='400'),'Actor names must use regular weight for every identity and read/write/error state');
+ assert.equal(new Set(actorStyles.map(a=>a.color)).size,1,'Read-only rows must not dim the recorded actor');
+ const output=new URL('../test-results/typography/',import.meta.url);await fs.mkdir(output,{recursive:true});
+ await page.screenshot({path:fileURLToPath(new URL('actor-rows.png',output))});
+ const actor=page.locator('.row[data-event-seq="1"] .c-identity .workbench-action-name');
+ const before=await actor.evaluate(e=>({weight:getComputedStyle(e).fontWeight,color:getComputedStyle(e).color}));
+ await page.locator('.row[data-event-seq="1"] .c-time').click();await actor.hover();
+ assert.deepEqual(await actor.evaluate(e=>({weight:getComputedStyle(e).fontWeight,color:getComputedStyle(e).color})),before,'Selection and hover must not change actor emphasis');
  await page.getByRole('tab',{name:'Original',exact:true}).click();
  const source=page.locator('.ei-source');await source.waitFor();
  assert.equal(JSON.parse(await source.textContent()).eventID,event.eventID);
  assert.match(await source.evaluate(e=>getComputedStyle(e).fontFamily),/^"?Fira Code"?,/);
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
  assert.deepEqual(external,[],'Fonts must not contact a CDN');
- console.log('PASS bundled Fira Code 400/500/600; 13px rows and aligned query overlay; literal glyphs; original evidence retained; no external requests');
+ console.log('PASS bundled Fira Code 400/500/600; 13px rows and aligned query overlay; literal glyphs; original evidence retained; consistent actors across identities/read/write/error/selection/hover; no external requests');
 }finally{await browser.close();await server.close();}
