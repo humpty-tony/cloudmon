@@ -1,3 +1,11 @@
+@font-face {
+  font-family: "Fira Code";
+  src: url("./assets/fonts/FiraCode-VF.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+}
+
 :root {
   color-scheme: dark;
   /* surface ladder - cool near-black, never #000 */
@@ -13,7 +21,7 @@
   /* hairlines: decorative (translucent) vs functional (3:1 solid) */
   --line-row: rgba(255,255,255,0.055); --line-zebra: rgba(255,255,255,0.022); --line-struct: rgba(255,255,255,0.09); --border-fn: #3d4c60; --kbd-line: rgba(255,255,255,0.14);
   /* type */
-  --mono: ui-monospace,'JetBrains Mono','SF Mono',Menlo,Consolas,monospace;
+  --mono: 'Fira Code',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
   --sans: -apple-system,'Segoe UI',system-ui,Roboto,sans-serif;
   /* type scale - 6 integer steps, 11px floor */
   --fs-cap: 11px; --fs-label: 12px; --fs-data: 13px; --fs-body: 14px; --fs-title: 16px; --fs-head: 18px;
@@ -31,6 +39,7 @@
 html, body, #root { height: 100%; margin: 0; }
 body { background: var(--bg-0); color: var(--tx-1); font-family: var(--sans); font-size: var(--fs-body); -webkit-font-smoothing: antialiased; overflow: hidden; }
 button { font-family: inherit; }
+button, input, select, textarea { font-feature-settings: inherit; font-variant-ligatures: inherit; }
 select, option, optgroup { color: var(--tx-1); background-color: var(--bg-2); }
 ::-webkit-scrollbar { width: var(--sbw); height: var(--sbw); }
 ::-webkit-scrollbar-thumb { background: #2a3542; border: 3px solid var(--bg-1); border-radius: 2px; }
@@ -633,7 +642,8 @@ body { font-size: var(--fs-body); }
   --ease-out: cubic-bezier(0.33,1,0.68,1); --ease-emph: cubic-bezier(0.16,1,0.3,1); --t-fast: 120ms; --t-med: 180ms;
 }
 html, body { background: var(--canvas); }
-body { font-feature-settings: "liga", "calt"; }
+/* Keep query operators and evidence identifiers visually literal. */
+body { font-feature-settings: "liga" 0, "calt" 0; font-variant-ligatures: none; }
 /* ambient gradient + film-grain removed: both were sub-JND decoration and a
    dark-SaaS "hero glow" tell. html/body paint flat var(--canvas) (matches main.go). */
 /* the 8% top-highlight now goes to ONE machined chrome seam (the toolbar) only -

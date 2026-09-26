@@ -6,6 +6,14 @@
 
 **ACTIVE PLAN:** [Approved analyst-review tasks](analyst-review-tasks.md). The user approved the new mock and authorized shipping it in separately committed slices. Two narrow workers own facets and inspector; parent owns shared integration. Older pass numbering below is historical. Shipping first, focused checks only, one final integration pass.
 
+### Fira Code readability trial
+
+- [x] Bundle Fira Code locally with its license; retain sans-serif controls and literal evidence/query glyphs.
+- [x] Increase Workbench event/query text to 13px with matched highlight/input metrics.
+- [x] Typography RED-to-GREEN, two-size actual-App layout checks and final native build passed; same-data browser comparison captured.
+- [x] Bounded independent CSS/font review passed without blockers. Details: `ui-reviews/fira-code-trial.md`.
+- Running capture remains untouched; user visual approval of the trial is still open.
+
 ### Native overlay correction
 
 - [x] Sources body collapse reproduced/fixed in native WebKitGTK (32px → 601px at 1280×800); scoped content-sized flex basis preserves scroll/focus behavior.

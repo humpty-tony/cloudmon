@@ -11,6 +11,7 @@
     "check:hunt-workspace": "node scripts/check-hunt-workspace.mjs && node scripts/check-hunt-saved-selection.mjs",
     "check:workbench": "node scripts/check-vector-workbench.cjs",
     "check:vector-layout": "node scripts/check-vector-layout.mjs",
+    "check:typography": "node scripts/check-typography.mjs",
     "check:inspector-dock": "node scripts/check-inspector-dock.mjs",
     "check:workspace-overlays": "node scripts/check-workspace-overlays.cjs",
     "check:facets": "node scripts/check-facets.mjs && node scripts/check-facets-ui.mjs && node scripts/check-facets-workbench.mjs",
