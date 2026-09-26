@@ -194,6 +194,9 @@ kbd { font: var(--fs-cap) var(--mono); border: 1px solid var(--kbd-line); border
 .qbar-row > .qbar-search { flex: none; }
 .qbar { display: flex; align-items: center; gap: 9px; background: var(--bg-1); border: 1px solid var(--line-struct); border-radius: var(--radius); padding: 0 11px; min-height: 42px; }
 .qbar:focus-within { border-color: var(--acc); }
+/* The visible input boundary owns focus, not the inset text layer. */
+.qbar:has(.qbar-input:focus-visible) { outline: 2px solid var(--acc-text); outline-offset: -2px; }
+:root .qbar-input:focus-visible { outline: none; }
 .qbar--err { border-color: var(--sev-err); }
 .qbar--dirty { border-color: var(--sev-warn); }
 .qbar-icon { color: var(--tx-3); font-size: var(--fs-title); }

@@ -25,6 +25,11 @@ try{
    const inputBox=await page.locator('.qbar').boundingBox(),buttonBox=await search.boundingBox();
    assert.ok(buttonBox.x>=inputBox.x+inputBox.width+6,'Search needs a visible gap to the right');
    assert.ok(Math.abs(buttonBox.y-inputBox.y)<=1&&Math.abs(buttonBox.height-inputBox.height)<=1,'Search and input should align in height');
+   await query.focus();await query.press('ArrowLeft');
+   const focus=await query.evaluate(e=>({inner:getComputedStyle(e).outlineStyle,outer:getComputedStyle(e.closest('.qbar')).outlineWidth,keyboard:e.matches(':focus-visible')}));
+   assert.ok(focus.keyboard);assert.equal(focus.inner,'none','The text input must not draw a smaller nested focus rectangle');
+   assert.ok(parseFloat(focus.outer)>=2,'Keyboard focus must visibly follow the outer query bar');
+   await query.press('Tab');assert.equal(await search.evaluate(e=>e.matches(':focus-visible')&&parseFloat(getComputedStyle(e).outlineWidth)>=2),true,'Search retains its own keyboard focus ring');
    await query.fill('eventName=GetObject');await search.click();await page.getByRole('region',{name:'Event results',exact:true}).getByText('24 events',{exact:true}).waitFor();
    await query.fill('(');assert.equal(await search.isDisabled(),true,'Invalid drafts must not submit');
    await query.fill('');await query.press('Enter');await page.getByRole('region',{name:'Event results',exact:true}).getByText('48 events',{exact:true}).waitFor();
