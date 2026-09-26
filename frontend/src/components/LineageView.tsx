@@ -7,7 +7,8 @@ import { identityGlyph } from "../api/types";
 import { backend } from "../api/backend";
 import { logError, logInfo } from "../api/log";
 import { LineageEventModal } from "./LineageEventModal";
-import {LineageEnrichment,LineageFindings,InitiationSummary} from "./LineageAttribution";
+import {LineageEnrichment,LineageFindings,InitiatorFacts} from "./LineageAttribution";
+import {buildLineageStory, activityCommand, activityFacts, type StoryNode, type StoryEdge, type SelectedActivity} from "./lineage-story";
 import type {LineageAttribution} from "../api/attribution";
 import { WorkspaceOverlay } from "./WorkspaceActivity";
 
@@ -19,10 +20,10 @@ interface Props {
   onPivot: (field: FilterField, value: string, op: QueryOp) => void;
 }
 
-const NODE_W = 360;
-const NODE_H = 64;
-const GAP_X = 22;
-const LEVEL_H = 160;
+const NODE_W = 300;
+const NODE_H = 86;
+const GAP_X = 40;
+const LEVEL_H = 490;
 
 const MAX_NODES = 600; // hard ceiling on rendered nodes so the graph can't blow up the renderer
 const GLYPH_CLS: Record<string, string> = {
@@ -47,7 +48,10 @@ const tail = (arn: string, sep = "/") => {
 // (…:key/abcd, …:secret/foo, bucket/obj), or the whole thing when it isn't an ARN.
 const resTail = (r: string) => (r.includes(":") ? r.slice(r.lastIndexOf(":") + 1) : r);
 
-function label(n: GraphNode): { primary: string; secondary: string } {
+function label(n: StoryNode): { primary: string; secondary: string } {
+  if(n.storyKind === "identity")return {primary:n.userName,secondary:"Identity Center user"};
+  if(n.storyKind === "gap")return {primary:"Issuer not recovered",secondary:"Missing credential issuance"};
+  if(n.storyKind === "activity")return {primary:n.eventName||"Selected activity",secondary:activityCommand(n.activity)||n.eventSource||"Selected activity"};
   if (n.kind === "event") return { primary: n.eventName || "event", secondary: n.resource ? resTail(n.resource) : n.eventSource || "" };
   switch (n.identityType) {
     case "Root": return { primary: "root", secondary: n.accountId };
@@ -76,6 +80,7 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
+  const [fitVersion,setFitVersion]=useState(0);
   const [attribution,setAttribution]=useState<LineageAttribution|null>(null);
   const snapshotRef = useRef<EvidenceSnapshot | undefined>(undefined);
   const generation = useRef(0);
@@ -85,6 +90,8 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
   const [expEvents, setExpEvents] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<Set<string>>(new Set());
   const [selected, setSelected] = useState<string | null>(null);
+  const [selectedEdge,setSelectedEdge]=useState<StoryEdge|null>(null);
+  const [activity,setActivity]=useState<SelectedActivity|null>(null);
   const view = useRef({ x: 0, y: 0, k: 1 });
   const viewFrame = useRef<number | null>(null);
   const viewportRef = useRef<SVGGElement>(null);
@@ -128,18 +135,32 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
     snapshotRef.current = undefined;
     graphRef.current = {nodes:new Map(),edges:[]};
     didCenter.current = false;
-    setSelected(null);
+    setSelected(null);setSelectedEdge(null);setActivity(null);
     setRaw(null);setAttribution(null);
     backend
       .queryLineageGraph(seq,initialSnapshot)
-      .then((t) => {
+      .then(async (t) => {
         if (request !== generation.current) return;
         snapshotRef.current = t.snapshot;
         graphRef.current = {nodes:new Map(t.nodes.map(n=>[n.id,n])),edges:t.edges};
         setNodes(new Map(t.nodes.map((n) => [n.id, n])));
         setEdges(t.edges);
         setMeta({ currentId: t.currentId, rootId: t.rootId, notes: t.notes || [],applicable:t.applicable });
-        setSelected(t.currentId || null);
+        if(t.snapshot){
+          try{
+            const json=await backend.queryLineageRaw(seq,t.snapshot);
+            if(request!==generation.current)return;
+            if(json.length>4*1024*1024)throw Error("Selected event exceeds the graph metadata limit; open original evidence instead.");
+            const record=JSON.parse(json);
+            const fields:SelectedActivity={};
+            for(const key of ["eventName","eventSource","eventTime","eventID","userAgent","sourceIPAddress","awsRegion","errorCode"] as const){
+              if(typeof record?.[key]==="string")fields[key]=record[key];
+            }
+            const mfa=record?.userIdentity?.sessionContext?.attributes?.mfaAuthenticated;
+            if(typeof mfa==="string"||typeof mfa==="boolean")fields.mfa=String(mfa);
+            setActivity(fields);
+          }catch(e){if(request===generation.current)setError(`Selected activity metadata unavailable: ${String(e)}`)}
+        }
         logInfo(`lineage graph opened seq=${seq} nodes=${t.nodes.length} edges=${t.edges.length}`);
       })
       .catch((e) => { if(request===generation.current){setError(String(e?.message || e));logError(`lineage graph load failed seq=${seq}: ${e?.message || e}`)} })
@@ -148,26 +169,29 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
   }, [seq, retry,initialSnapshot]);
 
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !raw && onClose();
+    const onKey = (e: KeyboardEvent) => {if(e.key!=="Escape"||raw)return;if(selected||selectedEdge){setSelected(null);setSelectedEdge(null)}else onClose()};
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, raw]);
+  }, [onClose, raw,selected,selectedEdge]);
 
+  const story=useMemo(()=>buildLineageStory({...meta,nodes:[...nodes.values()],edges},attribution?.result.evidence??[],seq,activity),[meta,nodes,edges,attribution,seq,activity]);
+  const storyIncoming=useMemo(()=>new Map(story.edges.map(e=>[e.child,e])),[story]);
   const laidOut = useMemo(() => {
-    const arr = [...nodes.values()];
-    if (!arr.length || !meta.rootId) return null;
+    const arr = story.nodes;
+    if (!arr.length || !story.rootId) return null;
     const parentOf: Record<string, string> = {};
-    for (const e of edges) parentOf[e.child] = e.parent;
+    for (const e of story.edges) parentOf[e.child] = e.parent;
     try {
-      const root = stratify<GraphNode>()
+      const root = stratify<StoryNode>()
         .id((d) => d.id)
-        .parentId((d) => (d.id === meta.rootId ? "" : parentOf[d.id]))(arr);
-      tree<GraphNode>().nodeSize([NODE_W + GAP_X, LEVEL_H])(root);
+        .parentId((d) => (d.id === story.rootId ? "" : parentOf[d.id]))(arr);
+      const positioned=tree<StoryNode>().nodeSize([NODE_H + GAP_X, LEVEL_H])(root);
+      positioned.each(d=>{const x=d.x;d.x=d.y;d.y=x});
       return root;
     } catch {
       return null;
     }
-  }, [nodes, edges, meta.rootId]);
+  }, [story]);
 
   const posOf = useCallback(
     (id: string) => {
@@ -192,7 +216,7 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
     const k = Math.min(1, (r.width - 64) / (maxX - minX + NODE_W), (r.height - 64) / (maxY - minY + NODE_H));
     moveViewport({k, x:r.width/2 - (minX+maxX)*k/2, y:r.height/2 - (minY+maxY)*k/2});
     didCenter.current = true;
-  }, [loading, laidOut, posOf, meta.currentId, moveViewport]);
+  }, [loading, laidOut, posOf, meta.currentId, moveViewport,fitVersion]);
 
   const merge = (t: LineageTree) => {
     const next = new Map(graphRef.current.nodes);
@@ -247,7 +271,7 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
   // ---- pan / zoom ----
   const drag = useRef<{ x: number; y: number } | null>(null);
   const onDown = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (e.button !== 0 || (e.target as Element).closest(".lgv-g")) return;
+    if (e.button !== 0 || (e.target as Element).closest(".lgv-g,.lgv-connection")) return;
     e.preventDefault();
     drag.current = { x: e.clientX - view.current.x, y: e.clientY - view.current.y };
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -282,25 +306,28 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
     return laidOut.links().map((l, i) => {
       const s = l.source as HierarchyNode<GraphNode> & { x: number; y: number };
       const t = l.target as HierarchyNode<GraphNode> & { x: number; y: number };
-      const my = (s.y + NODE_H / 2 + (t.y - NODE_H / 2)) / 2;
-      const edge = incoming.get(t.data.id);
-      const isActivity = t.data.kind === "event";
+      const mx=(s.x+t.x)/2,my=(s.y+t.y)/2;
+      const edge = storyIncoming.get(t.data.id);
+      const isActivity = edge?.relationship === "activity";
+      const path=`M${s.x+NODE_W/2},${s.y} C${mx},${s.y} ${mx},${t.y} ${t.x-NODE_W/2},${t.y}`;
+      const inspect=()=>{setSelected(null);setSelectedEdge(edge??null)};
       return (
-        <g key={i}>
+        <g key={i} className="lgv-connection" data-relationship={edge?.relationship} role="button" tabIndex={0} aria-label={`Inspect connection: ${edge?.label||"Activity"}`} onClick={inspect} onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();inspect()}}}>
+          <path className="lgv-edge-hit" d={path}/>
           <path
-            className={`lgv-link ${isActivity ? "ev" : ""} ${edge?.crossAccount ? "xacct" : ""}`}
-            d={`M${s.x},${s.y + NODE_H / 2} C${s.x},${my} ${t.x},${my} ${t.x},${t.y - NODE_H / 2}`}
+            className={`lgv-link ${isActivity ? "ev" : ""} ${edge?.relationship==="identity"||edge?.relationship==="gap"?"unproven":""} ${edge?.crossAccount ? "xacct" : ""}`}
+            d={path}
             markerEnd={`url(#${arrowId})`}
           />
-          {!isActivity && edge?.viaEvent && <g className="lgv-edge-label" transform={`translate(${(s.x+t.x)/2},${my})`}>
-            <title>{`${edge.viaEvent} · ${edge.viaTime}\n${edge.evidence || "Recorded credential issuance"}`}</title>
-            <text textAnchor="middle" y={-6} className="lgv-edge-method">{edge.viaEvent}</text>
-            <text textAnchor="middle" y={10} className="lgv-edge-time">{edge.viaTime.replace('T',' ')}</text>
+          {edge && <g className="lgv-edge-label" transform={`translate(${mx},${my})`}>
+            <title>{`${edge.label} · ${edge.detail}\n${edge.evidence || "Recorded activity"}`}</title>
+            <text textAnchor="middle" y={-12} className="lgv-edge-method">{edge.label}</text>
+            {edge.detail&&<text textAnchor="middle" y={18} className="lgv-edge-time">{edge.detail}</text>}
           </g>}
         </g>
       );
     });
-  }, [laidOut, incoming, arrowId]);
+  }, [laidOut, storyIncoming, arrowId]);
 
   const nodeEls = useMemo(() => {
     if (!laidOut) return null;
@@ -310,26 +337,30 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
       const y = (d as HierarchyNode<GraphNode> & { y: number }).y;
       const lab = label(n);
       if (n.kind === "event") {
-        const w = NODE_W - 34;
+        const w = NODE_W;
+        const inspect=()=>{if(n.storyKind==='activity'){setSelected(n.id);setSelectedEdge(null)}else void openRaw(n.seq||0,`${n.eventName} · ${n.eventSource}`)};
         return (
-          <g key={n.id} className="lgv-g" transform={`translate(${x - w / 2},${y - NODE_H / 2})`} onClick={() => openRaw(n.seq || 0, `${n.eventName} · ${n.eventSource}`)}>
+          <g key={n.id} className="lgv-g" role="button" tabIndex={0} aria-label={`Inspect activity: ${n.eventName}`} transform={`translate(${x - w / 2},${y - NODE_H / 2})`} onClick={inspect} onKeyDown={e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();inspect()}}}>
             <title>{`${n.eventName} · ${n.eventSource}${n.resource ? `\n→ ${n.resource}` : ""}\nseq ${n.seq} (click to open)`}</title>
-            <rect className="lgv-rect ev" width={w} height={NODE_H} rx={7} />
+            <rect className={`lgv-rect ev ${n.storyKind==='activity'?'selected-activity':''} ${n.id===selected?'sel':''}`} width={w} height={NODE_H} rx={7} />
+            <text x={26} y={17} className="lgv-kind">{n.storyKind==='activity'?'SELECTED ACTIVITY':'ACTIVITY'}</text>
             <circle cx={13} cy={NODE_H / 2} r={4} className={n.errorCode ? "lgv-dot-err" : "lgv-dot-ok"} />
-            <text x={26} y={NODE_H / 2 - 2} className="lgv-nm">{trunc(lab.primary, 20)}</text>
-            <text x={26} y={NODE_H / 2 + 12} className="lgv-sb">{trunc(lab.secondary, 22)}</text>
+            <text x={26} y={42} className="lgv-nm">{trunc(lab.primary, 32)}</text>
+            <text x={26} y={59} className="lgv-sb">{trunc(lab.secondary, 40)}</text>
+            <text x={26} y={76} className="lgv-sb">{n.eventTime?.replace('T',' ').replace('Z',' UTC')}</text>
           </g>
         );
       }
       const state = `${n.id === meta.currentId ? "cur" : ""} ${n.id === selected ? "sel" : ""} k-${n.kind}`;
       return (
-        <g key={n.id} className="lgv-g" role="button" tabIndex={0} aria-label={`Inspect credential: ${lab.primary}`} transform={`translate(${x - NODE_W / 2},${y - NODE_H / 2})`} onKeyDown={event => {if(event.key === "Enter" || event.key === " "){event.preventDefault();setSelected(n.id)}}} onClick={() => setSelected(n.id)}>
-          <title>{n.arn}</title>
+        <g key={n.id} className="lgv-g" role="button" tabIndex={0} aria-label={`Inspect ${n.storyKind==='identity'?'identity':n.storyKind==='gap'?'gap':'credential'}: ${lab.primary}`} transform={`translate(${x - NODE_W / 2},${y - NODE_H / 2})`} onKeyDown={event => {if(event.key === "Enter" || event.key === " "){event.preventDefault();setSelected(n.id);setSelectedEdge(null)}}} onClick={() => {setSelected(n.id);setSelectedEdge(null)}}>
+          <title>{n.arn||n.identityNote||n.userName}</title>
           <rect className={`lgv-rect ${state}`} width={NODE_W} height={NODE_H} rx={8} />
           <text x={16} y={NODE_H / 2 + 5} className={`lgv-gl ${GL_FILL[n.identityType] || "gl-other"}`}>{identityGlyph(n.identityType)}</text>
-          <text x={32} y={NODE_H / 2 - 3} className="lgv-nm">{trunc(lab.primary, 40)}</text>
-          {lab.secondary && <text x={32} y={NODE_H / 2 + 12} className="lgv-sb">{trunc(lab.secondary, 44)}</text>}
-          {n.events > 0 && <text x={NODE_W - 12} y={NODE_H / 2 + 4} textAnchor="end" className="lgv-ct">{n.events}</text>}
+          <text x={32} y={17} className="lgv-kind">{n.storyKind==='identity'?'USER':n.storyKind==='gap'?'EVIDENCE GAP':n.identityType==='AssumedRole'?'ROLE SESSION':n.identityType==='AWSService'?'AWS SERVICE':'IDENTITY'}</text>
+          <text x={32} y={42} className="lgv-nm">{trunc(lab.primary, 33)}</text>
+          {lab.secondary && <text x={32} y={59} className="lgv-sb">{trunc(lab.secondary, 40)}</text>}
+          {n.events > 0 && <text x={NODE_W - 12} y={76} textAnchor="end" className="lgv-ct">{n.events} {n.events===1?'event':'events'}</text>}
           {n.originKind === "sso" && <text x={NODE_W - 10} y={13} textAnchor="end" className="lgv-badge b-sso">SSO</text>}
           {n.originKind === "service-linked" && <text x={NODE_W - 10} y={13} textAnchor="end" className="lgv-badge b-slr">service-linked</text>}
         </g>
@@ -337,14 +368,14 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
     });
   }, [laidOut, selected, meta.currentId, openRaw]);
 
-  const sel = selected ? nodes.get(selected) : null;
+  const sel = selected ? story.nodes.find(n=>n.id===selected) : null;
   const atCap = nodes.size >= MAX_NODES;
-  const firstInitiation=useMemo(()=>{let id=meta.currentId,last:GraphEdge|undefined;const seen=new Set<string>();while(!seen.has(id)){seen.add(id);const edge=incoming.get(id);if(!edge)break;last=edge;id=edge.parent}return last},[incoming,meta.currentId]);
+
   const applyAttribution=useCallback((value:LineageAttribution)=>{
     const t=value.graph;if(t.snapshot?.generation!==snapshotRef.current?.generation||t.snapshot?.maxSeq!==snapshotRef.current?.maxSeq)return;
     generation.current++;busyRef.current.clear();setBusy(new Set());setExpSessions(new Set());setExpEvents(new Set());
     graphRef.current={nodes:new Map(t.nodes.map(n=>[n.id,n])),edges:t.edges};
-    didCenter.current=false;setNodes(graphRef.current.nodes);setEdges(t.edges);setMeta({currentId:t.currentId,rootId:t.rootId,notes:t.notes??[],applicable:t.applicable});setSelected(t.currentId||null);setAttribution(value);
+    didCenter.current=false;setNodes(graphRef.current.nodes);setEdges(t.edges);setMeta({currentId:t.currentId,rootId:t.rootId,notes:t.notes??[],applicable:t.applicable});setSelected(null);setSelectedEdge(null);setAttribution(value);
   },[]);
 
   return createPortal(
@@ -357,14 +388,15 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
         else if (!event.shiftKey && (document.activeElement === last || !items.includes(document.activeElement as HTMLElement))) { event.preventDefault(); first?.focus(); }
       }}>
         <div className="lgv-bar">
-          <span className="lgv-title">Credential lineage</span><span className="lgv-hint">{eventLabel || `Event #${seq}`} · observed evidence, not verified human identity</span>
+          <span className="lgv-title">Credential lineage</span>
           <span className="lgv-spacer" />
-          <span className="lgv-hint">drag pan · scroll zoom · click a node for details</span>
+          {!loading&&snapshotRef.current&&<LineageEnrichment key={`${seq}:${snapshotRef.current.generation}:${snapshotRef.current.maxSeq}`} seq={seq} snapshot={snapshotRef.current} unresolved={meta.applicable&&nodes.get(meta.rootId)?.kind!=="origin"} report={attribution} onResult={applyAttribution}/>}
+          <span className="lgv-hint">Click a node or connection to inspect</span>
+          <button className="lgv-close" onClick={()=>{didCenter.current=false;setFitVersion(n=>n+1)}} title="Fit the existing graph without changing evidence or expansions">Fit graph</button>
           <button ref={closeRef} className="lgv-close" onClick={onClose}>✕ Close</button>
         </div>
 
-        {!loading&&snapshotRef.current&&<LineageEnrichment key={`${seq}:${snapshotRef.current.generation}:${snapshotRef.current.maxSeq}`} seq={seq} snapshot={snapshotRef.current} unresolved={meta.applicable&&nodes.get(meta.rootId)?.kind!=="origin"} report={attribution} onResult={applyAttribution}/>}
-        {meta.notes.length>0 && <div className="lgv-notes">{meta.notes.map((n,i)=><div key={i} className="lgv-note">{n}</div>)}</div>}
+
         {error && <div className="lgv-error" role="alert">{error} <button onClick={()=>setRetry(n=>n+1)}>Reload lineage</button></div>}
         {loading ? (
           <div className="lgv-empty">Building lineage…</div>
@@ -378,10 +410,20 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
               </g>
             </svg>:<div className="la-empty-graph">{error?"The graph could not be loaded.":"No credential links are available for this event."}</div>}
 
-              <div className="lgv-detail">
-                <InitiationSummary edge={firstInitiation} parent={firstInitiation?nodes.get(firstInitiation.parent):undefined} onOpen={(id,title)=>void openRaw(id,title)}/>
-                <LineageFindings report={attribution} rootKey={meta.rootId}/>
-                {sel && sel.kind !== "event" && <>
+              {(sel||selectedEdge)&&<div className="lgv-detail" aria-label="Graph selection details">
+                <button className="lgv-detail-close" onClick={()=>{setSelected(null);setSelectedEdge(null)}}>Close details</button>
+                {selectedEdge&&<>
+                  <h3>{selectedEdge.label}</h3>
+                  <p className="la-selection-note">{selectedEdge.evidence||"Recorded activity performed with this identity."}</p>
+                  {(selectedEdge.relationship==="identity"||selectedEdge.relationship==="gap")&&meta.notes.length>0&&<details><summary>Graph evidence notes</summary>{meta.notes.map((note,i)=><p className="la-selection-note" key={i}>{note}</p>)}</details>}
+                  {selectedEdge.relationship==="issuance"&&<><InitiatorFacts value={{ip:selectedEdge.viaIP,userAgent:selectedEdge.viaUserAgent||'',time:selectedEdge.viaTime,eventId:selectedEdge.viaEventId||'',region:selectedEdge.viaRegion||'',mfa:selectedEdge.viaMfa||''}}/><div className="lgv-d-actions"><button onClick={()=>void openRaw(selectedEdge.viaSeq,`${selectedEdge.viaEvent} · original issuance`)}>Open issuance event</button></div></>}
+                  {selectedEdge.relationship==="activity"&&<div className="lgv-d-actions"><button onClick={()=>void openRaw(selectedEdge.viaSeq,`${activity?.eventName||eventLabel||"Activity"} · original event`)}>Open activity event</button></div>}
+                </>}
+                {sel?.storyKind==="identity"&&attribution&&<LineageFindings report={{...attribution,result:{...attribution.result,evidence:sel.identityEvidence?[sel.identityEvidence]:[]}}} rootKey={meta.rootId}/>}
+                {sel?.storyKind==="gap"&&<><h3>Issuer not recovered</h3><p className="la-selection-note">{sel.identityNote||"No supported issuance evidence is available."}</p></>}
+                {sel?.storyKind==="activity"&&<><h3>{sel.eventName}</h3><div className="la-scope">{sel.eventSource}</div><InitiatorFacts value={activityFacts(sel.activity)}/><div className="lgv-d-actions"><button onClick={()=>void openRaw(sel.seq!,`${sel.eventName} · original activity`)}>Open activity event</button></div></>}
+                {sel && !sel.storyKind && sel.kind !== "event" && <>
+                {meta.notes.length>0&&<details><summary>Graph evidence notes</summary>{meta.notes.map((note,i)=><p className="la-selection-note" key={i}>{note}</p>)}</details>}
                 <div className="lgv-d-head">
                   <span className={`lgv-glyph ${GLYPH_CLS[sel.identityType] || "lg-other"}`}>{identityGlyph(sel.identityType)}</span>
                   <span className="lgv-d-title">{label(sel).primary}</span>
@@ -431,8 +473,9 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
                     </>
                   )}
                 </div>
+                <LineageFindings report={attribution?{...attribution,result:{...attribution.result,evidence:attribution.result.evidence.filter(item=>item.nodeKey===sel.id)}}:null} rootKey={sel.id}/>
                 </>}
-              </div>
+              </div>}
           </div>
         )}
       </div>

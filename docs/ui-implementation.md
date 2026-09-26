@@ -6,6 +6,13 @@
 
 **ACTIVE PLAN:** [Approved analyst-review tasks](analyst-review-tasks.md). The user approved the new mock and authorized shipping it in separately committed slices. Two narrow workers own facets and inspector; parent owns shared integration. Older pass numbering below is historical. Shipping first, focused checks only, one final integration pass.
 
+### Graph-first identity → role → selected activity (current)
+
+- [x] Put exact recorded Identity Center association and the selected activity into the graph. Presentation-only typed links leave the native issuance graph unchanged; only exact store/user-ID evidence qualifies, conflicts stay unresolved, and expanded selected events are deduplicated. Unit checks pass.
+- [x] Remove default text banners and always-open metadata panels. Horizontal user → role → activity graph, uncertainty on connections, clickable/keyboard-accessible nodes and connections, optional source details, and view fitting without reloading evidence. Existing native-fixture browser regression passes at both viewport sizes, including remote errors, cancellation, original issuance, initiator metadata and browse return.
+- [x] Final bounded independent diff review passed with no security or logic blockers; static review of the changed graph, attribution controls and styles only (no independent test/screenshot claim). Parent verified the native build, two-size native-fixture UI regression and actual-S3 saved-evidence replay, including the final screenshot. Implementation committed with this checklist.
+- [x] Native binary rebuilt; focused native-fixture browser checks and saved-live-S3 replay pass at 1440×960 and 1280×800. Parent inspected the real-event screenshot: three readable connected presentation nodes, two typed links, no default text panels. Native result is still one credential node / zero proven issuance edges: SSO association is explicitly dashed and labeled **issuance not recovered**. Exact selected activity JSON opens; selection/browse state survives. Replay uses unchanged saved real AWS/native App evidence, not a new AWS lookup or native-window acceptance. Private screenshots: `~/.hermes/cache/scratch/cloudmon-live-s3-ls/graph-first-s3-{1440,1280}.png`. No cloud writes or capture changes.
+
 ### Connected lineage clarity — live correction
 
 - [x] Reproduced the distinction: live SSO directory enrichment had no exact issuance edge. It must not be advertised as resolved lineage.

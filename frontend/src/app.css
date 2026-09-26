@@ -1028,7 +1028,7 @@ body { font-feature-settings: "liga" 0, "calt" 0; font-variant-ligatures: none; 
 .lg-full:hover { border-color: var(--acc); background: var(--bg-3); }
 
 .lgv-scrim { position: fixed; inset: 0; background: rgba(4,8,12,0.6); display: flex; justify-content: center; align-items: center; z-index: 150; padding: 4vh 3vw; }
-.lgv-modal { width: min(1500px, 96vw); height: 90vh; display: flex; flex-direction: column; background: var(--bg-1); border: 1px solid var(--line-struct); border-radius: 8px; box-shadow: var(--overlay-shadow); overflow: hidden; }
+.lgv-modal { position: relative; width: min(1500px, 96vw); height: 90vh; display: flex; flex-direction: column; background: var(--bg-1); border: 1px solid var(--line-struct); border-radius: 8px; box-shadow: var(--overlay-shadow); overflow: hidden; }
 .lgv-bar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--bg-2); border-bottom: 1px solid var(--line-struct); }
 .lgv-title { font: 650 var(--fs-title)/1 var(--sans); color: var(--tx-1); }
 .lgv-note { font-family: var(--mono); font-size: var(--fs-cap); color: var(--sev-warn); }
@@ -1038,7 +1038,7 @@ body { font-feature-settings: "liga" 0, "calt" 0; font-variant-ligatures: none; 
 .lgv-close:hover { border-color: var(--sev-err); color: var(--sev-err); }
 .lgv-empty { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--tx-3); font-family: var(--mono); }
 
-.lgv-body { flex: 1; display: flex; min-height: 0; }
+.lgv-body { position: relative; flex: 1; display: flex; min-height: 0; }
 .lgv-canvas { flex: 1; min-width: 0; cursor: grab; user-select: none; -webkit-user-select: none; background: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.045) 1px, transparent 0) 0 0 / 26px 26px; }
 .lgv-node, .lgv-ev-node { user-select: none; -webkit-user-select: none; }
 .lgv-canvas:active { cursor: grabbing; }
@@ -1048,7 +1048,16 @@ body { font-feature-settings: "liga" 0, "calt" 0; font-variant-ligatures: none; 
 .lgv-edge-label text { font-family: var(--mono); paint-order: stroke; stroke: var(--bg-0); stroke-width: 6px; stroke-linejoin: round; }
 .lgv-edge-method { fill: var(--tx-1); font-size: 12px; }
 .lgv-edge-time { fill: var(--tx-2); font-size: 10px; }
-.lgv-link.ev { stroke: var(--line-struct); stroke-dasharray: 3 3; }
+.lgv-link.ev { stroke: var(--acc-text); }
+.lgv-link.unproven { stroke: var(--sev-warn); stroke-dasharray: 6 4; }
+.lgv-edge-hit { fill: none; stroke: transparent; stroke-width: 20; pointer-events: stroke; }
+.lgv-connection { cursor: pointer; }
+.lgv-connection:focus .lgv-link,.lgv-connection:hover .lgv-link { stroke-width: 3; }
+.lgv-connection[data-relationship="identity"] .lgv-edge-time { fill: var(--sev-warn); }
+.lgv-kind { fill: var(--tx-2); font: 10px var(--mono); letter-spacing: .05em; }
+.lgv-rect.k-unknown { stroke: var(--sev-warn); stroke-dasharray: 5 4; }
+.lgv-rect.k-identity { stroke: #c98bff; }
+.lgv-rect.ev.selected-activity { stroke: var(--acc-text); }
 /* an assumption that crosses an account boundary - a security-relevant hop */
 .lgv-link.xacct { stroke: var(--sev-warn); stroke-width: 2.5; stroke-dasharray: 6 3; }
 .lgv-xacct {
@@ -1087,7 +1096,10 @@ body { font-feature-settings: "liga" 0, "calt" 0; font-variant-ligatures: none; 
 .lgv-dot.err { background: var(--sev-err); }
 
 /* metadata drawer */
-.lgv-detail { flex: none; width: 320px; border-left: 1px solid var(--line-struct); background: var(--bg-2); padding: 14px; overflow-y: auto; }
+.lgv-detail { position: absolute; right: 12px; top: 12px; bottom: 12px; width: 380px; max-width: 45%; border: 1px solid var(--line-struct); border-radius: 6px; background: var(--bg-2); box-shadow: var(--overlay-shadow); padding: 14px; overflow-y: auto; box-sizing: border-box; }
+.lgv-detail-close { display: block; margin: 0 0 14px auto; padding: 5px 9px; border: 1px solid var(--border-fn); border-radius: 4px; color: var(--tx-1); background: var(--bg-1); cursor: pointer; }
+.lgv-detail h3 { font-size: 13px; overflow-wrap: anywhere; }
+.la-selection-note { font-size: 12px; line-height: 1.5; color: var(--tx-2); white-space: pre-line; }
 .lgv-d-head { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
 .lgv-d-title { flex: 1 1 auto; min-width: 0; font: 650 var(--fs-data)/1.2 var(--mono); color: var(--tx-1); overflow: hidden; text-overflow: ellipsis; }
 .lgv-kv { display: grid; grid-template-columns: 86px 1fr; gap: 5px 10px; margin: 0 0 14px; font-family: var(--mono); font-size: var(--fs-label); }
@@ -1108,7 +1120,7 @@ body { font-feature-settings: "liga" 0, "calt" 0; font-variant-ligatures: none; 
 .lgv-gl { font-size: 14px; }
 .gl-root { fill: var(--sev-err); } .gl-iam { fill: var(--acc-text); } .gl-role { fill: var(--sev-ok); }
 .gl-svc { fill: var(--tx-3); } .gl-fed { fill: var(--sev-warn); } .gl-other { fill: var(--tx-3); }
-.lgv-nm { fill: var(--tx-1); font-family: var(--mono); font-size: 12px; }
+.lgv-nm { fill: var(--tx-1); font-family: var(--mono); font-size: 13px; }
 .lgv-sb { fill: var(--tx-3); font-family: var(--mono); font-size: 10px; }
 .lgv-ct { fill: var(--tx-2); font-family: var(--mono); font-size: 10px; }
 .lgv-dot-ok { fill: var(--sev-ok); } .lgv-dot-err { fill: var(--sev-err); }

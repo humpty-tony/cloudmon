@@ -19,14 +19,13 @@ export function LineageEnrichment({seq,snapshot,unresolved,report,onResult}:Prop
  };
  if(!unresolved&&!report&&!error)return null;
  return <section className="la-tools" aria-label="Dynamic lineage resolution">
-  <div className="la-toolbar"><div className="la-message"><span className="la-heading">{working?'Resolving lineage…':unresolved?(report?'Lineage remains incomplete':'Lineage could not be fully resolved'):'Lineage context available'}</span>
-   <span className="la-scope">{report?(unresolved?'Available sources did not establish a complete chain. Supported evidence is shown below.':'Resolved from available evidence—not proof of the physical operator.'):'Search cloud history and available identity sources using your AWS connection. Original evidence is cached locally.'}</span>
-  </div><span className="lgv-spacer"/>
+  <div className="la-toolbar">
+   {working&&<span role="status" className="la-heading">Resolving…</span>}
    {working?<button onClick={()=>{controller.current?.abort();setError('Lookup cancelled. Existing evidence is unchanged.')}}>Cancel lookup</button>:unresolved&&<button className="la-primary" disabled={!ready} onClick={()=>void resolve()}>Resolve lineage dynamically</button>}
   </div>
-  {working&&<div role="status" className="la-progress">Checking cloud history and available identity sources…</div>}
+
   {error&&<div role="alert" className="la-error">{error}</div>}
-  {report&&<><button className="la-details-toggle" aria-expanded={details} onClick={()=>setDetails(!details)}>{details?'Hide lookup details':'Show lookup details'}</button>
+  {report&&<><button className="la-details-toggle" aria-expanded={details} onClick={()=>{setDetails(!details);setError('')}}>{details?'Hide lookup details':'Show lookup details'}</button>
    {details&&<div className="la-coverage"><div className="la-scope">{report.cached?'Saved offline result':'Retrieved result'} · {report.result.fetchedAt} · directory metadata reflects retrieval time</div><div className="la-source-list">{report.result.sources.map((source,i)=><div key={i} className="la-source"><div className="la-source-heading">{sourceName(source.source)} · {source.status.replaceAll('-',' ').replaceAll('_',' ')}</div><div>{source.detail}</div>{(source.accountId||source.region)&&<div>Scope: {source.accountId||'account not established'} / {source.region||'Region not specified'}</div>}{source.from&&<div>{source.from} → {source.to}</div>}<div>{source.pages} lookup calls · {source.events} records examined</div></div>)}</div></div>}
   </>}
  </section>;
