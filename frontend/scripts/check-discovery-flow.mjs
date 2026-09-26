@@ -38,6 +38,8 @@ try{
   await rows.first().locator('.c-time').click();const inspector=page.getByRole('complementary',{name:'Event inspector'});await inspector.locator('.ei-review-intro h2').waitFor();
   if(stage==='inspect'||stage==='all'){
    const actions=inspector.getByRole('group',{name:'Investigate selected event'});
+   const actionGeometry=await actions.locator('button').evaluateAll(buttons=>buttons.map(button=>({height:button.getBoundingClientRect().height,whiteSpace:getComputedStyle(button).whiteSpace})));
+   assert.ok(actionGeometry.every(button=>button.height<=32&&button.whiteSpace==='nowrap'),'Investigation actions should be compact single-line toolbar controls, not equal-width tiles');
    assert.equal(await actions.getByRole('button',{name:'Related events',exact:true}).isVisible(),true);
    assert.equal(await actions.getByRole('button',{name:'Credential chain',exact:true}).isVisible(),true);
    const ip=inspector.getByRole('button',{name:'Filter current results by sourceIPAddress: 198.51.100.44',exact:true});assert.equal(await ip.isVisible(),true);

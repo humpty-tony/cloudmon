@@ -67,8 +67,8 @@ export function FacetSidebar({ facets, collapsed, activeValues, onToggleCollapse
         <input ref={searchRef} aria-label="Find facet fields or returned values" aria-describedby={`${id}-search-scope`} placeholder="Find a field or value…" value={fieldSearch} onChange={event => setFieldSearch(event.target.value)} />
         {fieldSearch && <button className="facet-tool" aria-label="Clear facet search" onClick={() => {setFieldSearch(""); searchRef.current?.focus();}}>×</button>}
       </div>
-      <p className="facet-search-scope" id={`${id}-search-scope`}>Search: returned values only</p>
-      <p className="facet-scope" title="Counts and bars cover every matching event in the applied query, time filters and snapshot, not loaded rows.">Counts in matching events<br/><span>Applied query · time · snapshot</span></p>
+      <p className="facet-search-scope" id={`${id}-search-scope`}>Returned values only</p>
+      <p className="facet-scope" title="Counts and bars cover every matching event in the applied query, time filters and snapshot, not loaded rows.">Counts: matching events</p>
       <div className="facets-scroll">
         {query && matchingGroups.length === 0 && <p className="facet-note">No returned fields or values match. Omitted values are not searched; clear this search to enter an exact value in a group’s Details.</p>}
         {facets.map(group => {

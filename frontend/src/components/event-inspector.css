@@ -135,10 +135,9 @@
 }
 
 /* Stable task actions remain visible in every evidence tab. */
-.event-inspector--review .ei-investigation-tools { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; padding: 0 14px 12px; flex: none; }
+.event-inspector--review .ei-investigation-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 3px; padding: 0 12px 10px; flex: none; }
 .event-inspector--review .ei-investigation-tools .ei-selected-pin { display: contents; }
-.event-inspector--review .ei-investigation-tools button { min-height: 36px; min-width: 0; width: 100%; padding: 5px 6px; border: 1px solid var(--border-fn); border-radius: var(--radius); background: var(--bg-1); color: var(--tx-1); font: var(--fs-cap)/1.25 var(--sans); white-space: normal; cursor: pointer; text-decoration: none; }
-.event-inspector--review .ei-investigation-tools .ei-investigate { background: var(--acc-sel); border-color: var(--acc-focus); color: var(--acc-text); }
+.event-inspector--review .ei-investigation-tools button { min-height: 30px; min-width: 0; width: auto; padding: 5px 4px; border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--acc-text); font: var(--fs-cap)/1.25 var(--sans); white-space: nowrap; cursor: pointer; text-decoration: none; }
 .event-inspector--review .ei-investigation-tools button:hover:not(:disabled) { background: var(--bg-3); border-color: var(--acc-text); }
 .eo-filter-icon { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1.2; vertical-align: -2px; flex: none; margin-left: 4px; color: var(--acc-text); }
 .eo-filter-hint { display: flex; align-items: center; gap: 3px; color: var(--tx-3); font-size: var(--fs-cap); padding-top: 8px; }
