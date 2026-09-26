@@ -1042,7 +1042,12 @@ body { font-feature-settings: "liga" 0, "calt" 0; font-variant-ligatures: none; 
 .lgv-canvas { flex: 1; min-width: 0; cursor: grab; user-select: none; -webkit-user-select: none; background: radial-gradient(circle at 1px 1px, rgba(255,255,255,0.045) 1px, transparent 0) 0 0 / 26px 26px; }
 .lgv-node, .lgv-ev-node { user-select: none; -webkit-user-select: none; }
 .lgv-canvas:active { cursor: grabbing; }
-.lgv-link { fill: none; stroke: var(--border-fn); stroke-width: 1.5; }
+.lgv-link { fill: none; stroke: var(--tx-3); stroke-width: 1.5; }
+.lgv-arrow { fill: var(--tx-3); }
+.lgv-edge-label { pointer-events: auto; }
+.lgv-edge-label text { font-family: var(--mono); paint-order: stroke; stroke: var(--bg-0); stroke-width: 6px; stroke-linejoin: round; }
+.lgv-edge-method { fill: var(--tx-1); font-size: 12px; }
+.lgv-edge-time { fill: var(--tx-2); font-size: 10px; }
 .lgv-link.ev { stroke: var(--line-struct); stroke-dasharray: 3 3; }
 /* an assumption that crosses an account boundary - a security-relevant hop */
 .lgv-link.xacct { stroke: var(--sev-warn); stroke-width: 2.5; stroke-dasharray: 6 3; }

@@ -6,6 +6,15 @@
 
 **ACTIVE PLAN:** [Approved analyst-review tasks](analyst-review-tasks.md). The user approved the new mock and authorized shipping it in separately committed slices. Two narrow workers own facets and inspector; parent owns shared integration. Older pass numbering below is historical. Shipping first, focused checks only, one final integration pass.
 
+### Connected lineage clarity — live correction
+
+- [x] Reproduced the distinction: live SSO directory enrichment had no exact issuance edge. It must not be advertised as resolved lineage.
+- [x] Located a separate real Resource Explorer service → service-linked role issuance via exact returned access-key match; real App recovered two nodes / one edge without mutating the dataset.
+- [x] Put issuance method/time and direction on the connection; make caller and role names readable without selecting each node.
+- [x] Focused RED→GREEN UI regression passed at 1440×960 and 1280×800; native binary rebuilt. Real AWS lookup recovered one original issuance and two connected nodes; saved-live-result replay verified original JSON opening and browse return. Live harness initially inspected the asynchronous field tree too early; original-JSON replay passed without another AWS scan.
+- [x] Parent inspected the actual connected live screenshot: full service/role names, directional AssumeRole/time edge, retained original evidence. No directory-based assumption inferred.
+- [x] Bounded independent diff review found an unreachable SVG evidence tooltip (`pointer-events: none`). Parent reproduced it with a failing browser hit-test, enabled label pointer events, and verified both viewport checks and the final native build. No second independent review is claimed. Changes committed with this checklist. Private live artifacts: `~/.hermes/cache/scratch/cloudmon-live-lineage/`; screenshot shared with account identifiers redacted. Broader history is still scan-bounded; this validates the observed service-role hop, not the earlier SSO user's full chain.
+
 ### Simplified dynamic lineage resolution
 
 - [x] Remove the per-lineage settings panel and individual source expanders from the main workflow.

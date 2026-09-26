@@ -1,5 +1,5 @@
 import {AliasBadge} from "./AliasBadge";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { stratify, tree, type HierarchyNode } from "d3-hierarchy";
 import type { EvidenceSnapshot, FilterField, GraphEdge, GraphNode, LineageTree, QueryOp } from "../api/types";
@@ -19,10 +19,10 @@ interface Props {
   onPivot: (field: FilterField, value: string, op: QueryOp) => void;
 }
 
-const NODE_W = 210;
-const NODE_H = 54;
+const NODE_W = 360;
+const NODE_H = 64;
 const GAP_X = 22;
-const LEVEL_H = 112;
+const LEVEL_H = 160;
 
 const MAX_NODES = 600; // hard ceiling on rendered nodes so the graph can't blow up the renderer
 const GLYPH_CLS: Record<string, string> = {
@@ -69,6 +69,7 @@ export function LineageView(props: Props) {
 }
 
 function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: Props) {
+  const arrowId = useId();
   const [nodes, setNodes] = useState<Map<string, GraphNode>>(new Map());
   const [edges, setEdges] = useState<GraphEdge[]>([]);
   const [meta, setMeta] = useState<{ currentId: string; rootId: string; notes: string[]; applicable:boolean }>({ currentId: "", rootId: "", notes: [],applicable:false });
@@ -282,16 +283,24 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
       const s = l.source as HierarchyNode<GraphNode> & { x: number; y: number };
       const t = l.target as HierarchyNode<GraphNode> & { x: number; y: number };
       const my = (s.y + NODE_H / 2 + (t.y - NODE_H / 2)) / 2;
-      const xacct = incoming.get(t.data.id)?.crossAccount;
+      const edge = incoming.get(t.data.id);
+      const isActivity = t.data.kind === "event";
       return (
-        <path
-          key={i}
-          className={`lgv-link ${t.data.kind === "event" ? "ev" : ""} ${xacct ? "xacct" : ""}`}
-          d={`M${s.x},${s.y + NODE_H / 2} C${s.x},${my} ${t.x},${my} ${t.x},${t.y - NODE_H / 2}`}
-        />
+        <g key={i}>
+          <path
+            className={`lgv-link ${isActivity ? "ev" : ""} ${edge?.crossAccount ? "xacct" : ""}`}
+            d={`M${s.x},${s.y + NODE_H / 2} C${s.x},${my} ${t.x},${my} ${t.x},${t.y - NODE_H / 2}`}
+            markerEnd={`url(#${arrowId})`}
+          />
+          {!isActivity && edge?.viaEvent && <g className="lgv-edge-label" transform={`translate(${(s.x+t.x)/2},${my})`}>
+            <title>{`${edge.viaEvent} · ${edge.viaTime}\n${edge.evidence || "Recorded credential issuance"}`}</title>
+            <text textAnchor="middle" y={-6} className="lgv-edge-method">{edge.viaEvent}</text>
+            <text textAnchor="middle" y={10} className="lgv-edge-time">{edge.viaTime.replace('T',' ')}</text>
+          </g>}
+        </g>
       );
     });
-  }, [laidOut, incoming]);
+  }, [laidOut, incoming, arrowId]);
 
   const nodeEls = useMemo(() => {
     if (!laidOut) return null;
@@ -318,8 +327,8 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
           <title>{n.arn}</title>
           <rect className={`lgv-rect ${state}`} width={NODE_W} height={NODE_H} rx={8} />
           <text x={16} y={NODE_H / 2 + 5} className={`lgv-gl ${GL_FILL[n.identityType] || "gl-other"}`}>{identityGlyph(n.identityType)}</text>
-          <text x={32} y={NODE_H / 2 - 3} className="lgv-nm">{trunc(lab.primary, 20)}</text>
-          {lab.secondary && <text x={32} y={NODE_H / 2 + 12} className="lgv-sb">{trunc(lab.secondary, 22)}</text>}
+          <text x={32} y={NODE_H / 2 - 3} className="lgv-nm">{trunc(lab.primary, 40)}</text>
+          {lab.secondary && <text x={32} y={NODE_H / 2 + 12} className="lgv-sb">{trunc(lab.secondary, 44)}</text>}
           {n.events > 0 && <text x={NODE_W - 12} y={NODE_H / 2 + 4} textAnchor="end" className="lgv-ct">{n.events}</text>}
           {n.originKind === "sso" && <text x={NODE_W - 10} y={13} textAnchor="end" className="lgv-badge b-sso">SSO</text>}
           {n.originKind === "service-linked" && <text x={NODE_W - 10} y={13} textAnchor="end" className="lgv-badge b-slr">service-linked</text>}
@@ -362,6 +371,7 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
         ) : (
           <div className="lgv-body">
             {laidOut?<svg ref={svgRef} className="lgv-canvas" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onLostPointerCapture={() => { drag.current = null; }} onWheel={onWheel}>
+              <defs><marker id={arrowId} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse"><path d="M0,0 L0,8 L8,4 Z" className="lgv-arrow"/></marker></defs>
               <g ref={viewportRef} transform="translate(0,0) scale(1)">
                 {linkEls}
                 {nodeEls}
