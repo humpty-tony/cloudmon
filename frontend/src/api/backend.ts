@@ -41,6 +41,8 @@ import { computeFacets, FACET_FIELDS, type FacetGroup } from "./facets";
 import { computeHistogram, type Histogram } from "./histogram";
 import { computeStats, fmtSpan, type Stats } from "../components/StatsBar";
 
+import {defaultAttributionConfig, type AttributionBackend, type AttributionConfig, type LineageAttribution} from "./attribution";
+
 type EventCb = (e: CloudTrailEvent) => void;
 
 /** Aggregates in the shapes the UI components already consume. */
@@ -75,7 +77,7 @@ function sigmaOutcome(r:SigmaResultRaw):SigmaOutcome {
  return {parsed:r.parsed,supported:r.supported,title:r.title,diagnostics:r.diagnostics??[],sql:r.sql,matches:r.matches,scanned:r.scanned,events:(r.rows??[]).map(rowToEvent),snapshot:r.snapshot,explanations:r.explanations??{}};
 }
 
-export interface Backend {
+export interface Backend extends AttributionBackend {
   readonly live: boolean; // true => connected to a real Wails backend
   requiredPermissions(mode: ConnectionMode): Promise<RequiredPermission[]>;
   setConnection(cfg: ConnectionConfig): Promise<void>;
@@ -186,6 +188,10 @@ function requestID():string { return Array.from(crypto.getRandomValues(new Uint3
 function checkAborted(signal?:AbortSignal){if(signal?.aborted)throw new Error('Search cancelled')}
 
 class WailsBackend implements Backend {
+  getAttributionSettings(){return this.app.GetAttributionSettings() as Promise<AttributionConfig>}
+  async saveAttributionSettings(config:AttributionConfig){await this.app.SaveAttributionSettings(config)}
+  getLineageAttribution(seq:number,snapshot:EvidenceSnapshot){return this.app.GetLineageAttribution(seq,snapshot) as Promise<LineageAttribution|null>}
+  resolveLineageAttribution(seq:number,snapshot:EvidenceSnapshot,signal?:AbortSignal){return this.request<LineageAttribution>(signal,id=>this.app.ResolveLineageAttribution(id,seq,snapshot))}
   readonly live = true;
   private app = wailsApp()!;
   private async request<T>(signal: AbortSignal | undefined, invoke:(id:string)=>Promise<unknown>):Promise<T> {
@@ -312,6 +318,10 @@ class WailsBackend implements Backend {
 // ---- in-memory mock (browser preview): same windowed API over a JS array ----
 
 class MockBackend implements Backend {
+  async getAttributionSettings(){return {...defaultAttributionConfig}}
+  async saveAttributionSettings(_config:AttributionConfig){throw Error("Connector settings require the native CloudMon application.")}
+  async getLineageAttribution(_seq:number,_snapshot:EvidenceSnapshot):Promise<LineageAttribution|null>{return null}
+  async resolveLineageAttribution(_seq:number,_snapshot:EvidenceSnapshot,_signal?:AbortSignal):Promise<LineageAttribution>{throw Error("Remote attribution requires the native CloudMon application.")}
   readonly live = false;
   private feed = new MockFeed();
   private capture: SavedCapture | null = null;

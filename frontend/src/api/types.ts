@@ -244,6 +244,10 @@ export interface GraphEdge {
   viaEvent: string;
   viaTime: string;
   viaIP: string;
+  viaUserAgent?: string;
+  viaRegion?: string;
+  viaEventId?: string;
+  viaMfa?: string;
   evidence?: string;
   evidenceSeqs?: number[];
   crossAccount?: boolean; // caller and role live in different accounts

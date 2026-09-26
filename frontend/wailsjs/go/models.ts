@@ -1,16 +1,247 @@
+export namespace attribution {
+
+	export class FederationMapping {
+	    roleArn: string;
+	    validFrom: string;
+	    validTo: string;
+	    verifiedAt: string;
+	    note: string;
+
+	    static createFrom(source: any = {}) {
+	        return new FederationMapping(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.roleArn = source["roleArn"];
+	        this.validFrom = source["validFrom"];
+	        this.validTo = source["validTo"];
+	        this.verifiedAt = source["verifiedAt"];
+	        this.note = source["note"];
+	    }
+	}
+	export class Config {
+	    awsProfile: string;
+	    awsRegions: string[];
+	    identityCenterRegion: string;
+	    entraTenantId: string;
+	    entraTokenEnv: string;
+	    entraMappings: FederationMapping[];
+	    vaultAddress: string;
+	    vaultTokenEnv: string;
+	    vaultAuditPath: string;
+	    vaultAuditDevice: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Config(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.awsProfile = source["awsProfile"];
+	        this.awsRegions = source["awsRegions"];
+	        this.identityCenterRegion = source["identityCenterRegion"];
+	        this.entraTenantId = source["entraTenantId"];
+	        this.entraTokenEnv = source["entraTokenEnv"];
+	        this.entraMappings = this.convertValues(source["entraMappings"], FederationMapping);
+	        this.vaultAddress = source["vaultAddress"];
+	        this.vaultTokenEnv = source["vaultTokenEnv"];
+	        this.vaultAuditPath = source["vaultAuditPath"];
+	        this.vaultAuditDevice = source["vaultAuditDevice"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class Initiator {
+	    ip: string;
+	    userAgent: string;
+	    time: string;
+	    eventId: string;
+	    region: string;
+	    mfa: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Initiator(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ip = source["ip"];
+	        this.userAgent = source["userAgent"];
+	        this.time = source["time"];
+	        this.eventId = source["eventId"];
+	        this.region = source["region"];
+	        this.mfa = source["mfa"];
+	    }
+	}
+	export class Evidence {
+	    source: string;
+	    method: string;
+	    nodeKey: string;
+	    subjectId: string;
+	    displayName: string;
+	    userName: string;
+	    email: string;
+	    description: string;
+	    observedAt: string;
+	    initiator?: Initiator;
+
+	    static createFrom(source: any = {}) {
+	        return new Evidence(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.method = source["method"];
+	        this.nodeKey = source["nodeKey"];
+	        this.subjectId = source["subjectId"];
+	        this.displayName = source["displayName"];
+	        this.userName = source["userName"];
+	        this.email = source["email"];
+	        this.description = source["description"];
+	        this.observedAt = source["observedAt"];
+	        this.initiator = this.convertValues(source["initiator"], Initiator);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+
+	export class Record {
+	    id: string;
+	    raw: string;
+	    source: string;
+	    accountId: string;
+	    region: string;
+	    fetchedAt: string;
+
+	    static createFrom(source: any = {}) {
+	        return new Record(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.raw = source["raw"];
+	        this.source = source["source"];
+	        this.accountId = source["accountId"];
+	        this.region = source["region"];
+	        this.fetchedAt = source["fetchedAt"];
+	    }
+	}
+	export class SourceStatus {
+	    source: string;
+	    status: string;
+	    detail: string;
+	    accountId: string;
+	    region: string;
+	    from: string;
+	    to: string;
+	    events: number;
+	    pages: number;
+
+	    static createFrom(source: any = {}) {
+	        return new SourceStatus(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.source = source["source"];
+	        this.status = source["status"];
+	        this.detail = source["detail"];
+	        this.accountId = source["accountId"];
+	        this.region = source["region"];
+	        this.from = source["from"];
+	        this.to = source["to"];
+	        this.events = source["events"];
+	        this.pages = source["pages"];
+	    }
+	}
+	export class Result {
+	    fetchedAt: string;
+	    sources: SourceStatus[];
+	    evidence: Evidence[];
+	    records: Record[];
+
+	    static createFrom(source: any = {}) {
+	        return new Result(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.fetchedAt = source["fetchedAt"];
+	        this.sources = this.convertValues(source["sources"], SourceStatus);
+	        this.evidence = this.convertValues(source["evidence"], Evidence);
+	        this.records = this.convertValues(source["records"], Record);
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+
+}
+
 export namespace awsflow {
-	
+
 	export class Identity {
 	    account: string;
 	    arn: string;
 	    userId: string;
 	    profile: string;
 	    region: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Identity(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.account = source["account"];
@@ -30,11 +261,11 @@ export namespace awsflow {
 	    account: string;
 	    allManagement: boolean;
 	    owned: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Infra(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.queueUrl = source["queueUrl"];
@@ -52,11 +283,11 @@ export namespace awsflow {
 	    name: string;
 	    kind: string;
 	    region: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Profile(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -73,11 +304,11 @@ export namespace awsflow {
 	    coverageKnown: boolean;
 	    coverageComplete: boolean;
 	    summary: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new TrailStatus(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.hasLoggingTrail = source["hasLoggingTrail"];
@@ -94,17 +325,17 @@ export namespace awsflow {
 }
 
 export namespace capture {
-	
+
 	export class Session {
 	    version: number;
 	    phase: string;
 	    config: config.ConnectionConfig;
 	    infra: awsflow.Infra;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Session(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.version = source["version"];
@@ -112,7 +343,7 @@ export namespace capture {
 	        this.config = this.convertValues(source["config"], config.ConnectionConfig);
 	        this.infra = this.convertValues(source["infra"], awsflow.Infra);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -135,7 +366,7 @@ export namespace capture {
 }
 
 export namespace config {
-	
+
 	export class ConnectionConfig {
 	    mode: string;
 	    region: string;
@@ -145,11 +376,11 @@ export namespace config {
 	    dumpPath: string;
 	    capturePattern: string;
 	    writeOnly: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ConnectionConfig(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mode = source["mode"];
@@ -165,11 +396,11 @@ export namespace config {
 	export class RequiredPermission {
 	    action: string;
 	    reason: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new RequiredPermission(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.action = source["action"];
@@ -180,15 +411,15 @@ export namespace config {
 }
 
 export namespace main {
-	
+
 	export class FilteredExport {
 	    path: string;
 	    count: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new FilteredExport(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -201,11 +432,11 @@ export namespace main {
 	    totalMatches: number;
 	    observationCount: number;
 	    truncated: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new InvestigationExport(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.path = source["path"];
@@ -215,16 +446,52 @@ export namespace main {
 	        this.truncated = source["truncated"];
 	    }
 	}
+	export class LineageAttribution {
+	    result: attribution.Result;
+	    graph: store.LineageTree;
+	    raw: Record<number, string>;
+	    cached: boolean;
+
+	    static createFrom(source: any = {}) {
+	        return new LineageAttribution(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.result = this.convertValues(source["result"], attribution.Result);
+	        this.graph = this.convertValues(source["graph"], store.LineageTree);
+	        this.raw = source["raw"];
+	        this.cached = source["cached"];
+	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class RecoveryState {
 	    evidence: store.EvidenceStats;
 	    capture?: capture.Session;
 	    captureError: string;
 	    active: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new RecoveryState(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.evidence = this.convertValues(source["evidence"], store.EvidenceStats);
@@ -232,7 +499,7 @@ export namespace main {
 	        this.captureError = source["captureError"];
 	        this.active = source["active"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -255,18 +522,18 @@ export namespace main {
 }
 
 export namespace model {
-	
+
 	export class UserIdentity {
 	    type: string;
 	    principalId: string;
 	    arn: string;
 	    accountId: string;
 	    userName: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new UserIdentity(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.type = source["type"];
@@ -292,11 +559,11 @@ export namespace model {
 	    errorMessage?: string;
 	    recipientAccountId: string;
 	    rawJSON: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CloudTrailEvent(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.seq = source["seq"];
@@ -315,7 +582,7 @@ export namespace model {
 	        this.recipientAccountId = source["recipientAccountId"];
 	        this.rawJSON = source["rawJSON"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -338,7 +605,7 @@ export namespace model {
 }
 
 export namespace store {
-	
+
 	export class Row {
 	    seq: number;
 	    eventID: string;
@@ -362,11 +629,11 @@ export namespace store {
 	    managementEvent: boolean;
 	    rawJSON: string;
 	    target: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Row(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.seq = source["seq"];
@@ -400,11 +667,11 @@ export namespace store {
 	    errors: number;
 	    writes: number;
 	    totalGroups: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ActivityGroup(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.value = source["value"];
@@ -424,11 +691,11 @@ export namespace store {
 	    invalidTimes: number;
 	    firstMs?: number;
 	    lastMs?: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ActivityStats(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.events = source["events"];
@@ -445,11 +712,11 @@ export namespace store {
 	    generation: string;
 	    maxSeq: number;
 	    capturedAt: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Snapshot(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.generation = source["generation"];
@@ -472,11 +739,11 @@ export namespace store {
 	    breakdowns: Record<string, Array<ActivityGroup>>;
 	    events: Row[];
 	    notes: string[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ActivityAnalysis(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.snapshot = this.convertValues(source["snapshot"], Snapshot);
@@ -494,7 +761,7 @@ export namespace store {
 	        this.events = this.convertValues(source["events"], Row);
 	        this.notes = source["notes"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -513,17 +780,17 @@ export namespace store {
 		    return a;
 		}
 	}
-	
-	
+
+
 	export class Bucket {
 	    t: number;
 	    n: number;
 	    e: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Bucket(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.t = source["t"];
@@ -539,11 +806,11 @@ export namespace store {
 	    returnedValues: number;
 	    limit: number;
 	    truncated: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new FacetMetadata(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.totalEvents = source["totalEvents"];
@@ -562,11 +829,11 @@ export namespace store {
 	    regions: number;
 	    minMs: number;
 	    maxMs: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Stats(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.errors = source["errors"];
@@ -587,11 +854,11 @@ export namespace store {
 	    histStep: number;
 	    histFrom: number;
 	    histTo: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Aggregates(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.snapshot = this.convertValues(source["snapshot"], Snapshot);
@@ -604,7 +871,7 @@ export namespace store {
 	        this.histFrom = source["histFrom"];
 	        this.histTo = source["histTo"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -626,11 +893,11 @@ export namespace store {
 	export class AnalysisEntity {
 	    dimension: string;
 	    value: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AnalysisEntity(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.dimension = source["dimension"];
@@ -645,11 +912,11 @@ export namespace store {
 	    op?: string;
 	    value?: string;
 	    regex?: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Expr(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.t = source["t"];
@@ -660,7 +927,7 @@ export namespace store {
 	        this.value = source["value"];
 	        this.regex = source["regex"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -690,11 +957,11 @@ export namespace store {
 	    toMs: number;
 	    text: string;
 	    expr?: Expr;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Filter(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.includes = source["includes"];
@@ -708,7 +975,7 @@ export namespace store {
 	        this.text = source["text"];
 	        this.expr = this.convertValues(source["expr"], Expr);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -734,11 +1001,11 @@ export namespace store {
 	    windowHours: number;
 	    entity?: AnalysisEntity;
 	    snapshot?: Snapshot;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new AnalysisOptions(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.filter = this.convertValues(source["filter"], Filter);
@@ -748,7 +1015,7 @@ export namespace store {
 	        this.entity = this.convertValues(source["entity"], AnalysisEntity);
 	        this.snapshot = this.convertValues(source["snapshot"], Snapshot);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -767,16 +1034,16 @@ export namespace store {
 		    return a;
 		}
 	}
-	
+
 	export class CorrelationReason {
 	    kind: string;
 	    label: string;
 	    value?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new CorrelationReason(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -793,11 +1060,11 @@ export namespace store {
 	    lossy: boolean;
 	    observedAt: string;
 	    displayed: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SourceEvidence(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -814,18 +1081,18 @@ export namespace store {
 	    total: number;
 	    variants: number;
 	    observations: SourceEvidence[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new EvidencePage(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.total = source["total"];
 	        this.variants = source["variants"];
 	        this.observations = this.convertValues(source["observations"], SourceEvidence);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -849,11 +1116,11 @@ export namespace store {
 	    observations: number;
 	    variantEvents: number;
 	    lossy: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new EvidenceStats(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.events = source["events"];
@@ -862,23 +1129,23 @@ export namespace store {
 	        this.lossy = source["lossy"];
 	    }
 	}
-	
-	
+
+
 	export class FacetValue {
 	    value: string;
 	    count: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new FacetValue(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.value = source["value"];
 	        this.count = source["count"];
 	    }
 	}
-	
+
 	export class GraphEdge {
 	    parent: string;
 	    child: string;
@@ -886,14 +1153,18 @@ export namespace store {
 	    viaEvent: string;
 	    viaTime: string;
 	    viaIP: string;
+	    viaUserAgent?: string;
+	    viaRegion?: string;
+	    viaEventId?: string;
+	    viaMfa?: string;
 	    evidence?: string;
 	    evidenceSeqs?: number[];
 	    crossAccount?: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new GraphEdge(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.parent = source["parent"];
@@ -902,6 +1173,10 @@ export namespace store {
 	        this.viaEvent = source["viaEvent"];
 	        this.viaTime = source["viaTime"];
 	        this.viaIP = source["viaIP"];
+	        this.viaUserAgent = source["viaUserAgent"];
+	        this.viaRegion = source["viaRegion"];
+	        this.viaEventId = source["viaEventId"];
+	        this.viaMfa = source["viaMfa"];
 	        this.evidence = source["evidence"];
 	        this.evidenceSeqs = source["evidenceSeqs"];
 	        this.crossAccount = source["crossAccount"];
@@ -932,11 +1207,11 @@ export namespace store {
 	    errorCode?: string;
 	    readOnly?: boolean;
 	    resource?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new GraphNode(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -968,17 +1243,17 @@ export namespace store {
 	export class HuntMatch {
 	    event: Row;
 	    indicators: number[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new HuntMatch(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.event = this.convertValues(source["event"], Row);
 	        this.indicators = source["indicators"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1000,11 +1275,11 @@ export namespace store {
 	export class Indicator {
 	    kind: string;
 	    value: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Indicator(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -1021,11 +1296,11 @@ export namespace store {
 	    group: string;
 	    minutes: number;
 	    snapshot?: Snapshot;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new HuntOptions(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.mode = source["mode"];
@@ -1038,7 +1313,7 @@ export namespace store {
 	        this.minutes = source["minutes"];
 	        this.snapshot = this.convertValues(source["snapshot"], Snapshot);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1061,18 +1336,18 @@ export namespace store {
 	    events: Row[];
 	    deltaMs: number;
 	    tiedCandidates: number[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SequenceMatch(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.events = this.convertValues(source["events"], Row);
 	        this.deltaMs = source["deltaMs"];
 	        this.tiedCandidates = source["tiedCandidates"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1096,11 +1371,11 @@ export namespace store {
 	    second: Row;
 	    deltaMs: number;
 	    tiedFirst: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SequencePair(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.first = this.convertValues(source["first"], Row);
@@ -1108,7 +1383,7 @@ export namespace store {
 	        this.deltaMs = source["deltaMs"];
 	        this.tiedFirst = source["tiedFirst"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1131,11 +1406,11 @@ export namespace store {
 	    kind: string;
 	    value: string;
 	    matches: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new IndicatorCount(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.kind = source["kind"];
@@ -1156,11 +1431,11 @@ export namespace store {
 	    pairs: SequencePair[];
 	    sequences: SequenceMatch[];
 	    notes: string[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new HuntResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.snapshot = this.convertValues(source["snapshot"], Snapshot);
@@ -1176,7 +1451,7 @@ export namespace store {
 	        this.sequences = this.convertValues(source["sequences"], SequenceMatch);
 	        this.notes = source["notes"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1195,24 +1470,24 @@ export namespace store {
 		    return a;
 		}
 	}
-	
-	
+
+
 	export class InvestigationEvent {
 	    event: Row;
 	    reasons: CorrelationReason[];
 	    deltaMs: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new InvestigationEvent(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.event = this.convertValues(source["event"], Row);
 	        this.reasons = this.convertValues(source["reasons"], CorrelationReason);
 	        this.deltaMs = source["deltaMs"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1235,11 +1510,11 @@ export namespace store {
 	    arn: string;
 	    kind: string;
 	    source: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new ResourceReference(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.arn = source["arn"];
@@ -1258,11 +1533,11 @@ export namespace store {
 	    fromMs: number;
 	    toMs: number;
 	    notes: string[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Investigation(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.snapshot = this.convertValues(source["snapshot"], Snapshot);
@@ -1276,7 +1551,7 @@ export namespace store {
 	        this.toMs = source["toMs"];
 	        this.notes = source["notes"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1295,18 +1570,18 @@ export namespace store {
 		    return a;
 		}
 	}
-	
+
 	export class InvestigationOptions {
 	    seq: number;
 	    eventID: string;
 	    minutes: number;
 	    relation: string;
 	    snapshot?: Snapshot;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new InvestigationOptions(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.seq = source["seq"];
@@ -1315,7 +1590,7 @@ export namespace store {
 	        this.relation = source["relation"];
 	        this.snapshot = this.convertValues(source["snapshot"], Snapshot);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1348,11 +1623,11 @@ export namespace store {
 	    viaSourceIP: string;
 	    evidence: string;
 	    evidenceSeqs: number[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LineageNode(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.identityType = source["identityType"];
@@ -1377,11 +1652,11 @@ export namespace store {
 	    status: string;
 	    reason: string;
 	    nodes: LineageNode[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new Lineage(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.applicable = source["applicable"];
@@ -1391,7 +1666,7 @@ export namespace store {
 	        this.reason = source["reason"];
 	        this.nodes = this.convertValues(source["nodes"], LineageNode);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1410,7 +1685,7 @@ export namespace store {
 		    return a;
 		}
 	}
-	
+
 	export class LineageTree {
 	    snapshot?: Snapshot;
 	    applicable: boolean;
@@ -1419,11 +1694,11 @@ export namespace store {
 	    nodes: GraphNode[];
 	    edges: GraphEdge[];
 	    notes: string[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new LineageTree(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.snapshot = this.convertValues(source["snapshot"], Snapshot);
@@ -1434,7 +1709,7 @@ export namespace store {
 	        this.edges = this.convertValues(source["edges"], GraphEdge);
 	        this.notes = source["notes"];
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1453,22 +1728,22 @@ export namespace store {
 		    return a;
 		}
 	}
-	
-	
+
+
 	export class SearchResult {
 	    aggregates: Aggregates;
 	    events: Row[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SearchResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.aggregates = this.convertValues(source["aggregates"], Aggregates);
 	        this.events = this.convertValues(source["events"], Row);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1487,17 +1762,17 @@ export namespace store {
 		    return a;
 		}
 	}
-	
-	
+
+
 	export class SigmaDiag {
 	    severity: string;
 	    message: string;
 	    line?: number;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SigmaDiag(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.severity = source["severity"];
@@ -1516,11 +1791,11 @@ export namespace store {
 	    rows: Row[];
 	    snapshot?: Snapshot;
 	    explanations: Record<number, Array<SigmaSelection>>;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SigmaResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.parsed = source["parsed"];
@@ -1534,7 +1809,7 @@ export namespace store {
 	        this.snapshot = this.convertValues(source["snapshot"], Snapshot);
 	        this.explanations = this.convertValues(source["explanations"], Array<SigmaSelection>, true);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1556,11 +1831,11 @@ export namespace store {
 	export class SigmaRuleInput {
 	    name: string;
 	    yaml: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SigmaRuleInput(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -1570,11 +1845,11 @@ export namespace store {
 	export class SigmaSelection {
 	    name: string;
 	    matched: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SigmaSelection(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
@@ -1584,17 +1859,17 @@ export namespace store {
 	export class SigmaSuiteEntry {
 	    name: string;
 	    result: SigmaResult;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SigmaSuiteEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.name = source["name"];
 	        this.result = this.convertValues(source["result"], SigmaResult);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1616,17 +1891,17 @@ export namespace store {
 	export class SigmaSuiteResult {
 	    snapshot: Snapshot;
 	    results: SigmaSuiteEntry[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new SigmaSuiteResult(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.snapshot = this.convertValues(source["snapshot"], Snapshot);
 	        this.results = this.convertValues(source["results"], SigmaSuiteEntry);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -1645,8 +1920,8 @@ export namespace store {
 		    return a;
 		}
 	}
-	
-	
+
+
 
 }
 

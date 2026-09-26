@@ -85,6 +85,10 @@ type GraphEdge struct {
 	ViaEvent     string  `json:"viaEvent"`
 	ViaTime      string  `json:"viaTime"`
 	ViaIP        string  `json:"viaIP"`
+	ViaUserAgent string  `json:"viaUserAgent,omitempty"`
+	ViaRegion    string  `json:"viaRegion,omitempty"`
+	ViaEventID   string  `json:"viaEventId,omitempty"`
+	ViaMFA       string  `json:"viaMfa,omitempty"`
 	Evidence     string  `json:"evidence,omitempty"`
 	EvidenceSeqs []int64 `json:"evidenceSeqs,omitempty"`
 	CrossAccount bool    `json:"crossAccount,omitempty"` // parent and child live in different accounts
@@ -198,6 +202,7 @@ func parseStsArn(arn string) (account, role, session string) {
 type childRow struct {
 	Seq                                                                                                                             int64
 	EventName, EventTime, SourceIP, ChildKey, ChildArn, TargetRole, TargetPrincipal, CallerType, CallerArn, CallerAccount, Evidence string
+	UserAgent, Region, EventID, MFA                                                                                                 string
 	EvidenceSeqs                                                                                                                    []int64
 }
 
@@ -238,7 +243,7 @@ func (s *lineageReader) childrenOf(key string) ([]childRow, bool, error) {
 			s.notes = append(s.notes, "Child credential has a different or missing caller key in the selected observation; omitted.")
 			continue
 		}
-		rows = append(rows, childRow{Seq: r.Seq, EventName: r.EventName, EventTime: r.EventTime, SourceIP: r.SourceIP, ChildKey: k.K, ChildArn: r.IssuedArn, TargetRole: r.TargetRole, TargetPrincipal: r.TargetPrincipal, CallerType: r.IdentityType, CallerArn: r.IdentityArn, CallerAccount: r.AccountID, Evidence: r.Evidence, EvidenceSeqs: r.EvidenceSeqs})
+		rows = append(rows, childRow{Seq: r.Seq, EventName: r.EventName, EventTime: r.EventTime, SourceIP: r.SourceIP, UserAgent: r.UserAgent, Region: r.Region, EventID: r.EventID, MFA: r.MFA, ChildKey: k.K, ChildArn: r.IssuedArn, TargetRole: r.TargetRole, TargetPrincipal: r.TargetPrincipal, CallerType: r.IdentityType, CallerArn: r.IdentityArn, CallerAccount: r.AccountID, Evidence: r.Evidence, EvidenceSeqs: r.EvidenceSeqs})
 	}
 	return rows, trunc, nil
 }
@@ -435,7 +440,7 @@ func (s *lineageReader) LineageGraph(seq int64) (LineageTree, error) {
 		*n = GraphNode{ID: id, Kind: kind, IdentityType: a.IdentityType, Arn: a.IdentityArn,
 			RoleArn: a.RoleArn, RoleName: roleTail(a.RoleArn), UserName: a.UserName, SessionName: a.SessionName,
 			AccountID: a.AccountID, AccessKeyID: a.NodeKey, InvokedBy: a.InvokedBy}
-		tree.Edges = append(tree.Edges, GraphEdge{Parent: id, Child: prevID, ViaSeq: a.Seq, ViaEvent: a.EventName, ViaTime: a.EventTime, ViaIP: a.SourceIP, Evidence: a.Evidence, EvidenceSeqs: a.EvidenceSeqs})
+		tree.Edges = append(tree.Edges, GraphEdge{Parent: id, Child: prevID, ViaSeq: a.Seq, ViaEvent: a.EventName, ViaTime: a.EventTime, ViaIP: a.SourceIP, ViaUserAgent: a.UserAgent, ViaRegion: a.Region, ViaEventID: a.EventID, ViaMFA: a.MFA, Evidence: a.Evidence, EvidenceSeqs: a.EvidenceSeqs})
 		prevID = id
 	}
 	tree.RootID = ks
@@ -470,7 +475,7 @@ func (s *lineageReader) LineageGraph(seq int64) (LineageTree, error) {
 			resolveKeys = append(resolveKeys, c.ChildKey)
 			edgeRows[c.ChildKey] = c
 		}
-		tree.Edges = append(tree.Edges, GraphEdge{Parent: parentNodeID, Child: id, ViaSeq: c.Seq, ViaEvent: c.EventName, ViaTime: c.EventTime, ViaIP: c.SourceIP, Evidence: c.Evidence, EvidenceSeqs: c.EvidenceSeqs})
+		tree.Edges = append(tree.Edges, GraphEdge{Parent: parentNodeID, Child: id, ViaSeq: c.Seq, ViaEvent: c.EventName, ViaTime: c.EventTime, ViaIP: c.SourceIP, ViaUserAgent: c.UserAgent, ViaRegion: c.Region, ViaEventID: c.EventID, ViaMFA: c.MFA, Evidence: c.Evidence, EvidenceSeqs: c.EvidenceSeqs})
 	}
 
 	// parent's children → siblings (S is already present, so it's just skipped)
@@ -633,7 +638,7 @@ func (s *lineageReader) LineageChildren(accessKeyID string) (LineageTree, error)
 	for _, c := range kids {
 		keys = append(keys, c.ChildKey)
 		edgeRows[c.ChildKey] = c
-		tree.Edges = append(tree.Edges, GraphEdge{Parent: accessKeyID, Child: nodeID(c.ChildKey, c.ChildArn), ViaSeq: c.Seq, ViaEvent: c.EventName, ViaTime: c.EventTime, ViaIP: c.SourceIP, Evidence: c.Evidence, EvidenceSeqs: c.EvidenceSeqs})
+		tree.Edges = append(tree.Edges, GraphEdge{Parent: accessKeyID, Child: nodeID(c.ChildKey, c.ChildArn), ViaSeq: c.Seq, ViaEvent: c.EventName, ViaTime: c.EventTime, ViaIP: c.SourceIP, ViaUserAgent: c.UserAgent, ViaRegion: c.Region, ViaEventID: c.EventID, ViaMFA: c.MFA, Evidence: c.Evidence, EvidenceSeqs: c.EvidenceSeqs})
 	}
 	idents, err := s.resolveIdentities(keys)
 	if err != nil {

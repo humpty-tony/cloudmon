@@ -27,6 +27,8 @@ github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.58.0 h1:0emgCpX7x4s80lZbktnRJ
 github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.58.0/go.mod h1:Fe4hZhPz2Pd5Ip9F/x5F+qVZVwkhm9CL+FdvrDOwQWE=
 github.com/aws/aws-sdk-go-v2/service/eventbridge v1.48.0 h1:yELHfWewimb2tn3G1VzB9vV0m1gfIg6l7SUJegUwdOM=
 github.com/aws/aws-sdk-go-v2/service/eventbridge v1.48.0/go.mod h1:omTuHWtb4F9qY54sIyduQW899SSbvO6t7rgO6KiLn90=
+github.com/aws/aws-sdk-go-v2/service/identitystore v1.39.0 h1:k0/u3AzMxsHypxUEw0c5D+ygjLCqUOJ8HJfBfV81nLk=
+github.com/aws/aws-sdk-go-v2/service/identitystore v1.39.0/go.mod h1:SL6bbuqdtQ4jCZP2PXU7oshbgEI/hvVlB8RO5F4+qkY=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.13 h1:mbRIur/BiHK6SKPjoBIXSE/hJ6g6JGRLuxQy1jGjlN4=
 github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.13/go.mod h1:ITg9em2KbJx1s0y4aqRX5OYWG6HBZ5TVR//OdpEZ2CQ=
 github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.31 h1:w2SIhW92DZPFrSL4ksVCr8IYff5OZwIcxg8+95tzvAI=

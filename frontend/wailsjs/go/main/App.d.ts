@@ -3,6 +3,7 @@
 import {store} from '../models';
 import {awsflow} from '../models';
 import {main} from '../models';
+import {attribution} from '../models';
 import {model} from '../models';
 import {config} from '../models';
 
@@ -24,6 +25,8 @@ export function ExportFiltered(arg1:store.Filter,arg2:store.Snapshot,arg3:string
 
 export function ExportInvestigation(arg1:store.InvestigationOptions,arg2:string):Promise<main.InvestigationExport>;
 
+export function GetAttributionSettings():Promise<attribution.Config>;
+
 export function GetEventEvidence(arg1:number,arg2:number):Promise<store.EvidencePage>;
 
 export function GetEventEvidenceSnapshot(arg1:number,arg2:number,arg3:store.Snapshot):Promise<store.EvidencePage>;
@@ -33,6 +36,8 @@ export function GetEventRaw(arg1:number):Promise<string>;
 export function GetEvidenceSnapshot():Promise<store.Snapshot>;
 
 export function GetInitialEvents():Promise<Array<model.CloudTrailEvent>>;
+
+export function GetLineageAttribution(arg1:number,arg2:store.Snapshot):Promise<main.LineageAttribution>;
 
 export function GetObservation(arg1:number):Promise<string>;
 
@@ -88,9 +93,13 @@ export function RawBySeqs(arg1:Array<number>):Promise<Array<string>>;
 
 export function RequiredPermissions(arg1:string):Promise<Array<config.RequiredPermission>>;
 
+export function ResolveLineageAttribution(arg1:string,arg2:number,arg3:store.Snapshot):Promise<main.LineageAttribution>;
+
 export function ResumeCapture():Promise<awsflow.Infra>;
 
 export function RunLoginCommand(arg1:string):Promise<void>;
+
+export function SaveAttributionSettings(arg1:attribution.Config):Promise<void>;
 
 export function SelectDumpFile():Promise<string>;
 

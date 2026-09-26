@@ -21,11 +21,12 @@ Scope: 90-day CloudTrail history is the primary remote source. Stack Identity Ce
 
 - [x] Inspect current store, bridge, UI, research and repo handoff; establish disjoint ownership and contracts.
 - [x] Native initiator metadata and isolated lineage overlay; source-variant/snapshot safeguards. Focused native regression tests pass; browsing generation/count remain unchanged.
-- [ ] Primary bounded CloudTrail adapter and Identity Store enrichment.
-- [ ] Optional Entra mapping and Vault audit/HMAC adapters.
+- [x] Primary bounded CloudTrail adapter and Identity Store enrichment. Native adapter tests and real adapter→store synthetic integration pass.
+- [x] Optional Entra mapping and Vault audit/HMAC adapters. Exact matching, attestation, tenant binding, token secrecy and failure fixtures pass.
 - [x] Explicit connector setup, cancellation, persisted offline overlay and evidence access. Native cache/config/isolation tests pass, including stale-snapshot rejection and private-file modes.
 - [x] Integrated lineage UI with stacked findings, source coverage, and initiation metadata. Actual-App Chromium checks pass at 1440×960 and 1280×800; fixtures are explicitly synthetic.
-- [ ] Focused native/API and actual-App UI checks, bounded adversarial review.
-- [ ] Production native rebuild, incremental commits, inspected final screenshot delivered.
+- [x] Focused native/API and actual-App UI checks, bounded adversarial review. Independent review found remote ancestry could bypass contradictory local parent evidence. Reproduced both distinct-issuance and original-source-variant cases as failing regressions, then fixed collection to include remote-discovered keys and recursive local observations; both pass. Final targeted checks and native rebuild pass. No second broad review was run.
+- [x] Production native rebuild and inspected final actual-UI screenshots; synthetic AWS responses run through real native adapters/store.
+- [x] Address the review's sole blocker with regression coverage; commit implementation, generated bindings and handoff. Documentation checkpoint: `896c4b1`; feature commit follows it on `feat/vector-workbench`.
 
 Research-backed feasibility is not live-account acceptance. Synthetic API fixtures and browser screenshots must be labelled separately from live/native execution.

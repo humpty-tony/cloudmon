@@ -12,6 +12,8 @@ import (
 const issuancePredicate = `eventSource = 'sts.amazonaws.com' AND eventName IN ('AssumeRole','AssumeRoleWithSAML','AssumeRoleWithWebIdentity','AssumeRoot','GetSessionToken','GetFederationToken') AND coalesce(errorCode,'') = '' AND coalesce(errorMessage,'') = '' AND coalesce(issuedKeyId,'') <> ''`
 const issuanceCap = 64
 const lineageColumns = `(SELECT count(DISTINCT o.raw) FROM observations o WHERE o.eventKey=events.eventKey)>1 AS hasVariants, seq, eventName, eventTime, sourceIPAddress, identityType, identityArn, userName, accountId, roleArn, sessionName, invokedBy, accessKeyId AS node_key, principalId, sourceIdentity,
+  json_extract_string(raw,'$.userAgent') AS userAgent, json_extract_string(raw,'$.awsRegion') AS region,
+  json_extract_string(raw,'$.eventID') AS eventId, json_extract_string(raw,'$.userIdentity.sessionContext.attributes.mfaAuthenticated') AS mfa,
  coalesce(json_exists(raw,'$.userIdentity.sessionContext'),false) AS hasContext,
  json_extract_string(raw,'$.sharedEventID') AS sharedEventID,
  json_extract_string(raw,'$.responseElements.credentials.expiration') AS expiration,
@@ -25,6 +27,10 @@ type ancRow struct {
 	EventName       string `json:"eventName"`
 	EventTime       string `json:"eventTime"`
 	SourceIP        string `json:"sourceIPAddress"`
+	UserAgent       string `json:"userAgent"`
+	Region          string `json:"region"`
+	EventID         string `json:"eventId"`
+	MFA             string `json:"mfa"`
 	IdentityType    string `json:"identityType"`
 	IdentityArn     string `json:"identityArn"`
 	UserName        string `json:"userName"`

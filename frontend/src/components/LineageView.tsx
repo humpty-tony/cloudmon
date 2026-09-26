@@ -7,6 +7,8 @@ import { identityGlyph } from "../api/types";
 import { backend } from "../api/backend";
 import { logError, logInfo } from "../api/log";
 import { LineageEventModal } from "./LineageEventModal";
+import {LineageEnrichment,LineageFindings,InitiationSummary} from "./LineageAttribution";
+import type {LineageAttribution} from "../api/attribution";
 import { WorkspaceOverlay } from "./WorkspaceActivity";
 
 interface Props {
@@ -73,6 +75,7 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
+  const [attribution,setAttribution]=useState<LineageAttribution|null>(null);
   const snapshotRef = useRef<EvidenceSnapshot | undefined>(undefined);
   const generation = useRef(0);
   const graphRef = useRef({nodes: new Map<string, GraphNode>(), edges: [] as GraphEdge[]});
@@ -125,7 +128,7 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
     graphRef.current = {nodes:new Map(),edges:[]};
     didCenter.current = false;
     setSelected(null);
-    setRaw(null);
+    setRaw(null);setAttribution(null);
     backend
       .queryLineageGraph(seq,initialSnapshot)
       .then((t) => {
@@ -229,9 +232,10 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
   });
   const openRaw = useCallback((viaSeq: number, title: string) => withBusy("raw",async request=>{
     if(!snapshotRef.current)throw Error("Graph snapshot unavailable; reload lineage.");
-    const json=await backend.queryLineageRaw(viaSeq,snapshotRef.current);
+    const json=viaSeq<0 ? attribution?.raw[String(viaSeq)] : await backend.queryLineageRaw(viaSeq,snapshotRef.current);
+    if(json===undefined)throw Error("Recovered evidence is unavailable; refresh attribution.");
     if(request===generation.current)setRaw({title,json});
-  }), [withBusy]);
+  }), [withBusy,attribution]);
 
   const incoming = useMemo(() => {
     const m = new Map<string, GraphEdge>();
@@ -326,12 +330,19 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
 
   const sel = selected ? nodes.get(selected) : null;
   const atCap = nodes.size >= MAX_NODES;
+  const firstInitiation=useMemo(()=>{let id=meta.currentId,last:GraphEdge|undefined;const seen=new Set<string>();while(!seen.has(id)){seen.add(id);const edge=incoming.get(id);if(!edge)break;last=edge;id=edge.parent}return last},[incoming,meta.currentId]);
+  const applyAttribution=useCallback((value:LineageAttribution)=>{
+    const t=value.graph;if(t.snapshot?.generation!==snapshotRef.current?.generation||t.snapshot?.maxSeq!==snapshotRef.current?.maxSeq)return;
+    generation.current++;busyRef.current.clear();setBusy(new Set());setExpSessions(new Set());setExpEvents(new Set());
+    graphRef.current={nodes:new Map(t.nodes.map(n=>[n.id,n])),edges:t.edges};
+    didCenter.current=false;setNodes(graphRef.current.nodes);setEdges(t.edges);setMeta({currentId:t.currentId,rootId:t.rootId,notes:t.notes??[]});setSelected(t.currentId||null);setAttribution(value);
+  },[]);
 
   return createPortal(
     <div className="lgv-scrim" onClick={onClose}>
       <div ref={modalRef} className="lgv-modal" role="dialog" aria-modal="true" aria-label="Credential lineage" onClick={(e) => e.stopPropagation()} onKeyDown={event => {
         if (event.key !== "Tab" || raw) return;
-        const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),[tabindex="0"]')).filter(el => el.getClientRects().length);
+        const items = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary,[tabindex="0"]')).filter(el => el.getClientRects().length);
         const first = items[0], last = items[items.length-1];
         if (event.shiftKey && (document.activeElement === first || !items.includes(document.activeElement as HTMLElement))) { event.preventDefault(); last?.focus(); }
         else if (!event.shiftKey && (document.activeElement === last || !items.includes(document.activeElement as HTMLElement))) { event.preventDefault(); first?.focus(); }
@@ -343,23 +354,24 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
           <button ref={closeRef} className="lgv-close" onClick={onClose}>✕ Close</button>
         </div>
 
+        {!loading&&snapshotRef.current&&<LineageEnrichment key={`${seq}:${snapshotRef.current.generation}:${snapshotRef.current.maxSeq}`} seq={seq} snapshot={snapshotRef.current} report={attribution} onResult={applyAttribution}/>}
         {meta.notes.length>0 && <div className="lgv-notes">{meta.notes.map((n,i)=><div key={i} className="lgv-note">{n}</div>)}</div>}
         {error && <div className="lgv-error" role="alert">{error} <button onClick={()=>setRetry(n=>n+1)}>Reload lineage</button></div>}
         {loading ? (
           <div className="lgv-empty">Building lineage…</div>
-        ) : !laidOut ? (
-          <div className="lgv-empty">{error ? "The graph could not be loaded." : "No credential links are available for this event."}</div>
         ) : (
           <div className="lgv-body">
-            <svg ref={svgRef} className="lgv-canvas" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onLostPointerCapture={() => { drag.current = null; }} onWheel={onWheel}>
+            {laidOut?<svg ref={svgRef} className="lgv-canvas" onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp} onLostPointerCapture={() => { drag.current = null; }} onWheel={onWheel}>
               <g ref={viewportRef} transform="translate(0,0) scale(1)">
                 {linkEls}
                 {nodeEls}
               </g>
-            </svg>
+            </svg>:<div className="la-empty-graph">{error?"The graph could not be loaded.":"No credential links are available for this event."}</div>}
 
-            {sel && sel.kind !== "event" && (
               <div className="lgv-detail">
+                <InitiationSummary edge={firstInitiation} parent={firstInitiation?nodes.get(firstInitiation.parent):undefined} onOpen={(id,title)=>void openRaw(id,title)}/>
+                <LineageFindings report={attribution} rootKey={meta.rootId}/>
+                {sel && sel.kind !== "event" && <>
                 <div className="lgv-d-head">
                   <span className={`lgv-glyph ${GLYPH_CLS[sel.identityType] || "lg-other"}`}>{identityGlyph(sel.identityType)}</span>
                   <span className="lgv-d-title">{label(sel).primary}</span>
@@ -409,8 +421,8 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
                     </>
                   )}
                 </div>
+                </>}
               </div>
-            )}
           </div>
         )}
       </div>

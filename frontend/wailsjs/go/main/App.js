@@ -38,6 +38,10 @@ export function ExportInvestigation(arg1, arg2) {
   return window['go']['main']['App']['ExportInvestigation'](arg1, arg2);
 }
 
+export function GetAttributionSettings() {
+  return window['go']['main']['App']['GetAttributionSettings']();
+}
+
 export function GetEventEvidence(arg1, arg2) {
   return window['go']['main']['App']['GetEventEvidence'](arg1, arg2);
 }
@@ -56,6 +60,10 @@ export function GetEvidenceSnapshot() {
 
 export function GetInitialEvents() {
   return window['go']['main']['App']['GetInitialEvents']();
+}
+
+export function GetLineageAttribution(arg1, arg2) {
+  return window['go']['main']['App']['GetLineageAttribution'](arg1, arg2);
 }
 
 export function GetObservation(arg1) {
@@ -166,12 +174,20 @@ export function RequiredPermissions(arg1) {
   return window['go']['main']['App']['RequiredPermissions'](arg1);
 }
 
+export function ResolveLineageAttribution(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ResolveLineageAttribution'](arg1, arg2, arg3);
+}
+
 export function ResumeCapture() {
   return window['go']['main']['App']['ResumeCapture']();
 }
 
 export function RunLoginCommand(arg1) {
   return window['go']['main']['App']['RunLoginCommand'](arg1);
+}
+
+export function SaveAttributionSettings(arg1) {
+  return window['go']['main']['App']['SaveAttributionSettings'](arg1);
 }
 
 export function SelectDumpFile() {
