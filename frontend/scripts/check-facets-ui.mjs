@@ -60,7 +60,8 @@ try {
  const groups=page.locator('.facet-group:not([hidden])');
  await page.locator('.facets').waitFor();
  assert.deepEqual(await groups.locator('.facet-group-label').allTextContents(),['Service','User / issuer name','Source IP','Result']);
- assert.match(await page.locator('.facets').innerText(),/Applied query/);
+ assert.match(await page.locator('.facet-scope').innerText(),/Counts: matching events/);
+ assert.match(await page.locator('.facet-scope').getAttribute('title'),/applied query, time filters and snapshot, not loaded rows/);
  await groups.nth(0).locator('.facet-details-toggle').click();
  await groups.nth(1).locator('.facet-details-toggle').click();
  assert.match(await groups.nth(0).innerText(),/38\s*\/\s*40/);
@@ -118,7 +119,7 @@ try {
   const activeSearch=identityGroup.locator('.facet-value-search');
   assert.equal(await activeSearch.isVisible(),true,'active value search must be visible after rail collapse/reopen even with Find closed');
   assert.match(await activeSearch.innerText(),/Value search: operator-03/);
-  assert.match(await page.locator('.facet-search-scope').innerText(),/returned values only/);
+  assert.match(await page.locator('.facet-search-scope').innerText(),/Returned values only/);
   const clearSearch=identityGroup.getByRole('button',{name:'Clear User / issuer name value search',exact:true});
   assert.equal(await clearSearch.isVisible(),true);
   assert.match(await identityGroup.locator('.facet-search').innerText(),/25 returned \/ 30 distinct/);

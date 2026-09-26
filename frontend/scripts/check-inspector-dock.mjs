@@ -27,7 +27,7 @@ test("dock layout fits and leaves useful context beside details", async page => 
   }
 });
 
-test("Around delegates the exact selected event and optional snapshot", async page => {
+test("Around delegates the exact selected event and requires a pinned snapshot", async page => {
   await page.getByRole("button", {name:"Around this event",exact:true}).click();
   assert.equal(await page.evaluate(() => window.inspectorDock.calls.length), 1, "Around opened the fallback instead of invoking onInvestigate");
   const call = await page.evaluate(() => window.inspectorDock.calls[0]);
@@ -35,9 +35,9 @@ test("Around delegates the exact selected event and optional snapshot", async pa
   assert.deepEqual(call.snapshot, {generation:"dock-fixture",maxSeq:30,capturedAt:"2026-09-24T10:00:00Z"});
   assert.equal(await page.getByRole("dialog").count(), 0);
   await update(page, {snapshot:undefined});
-  assert.ok(await page.getByRole("button", {name:"Around this event",exact:true}).isEnabled(), "callback is allowed without a snapshot");
-  await page.getByRole("button", {name:"Around this event",exact:true}).click();
-  assert.equal(await page.evaluate(() => window.inspectorDock.calls[1].snapshot), undefined);
+  await page.waitForFunction(() => document.querySelector('.ei-investigate')?.disabled);
+  assert.ok(await page.getByRole("button", {name:"Around this event",exact:true}).isDisabled(), "cannot investigate an unpinned dataset");
+  assert.equal(await page.evaluate(() => window.inspectorDock.calls.length), 1, "missing snapshot must not dispatch another investigation");
 });
 
 test("observed chain discloses exact node details without pivoting or inventing links", async page => {
@@ -280,7 +280,7 @@ test("lineage uncertainty and original-record states remain explicit", async pag
   await page.getByRole("tab", {name:"Fields",exact:true}).click();
   await update(page, {rawJSON:"",rawLoading:true});
   await page.getByRole("status").filter({hasText:"Loading original event"}).waitFor();
-  assert.ok(await page.getByRole("button", {name:"Pin comparison",exact:true}).isDisabled());
+  assert.ok(await page.getByRole("button", {name:"Add to comparison",exact:true}).isDisabled());
   await update(page, {rawLoading:false,rawError:"Original storage unavailable"});
   await page.getByRole("alert").filter({hasText:"Original storage unavailable"}).waitFor();
   await page.getByRole("button", {name:"Retry event",exact:true}).click();
@@ -288,9 +288,9 @@ test("lineage uncertainty and original-record states remain explicit", async pag
 });
 
 test("pins keep exact selected source copies across snapshot replacement", async page => {
-  await page.getByRole("button", {name:"Pin event A",exact:true}).click();
+  await page.getByRole("button", {name:"Add to comparison",exact:true}).click();
   await update(page, {rawJSON:'{ "exact": 9007199254740992 }',snapshot:{generation:"replacement",maxSeq:30,capturedAt:"2026-09-24T11:00:00Z"}});
-  await page.getByRole("button", {name:"Pin event B",exact:true}).click();
+  await page.getByRole("button", {name:"Add as second event",exact:true}).click();
   await page.getByRole("button", {name:"Compare events",exact:true}).click();
   const comparison = page.getByRole("dialog", {name:"Compare original records",exact:true});
   await comparison.getByRole("status").filter({hasText:"field difference"}).waitFor();

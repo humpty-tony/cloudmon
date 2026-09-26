@@ -71,7 +71,10 @@ try {
   await inspector.getByRole('button',{name:/^Credential chain/}).click();
   const graph=page.getByRole('dialog',{name:'Credential lineage',exact:true});
   await graph.locator('.lgv-g').first().waitFor();
-  assert.equal(await graph.locator('.lgv-g').count(),3);
+  // Three credential nodes plus the explicitly selected activity in the story graph.
+  assert.equal(await graph.locator('.lgv-g').count(),4);
+  assert.equal(await graph.getByRole('button',{name:/^Inspect credential:/}).count(),3);
+  assert.ok(await graph.getByRole('button',{name:'Inspect activity: GetSecretValue',exact:true}).isVisible());
   const calls=await page.evaluate(()=>window.graphCalls);assert.ok(calls.length>=1);assert.ok(calls.every(call=>call.seq===seq && call.snapshot.generation===calls[0].snapshot.generation && call.snapshot.maxSeq===calls[0].snapshot.maxSeq));assert.ok(calls[0].snapshot.generation); // Dev StrictMode may remount the graph effect.
   await page.screenshot({path:fileURLToPath(new URL(`lineage-popup-${width}.png`,out))});
   await page.keyboard.press('Escape');await graph.waitFor({state:'detached'});
@@ -106,13 +109,16 @@ try {
   await inspector.getByRole('button',{name:/^Credential chain/}).waitFor();
   await page.locator('.qbar-input').fill('eventName=unapplied');
   const before=await browse.evaluate(el=>({scroll:el.querySelector('.etbody').scrollTop,seq:el.querySelector('.row--selected')?.getAttribute('data-event-seq'),heading:el.querySelector('.workbench-list-heading strong').textContent}));
-  await inspector.getByRole('button',{name:'Same source IP',exact:false}).click();
+  await inspector.getByRole('button',{name:'Related events',exact:true}).click();
   const context=page.getByRole('region',{name:'Contextual event results'});
+  await context.locator('.row').first().waitFor();
+  await page.evaluate(()=>{window.contextCalls=[]});
+  await page.getByRole('complementary',{name:'Context relationships'}).getByRole('button',{name:'Same source IP',exact:true}).click();
   await context.locator('.row').first().waitFor();
   assert.ok(await page.locator('.qbar-input').isDisabled());
   assert.match(await context.innerText(),/browsing filters not applied/);
   const requests=await page.evaluate(()=>window.contextCalls);
-  assert.ok(requests.every(r=>r.seq===Number(before.seq) && r.relation==='ip' && r.snapshot.generation));
+  assert.ok(requests.length>0 && requests.every(r=>r.seq===Number(before.seq) && r.relation==='ip' && r.snapshot.generation));
   await context.locator('.row').first().locator('.c-time').click();
   await page.screenshot({path:fileURLToPath(new URL(`context-${width}.png`,out))});
   await context.getByRole('button',{name:'Back to Events',exact:true}).click();

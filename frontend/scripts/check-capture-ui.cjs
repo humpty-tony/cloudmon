@@ -44,14 +44,14 @@ async function workbenchLayout(page) {
 }
 async function checkWorkbenchFits(page) {
  const bounds=await page.evaluate(()=>{
-  const panes=['.workbench-body','.workbench-results','.workbench-inspector'].map(selector=>{
+  const panes=['.workbench-body','.workbench-results','.workbench-body > .event-inspector'].map(selector=>{
    const element=document.querySelector(selector),rect=element?.getBoundingClientRect();
-   return {selector,exists:!!element,inside:!!rect&&rect.left>=0&&rect.top>=0&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1,
+   return {selector,empty:element?.classList.contains('is-empty'),exists:!!element,inside:!!rect&&rect.left>=0&&rect.top>=0&&rect.right<=innerWidth+1&&rect.bottom<=innerHeight+1,
     width:rect?.width,height:rect?.height};
   });
   return {panes,pageFits:document.documentElement.scrollWidth<=innerWidth};
  });
- assert.ok(bounds.pageFits&&bounds.panes.every(p=>p.exists&&p.inside&&p.width>100&&p.height>100),`Workbench panes spill outside the window: ${JSON.stringify(bounds)}`);
+ assert.ok(bounds.pageFits&&bounds.panes.every(p=>p.exists&&p.inside&&(p.empty?p.width===0:p.width>100)&&p.height>100),`Workbench panes spill outside the window: ${JSON.stringify(bounds)}`);
  assert.equal(await page.locator('.workbench-results .row-expand').count(),0,'Workbench rendered an inline expansion');
 }
 async function checkStatusBar(page, expected='↑ 1 new event') {
@@ -81,11 +81,11 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
 }
 (async()=>{
  const vite=await import('vite');
- const server=await vite.createServer({root,server:{host:'127.0.0.1',port:5181,strictPort:true}}); await server.listen();
+ const server=await vite.createServer({root,cacheDir:path.join(root,'node_modules','.vite-capture-ui'),server:{host:'127.0.0.1',port:5181,strictPort:true}}); await server.listen();
  const browser=await chromium.launch({headless:true});
  try {
   const page=await browser.newPage({viewport:{width:1440,height:1000}});
-  const errors=[];page.on('pageerror',e=>errors.push(String(e)));
+  const errors=[];page.on('pageerror',e=>{errors.push(String(e));console.error('Browser error:',e.stack||String(e))});
   await page.addInitScript(()=>{
    const raw='{"eventID":"saved-1","eventTime":"2026-09-24T00:00:00Z","eventName":"RunInstances","eventSource":"ec2.amazonaws.com","awsRegion":"us-east-1","recipientAccountId":"111122223333","userIdentity":{"type":"IAMUser","userName":"analyst"},"opaque":9007199254740993}';
    const config={mode:'create-infra',profile:'investigator',region:'us-east-1',queueUrl:'',ruleArn:'',dumpPath:'',dumpText:'',capturePattern:''};
@@ -94,7 +94,9 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
    const state=window.captureTest={delayIdentity:false,delayTrail:false,failTrail:false,startCalls:0,resumeCalls:0,removeCalls:0,cleanupFails:false,exportFails:false,exported:null,raw,
      aggCalls:0,aggActive:0,aggMax:0,newerCalls:0,newerActive:0,newerMax:0,delayAgg:false,delayNewer:false,searchMode:false,failSearch:false,
      searchCalls:[],searchActive:0,searchMax:0,delaySearch:false,delayExport:false,cancelledQueries:0,exportedFilter:null,rawBySeq:{},rawCalls:0,copied:null,failRaw:false,failLineage:false,delayRawSeq:0,inspectorLoads:0,snapshotCalls:[],
-     rows:[{seq:1,eventID:"saved-1",eventName:"RunInstances",eventSource:"ec2.amazonaws.com",eventTime:"2026-09-24T00:00:00Z",awsRegion:"us-east-1",identityType:"IAMUser",userName:"analyst",readOnly:false,managementEvent:true}],
+     // Match the native EventRow contract: absent indexed strings are empty,
+     // not undefined. Overview renders these fields before raw evidence loads.
+     rows:[{seq:1,eventID:"saved-1",eventName:"RunInstances",eventSource:"ec2.amazonaws.com",eventTime:"2026-09-24T00:00:00Z",awsRegion:"us-east-1",identityType:"IAMUser",userName:"analyst",sourceIPAddress:'',userAgent:'',principalId:'',identityArn:'',accountId:'',roleArn:'',sessionName:'',recipientAccountId:'111122223333',target:'',readOnly:false,managementEvent:true}],
      recovery:{evidence:{events:recovering?1:0,observations:recovering?3:0,variantEvents:recovering?1:0,lossy:recovering?1:0},capture:recovering?{version:1,phase:'ready',config,infra}:null,captureError:'',active:false}};
    const handlers=new Map();
    const searchJobs=new Map();
@@ -114,6 +116,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
    state.emit=(total,withRows=true)=>{while(withRows && state.rows.length<total){const seq=state.rows.length+1;state.rows.unshift({...state.rows[state.rows.length-1],seq,eventID:`live-${seq}`,eventName:`LiveEvent${seq}`})}state.recovery.evidence.events=total;for(const cb of handlers.get('cloudmon:events')||[])cb({added:1,total})};
    window.go={main:{App:{
     Log:async()=>{},MaximizeWindow:async()=>{},
+    GetLineageAttribution:async()=>null,
     GetRecoveryState:async()=>structuredClone(state.recovery),
     GetEvidenceSnapshot:async()=>{const snap={...snapshot(),generation:state.snapshotGeneration||'fixture'};state.snapshotCalls.push(snap);if(state.failSnapshot)throw Error('Snapshot unavailable');if(state.delaySnapshot)return new Promise(resolve=>{state.resolveSnapshot=()=>resolve(snap)});return snap},
     StartCapture:async()=>{state.startCalls++;throw Error('Unexpected provisioning')},
@@ -147,7 +150,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
       return {anchor,snapshot:snap,resources:[{arn:'arn:aws:s3:::evidence-bucket',kind:'AWS::S3::Bucket',source:'resources[0].ARN'},{arn:'arn:aws:s3:::evidence-bucket/audit/events.json',kind:'AWS::S3::Object',source:'resources[1].ARN'}],resourcesTruncated:false,events:matches.slice(0,500).map(r=>({event:r,deltaMs:(r.seq-options.seq)*500,reasons:r.seq===options.seq?[{kind:'anchor',label:'Selected event'}]:[{kind:'resource',label:'Shared recorded ARN',value:'arn:aws:s3:::evidence-bucket/audit/events.json'},{kind:'ip',label:'Same source IP (context)',value:'192.0.2.1'}]})),total:matches.length,limit:500,fromMs:Date.parse(anchor.eventTime)-options.minutes*60000,toMs:Date.parse(anchor.eventTime)+options.minutes*60000,notes:['Shared identifiers show relationships in the loaded evidence, not causation. A principal or IP can be used by multiple operators.']};
      }finally{searchJobs.delete(id)}
     },
-    QueryLineageGraph:async()=>{if(state.failGraph)throw Error('Graph query unavailable');return {...state.graph,snapshot:snapshot()}},
+    QueryLineageGraph:async()=>{if(state.failGraph)throw Error('Graph query unavailable');return {...(state.graph||{applicable:false,rootId:'',currentId:'',nodes:[],edges:[],notes:['No credential links observed in this fixture.']}),snapshot:snapshot()}},
     QueryLineageChildren:async(key,snap)=>{state.expansionSnapshot=snap;if(state.failExpansion)throw Error('The dataset changed; reload lineage.');return {nodes:[],edges:[],notes:['No further unambiguous child links are present.']}},
     QueryLineageEvents:async(key,snap)=>{state.expansionSnapshot=snap;return {nodes:[],edges:[],notes:[]}},
     QueryLineageRaw:async(seq,snap)=>{state.rawSnapshot=snap;state.rawSeq=seq;return window.go.main.App.GetEventRaw(seq)},
@@ -253,8 +256,8 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
 
   await page.goto('http://127.0.0.1:5181/?recovery');
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
-  await page.getByText('RunInstances',{exact:true}).first().click();
-  await page.getByRole('button',{name:'Sources & hashes',exact:true}).click();
+  await page.locator('.workbench-results .row').getByText('RunInstances',{exact:true}).first().click();
+  await openReviewEvidence(page);
   await page.getByRole('button',{name:'View source #1',exact:true}).click();
   await page.getByRole('region',{name:'Original source record'}).getByText('9007199254740993',{exact:false}).waitFor();
   assert.equal(await page.evaluate(()=>window.captureTest.resumeCalls),0);
@@ -316,8 +319,8 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.equal(await page.evaluate(()=>window.captureTest.aggCalls),busyAgg+1,'arrivals during a refresh were lost');
   assert.deepEqual(await page.evaluate(()=>[window.captureTest.aggMax,window.captureTest.newerMax]),[1,1]);
 
-  await page.getByText('RunInstances',{exact:true}).first().click();
-  await page.getByRole('button',{name:'Sources & hashes',exact:true}).waitFor();
+  await page.locator('.workbench-results .row').getByText('RunInstances',{exact:true}).first().click();
+  await page.getByRole('button',{name:'Related events',exact:true}).waitFor();
   const frozen=await page.evaluate(()=>({agg:window.captureTest.aggCalls,newer:window.captureTest.newerCalls}));
   await page.evaluate(()=>window.captureTest.emit(5));
   await page.clock.runFor(6000);
@@ -337,8 +340,8 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('button',{name:'↑ 1,000,000 new events',exact:true}).click();
   await page.locator('.sb-mode.live').waitFor();
   assert.equal(await page.locator('.newpill').count(),0,'explicit Follow did not clear pending arrivals');
-  // Workbench reserves its inspector dock: selecting evidence must not move or
-  // resize the event rows, and the two scrollable panes operate independently.
+  // The right inspector takes width only while selected. Row heights/vertical
+  // anchoring stay stable, and the two scrollable panes operate independently.
   await page.goto('http://127.0.0.1:5181/?recovery');
   await page.evaluate(()=>{
     const state=window.captureTest;state.emit(120);
@@ -350,7 +353,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   });
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   const workbenchTable=page.locator('.workbench-results .etbody');
-  const workbenchInspector=page.locator('.workbench-inspector');
+  const workbenchInspector=page.locator('.workbench-body > .event-inspector');
   await page.locator('.row').getByText('LiveEvent120',{exact:true}).waitFor();
   await page.clock.runFor(100);
   const unselectedLayout=await workbenchLayout(page);
@@ -358,7 +361,9 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await workbenchInspector.getByRole('tab',{name:'Fields',exact:true}).click();
   await workbenchInspector.getByRole('region',{name:'Event fields',exact:true}).getByText('live-120',{exact:true}).waitFor();
   await page.clock.runFor(100);
-  assert.deepEqual(await workbenchLayout(page),unselectedLayout,'Selecting an event moved the event table');
+  const selectedLayout=await workbenchLayout(page);
+  assert.ok(selectedLayout.width<unselectedLayout.width,'Selecting an event did not allocate the right inspector');
+  assert.deepEqual({...selectedLayout,width:unselectedLayout.width},unselectedLayout,'Selecting an event moved event rows vertically');
   const selectedSnapshotCount=await page.evaluate(()=>window.captureTest.snapshotCalls.length);
   await page.locator('.row--selected').click();
   await workbenchInspector.getByRole('button',{name:'Close inspector',exact:true}).waitFor();
@@ -371,7 +376,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.keyboard.press('ArrowUp');
   await workbenchInspector.getByRole('region',{name:'Event fields',exact:true}).getByText('live-120',{exact:true}).waitFor();
   await page.clock.runFor(100);
-  assert.deepEqual(await workbenchLayout(page),unselectedLayout,'Keyboard selection moved visible rows');
+  assert.deepEqual(await workbenchLayout(page),selectedLayout,'Keyboard selection moved visible rows');
   assert.ok(await page.evaluate(()=>window.captureTest.inspectorLoads)>workbenchParses,'Keyboard selection left old inspector evidence');
   // Navigation keys inside an inspector control must not select another event.
   await workbenchInspector.getByRole('tab',{name:'Fields',exact:true}).focus();
@@ -414,7 +419,9 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await workbenchInspector.getByRole('button',{name:'Close inspector',exact:true}).click();
   await page.clock.runFor(100);
   assert.equal(await page.locator('.row--selected').count(),0,'Close inspector left a selected event');
-  assert.deepEqual(await workbenchLayout(page),beforeClose,'Closing the inspector changed event-row geometry');
+  const closedLayout=await workbenchLayout(page);
+  assert.ok(closedLayout.width>beforeClose.width,'Closing the inspector did not return its width to the event list');
+  assert.deepEqual({...closedLayout,width:beforeClose.width},beforeClose,'Closing the inspector moved event rows vertically');
   await checkWorkbenchFits(page);
   await page.locator('.row').getByText('LiveEvent120',{exact:true}).click();
   await workbenchInspector.getByRole('tab',{name:'Fields',exact:true}).focus();
@@ -429,7 +436,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.getByText('LiveEvent2',{exact:true}).first().waitFor();
   await page.locator('.row').getByText('LiveEvent2',{exact:true}).click();
-  await page.locator('.workbench-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
+  await page.locator('.workbench-body > .event-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
   await workbenchInspector.getByRole('region',{name:'Event fields',exact:true}).getByText('live-2',{exact:true}).waitFor();
   const query=page.getByRole('textbox',{name:'Search query',exact:true});
   await query.fill('eventID="saved-1"');
@@ -437,7 +444,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.locator('.row').getByText('LiveEvent2',{exact:true}).waitFor({state:'hidden'});
   await page.getByText('RunInstances',{exact:true}).first().waitFor();
   assert.equal(await page.locator('.row--selected').count(),0,'A successful search left its excluded event selected');
-  await workbenchInspector.getByText('Select an event',{exact:true}).waitFor();
+  await workbenchInspector.waitFor({state:'hidden'});
   await page.screenshot({path:path.join(output,'search-valid.png'),fullPage:true});
   const appliedCalls=await page.evaluate(()=>window.captureTest.aggCalls);
   await query.fill('eventName~"(?=Run)"');
@@ -471,7 +478,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   });
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.locator('.row').getByText('RunInstances',{exact:true}).click();
-  await page.locator('.workbench-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
+  await page.locator('.workbench-body > .event-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
   const fields=page.getByRole('region',{name:'Event fields',exact:true});
   await fields.getByText('9007199254740993',{exact:true}).waitFor();
   await fields.getByRole('button',{name:/requestParameters/}).click();
@@ -524,21 +531,21 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.evaluate(()=>{window.captureTest.delaySnapshot=true});
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.locator('.row').getByText('RunInstances',{exact:true}).click();
-  await page.locator('.workbench-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
+  await page.locator('.workbench-body > .event-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
   await page.waitForFunction(()=>typeof window.captureTest.resolveSnapshot==='function');
-  for(const name of ['Sources & hashes','Around this event'])assert.ok(await workbenchInspector.getByRole('button',{name,exact:true}).isDisabled(),`${name} ran before its evidence scope was ready`);
+  await checkSnapshotActions(page,true,'ran before its evidence scope was ready');
   assert.equal(await page.evaluate(()=>window.captureTest.rawCalls),0,'Original record loaded before its evidence cutoff');
   await page.evaluate(()=>{window.captureTest.emit(2);window.captureTest.delaySnapshot=false;window.captureTest.resolveSnapshot()});
   await fields.getByText('saved-1',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.captureTest.rawSnapshot.maxSeq),1,'Delayed snapshot widened to later arrivals');
-  for(const name of ['Sources & hashes','Around this event'])assert.ok(await workbenchInspector.getByRole('button',{name,exact:true}).isEnabled());
+  await checkSnapshotActions(page,false,'was unavailable after its evidence scope resolved');
   await page.goto('http://127.0.0.1:5181/?recovery');
   await page.evaluate(()=>{window.captureTest.failSnapshot=true});
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.locator('.row').getByText('RunInstances',{exact:true}).click();
-  await page.locator('.workbench-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
+  await page.locator('.workbench-body > .event-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
   await workbenchInspector.getByRole('button',{name:'Retry event',exact:true}).waitFor();
-  for(const name of ['Sources & hashes','Around this event'])assert.ok(await workbenchInspector.getByRole('button',{name,exact:true}).isDisabled(),`${name} escaped a failed evidence cutoff`);
+  await checkSnapshotActions(page,true,'escaped a failed evidence cutoff');
   await page.evaluate(()=>{window.captureTest.failSnapshot=false});
   await workbenchInspector.getByRole('button',{name:'Retry event',exact:true}).click();
   await fields.getByText('saved-1',{exact:true}).waitFor();
@@ -550,11 +557,11 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.locator('.row').getByText('RunInstances',{exact:true}).waitFor();
   await page.evaluate(()=>{window.captureTest.snapshotGeneration='replacement-dataset'});
   await page.locator('.row').getByText('RunInstances',{exact:true}).click();
-  await page.locator('.workbench-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
+  await page.locator('.workbench-body > .event-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
   await workbenchInspector.getByRole('button',{name:'Retry event',exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.captureTest.rawCalls),0,'A selected event loaded a reused sequence from another dataset');
   assert.equal(await page.evaluate(()=>window.captureTest.lineageSnapshot),undefined,'Lineage crossed the selected dataset generation');
-  for(const name of ['Sources & hashes','Around this event'])assert.ok(await workbenchInspector.getByRole('button',{name,exact:true}).isDisabled(),`${name} accepted a different dataset generation`);
+  await checkSnapshotActions(page,true,'accepted a different dataset generation');
   await page.evaluate(()=>{window.captureTest.snapshotGeneration='fixture'});
   await workbenchInspector.getByRole('button',{name:'Retry event',exact:true}).click();
   await fields.getByText('saved-1',{exact:true}).waitFor();
@@ -565,36 +572,38 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.evaluate(()=>{
     const state=window.captureTest;state.emit(2);state.delayRawSeq=1;
     state.rawBySeq[2]='{"eventID":"second-event","eventName":"LiveEvent2","userIdentity":{"type":"AssumedRole"}}';
-    state.rows[0].identityType='AssumedRole';state.failLineage=true;
+    state.rows[0].identityType='AssumedRole';state.failGraph=true;
   });
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.locator('.row').getByText('RunInstances',{exact:true}).click();
-  await page.locator('.workbench-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
+  await page.locator('.workbench-body > .event-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
   await page.getByText('Loading original event…',{exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>typeof window.captureTest.resolveRaw),'function','delayed detail request was not started');
   await page.locator('.etbody').evaluate(el=>{el.scrollTop=0});
   await page.clock.runFor(100);
   await page.locator('.row').getByText('LiveEvent2',{exact:true}).click();
-  await page.locator('.workbench-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
+  await page.locator('.workbench-body > .event-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
   await fields.getByText('second-event',{exact:true}).waitFor();
   await page.evaluate(()=>window.captureTest.resolveRaw());
   await page.clock.runFor(100);
   assert.equal(await fields.getByText('saved-1',{exact:true}).count(),0,'late response replaced selected evidence');
-  await page.getByRole('tab',{name:'Context',exact:true}).click();
-  await page.getByRole('button',{name:'Retry lineage',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Credential chain',exact:true}).click();
+  await page.getByRole('button',{name:'Reload lineage',exact:true}).waitFor();
   const retrySnapshot=await page.evaluate(()=>({snapshot:window.captureTest.rawSnapshot,calls:window.captureTest.snapshotCalls.length}));
-  await page.evaluate(()=>{window.captureTest.failLineage=false;window.captureTest.emit(3)});
-  await page.getByRole('button',{name:'Retry lineage',exact:true}).click();
-  await page.getByRole('button',{name:'Retry lineage',exact:true}).waitFor({state:'hidden'});
+  await page.evaluate(()=>{window.captureTest.failGraph=false;window.captureTest.emit(3)});
+  await page.getByRole('button',{name:'Reload lineage',exact:true}).click();
+  await page.getByRole('button',{name:'Reload lineage',exact:true}).waitFor({state:'hidden'});
+  await page.keyboard.press('Escape');
+  await page.getByRole('dialog',{name:'Credential lineage',exact:true}).waitFor({state:'hidden'});
   await page.getByRole('tab',{name:'Fields',exact:true}).click();
   await fields.getByText('second-event',{exact:true}).waitFor();
-  assert.equal(await page.getByRole('button',{name:'Retry lineage',exact:true}).count(),0);
+  assert.equal(await page.getByRole('button',{name:'Reload lineage',exact:true}).count(),0);
   assert.deepEqual(await page.evaluate(()=>({snapshot:window.captureTest.rawSnapshot,calls:window.captureTest.snapshotCalls.length})),retrySnapshot,'Retry replaced the selected evidence snapshot after new arrivals');
-  assert.deepEqual(await page.evaluate(()=>window.captureTest.lineageSnapshot),retrySnapshot.snapshot,'Retry lineage used a different snapshot from the event');
+  assert.deepEqual(await page.evaluate(()=>window.captureTest.graphSnapshot),retrySnapshot.snapshot,'Retry lineage used a different snapshot from the event');
   await page.getByRole('button',{name:'Close inspector',exact:true}).click();
   await page.evaluate(()=>{window.captureTest.failRaw=true});
   await page.locator('.row').getByText('LiveEvent2',{exact:true}).click();
-  await page.locator('.workbench-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
+  await page.locator('.workbench-body > .event-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
   await page.getByRole('button',{name:'Retry event',exact:true}).waitFor();
   await page.screenshot({path:path.join(output,'inspector-error.png'),fullPage:true});
   await page.evaluate(()=>{window.captureTest.failRaw=false});
@@ -645,36 +654,35 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   });
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.locator('.row').getByText('RunInstances',{exact:true}).click();
-  await page.locator('.workbench-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
+  await page.locator('.workbench-body > .event-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
   await page.getByRole('region',{name:'Event fields',exact:true}).getByText('saved-1',{exact:true}).waitFor();
   const investigationSnapshot=await page.evaluate(()=>window.captureTest.rawSnapshot);
   assert.equal(investigationSnapshot.maxSeq,11);
-  assert.deepEqual(await page.evaluate(()=>window.captureTest.lineageSnapshot),investigationSnapshot,'Inline lineage used a different cutoff from the event');
+  assert.equal(await page.evaluate(()=>window.captureTest.graphSnapshot),undefined,'Browsing resolved lineage before an explicit request');
   await page.evaluate(()=>window.captureTest.emit(12));
-  await page.getByRole('button',{name:'Sources & hashes',exact:true}).click();
+  await openReviewEvidence(page);
   await page.getByRole('button',{name:'View source #1',exact:true}).click();
   await page.getByRole('region',{name:'Original source record'}).getByText('9007199254740993',{exact:false}).waitFor();
   assert.deepEqual(await page.evaluate(()=>window.captureTest.evidenceSnapshot),investigationSnapshot,'Sources widened the selected event snapshot');
   assert.deepEqual(await page.evaluate(()=>window.captureTest.observationSnapshot),investigationSnapshot,'Original source used a different snapshot');
   await page.getByRole('button',{name:'Close source evidence',exact:true}).click();
-  await page.getByRole('button',{name:'Around this event',exact:true}).click();
-  const selectedInvestigation=page.getByRole('dialog',{name:'Event investigation',exact:true});
-  await selectedInvestigation.getByText('11 events',{exact:true}).waitFor();
+  await page.getByRole('button',{name:'Related events',exact:true}).click();
+  const selectedInvestigation=page.getByRole('region',{name:'Contextual event results',exact:true});
+  await selectedInvestigation.getByText('11 matching events',{exact:true}).waitFor();
   assert.deepEqual(await page.evaluate(()=>window.captureTest.investigationCalls.at(-1).snapshot),investigationSnapshot,'Investigate included arrivals after selection');
-  await selectedInvestigation.getByRole('button',{name:'Close investigation',exact:true}).click();
-  await page.getByRole('tab',{name:'Context',exact:true}).click();
-  await page.getByText('Principal observed',{exact:true}).waitFor();
-  await page.getByRole('button',{name:'Expand selected-event lineage',exact:true}).click();
+  await selectedInvestigation.getByRole('button',{name:'Back to Events',exact:true}).click();
+  await page.getByRole('button',{name:'Credential chain',exact:true}).click();
   await page.locator('.lgv-error').getByText('Graph query unavailable',{exact:false}).waitFor();
   await page.evaluate(()=>{window.captureTest.failGraph=false});
   await page.getByRole('button',{name:'Reload lineage',exact:true}).click();
   await page.locator('.lgv-canvas .lgv-g').first().waitFor();
-  assert.equal(await page.locator('.lgv-canvas .lgv-g').count(),2);
+  assert.equal(await page.locator('.lgv-canvas .lgv-g[aria-label^="Inspect credential:"]').count(),2);
+  assert.equal(await page.getByRole('button',{name:'Inspect activity: RunInstances',exact:true}).count(),1,'graph lost or duplicated the selected activity');
   assert.deepEqual(await page.evaluate(()=>window.captureTest.graphSnapshot),investigationSnapshot,'Full lineage widened the selected event snapshot');
   await page.clock.runFor(100);
   const graphViewport=page.locator('.lgv-canvas > g');
   const centeredTransform=await graphViewport.getAttribute('transform');
-  await page.locator('.lgv-canvas .lgv-g').nth(1).click();
+  await page.locator('.lgv-canvas .lgv-g').filter({has:page.locator('.lgv-rect.cur')}).click();
   await page.clock.runFor(50);
   assert.equal(await graphViewport.getAttribute('transform'),centeredTransform,'a node click started panning');
   const graphBox=await page.locator('.lgv-canvas').boundingBox();
@@ -726,6 +734,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.deepEqual(await page.evaluate(()=>window.captureTest.expansionSnapshot),investigationSnapshot,'Lineage expansion widened the selected snapshot');
   await page.evaluate(()=>{window.captureTest.failExpansion=false});
   await page.getByRole('button',{name:'Expand 1 issued key',exact:true}).click();
+  await page.locator('.lgv-detail summary').filter({hasText:'Graph evidence notes'}).click();
   await page.getByText('No further unambiguous child links are present.',{exact:true}).waitFor();
   await page.screenshot({path:path.join(output,'investigation-context.png'),fullPage:true});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
@@ -739,7 +748,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   });
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.locator('.row').getByText('GetObject',{exact:true}).click();
-  await page.getByRole('button',{name:'Around this event',exact:true}).click();
+  await openRuleInvestigation(page,'GetObject');
   const investigation=page.getByRole('dialog',{name:'Event investigation',exact:true});
   await investigation.getByText('Investigation query unavailable',{exact:false}).waitFor();
   await page.evaluate(()=>{window.captureTest.failInvestigation=false});
@@ -811,10 +820,10 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   });
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.locator('.row').getByText('PutRolePolicy',{exact:true}).nth(1).click();
-  await page.getByRole('button',{name:'Pin event A',exact:true}).click();
+  await page.getByRole('button',{name:'Add to comparison',exact:true}).click();
   await page.locator('.etbody').evaluate(el=>{el.scrollTop=0});await page.clock.runFor(100);
   await page.locator('.row').getByText('PutRolePolicy',{exact:true}).first().click();
-  await page.getByRole('button',{name:'Pin event B',exact:true}).click();
+  await page.getByRole('button',{name:'Add as second event',exact:true}).click();
   await page.evaluate(()=>{window.captureTest.rawBySeq[1]='{"eventID":"changed-after-pin","eventName":"Replacement"}'});
   await page.getByRole('button',{name:'Compare events',exact:true}).click();
   const comparison=page.getByRole('dialog',{name:'Compare original records',exact:true});
@@ -832,7 +841,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await comparison.getByRole('button',{name:'Swap A/B',exact:true}).click();
   await comparison.locator('.comparison-change').filter({hasText:'/opaque'}).locator('pre').first().getByText('9007199254740992',{exact:true}).waitFor();
   await comparison.getByRole('button',{name:'Close comparison',exact:true}).click();
-  await page.getByRole('button',{name:'Clear pins',exact:true}).click();
+  await page.getByRole('button',{name:'Clear comparison',exact:true}).click();
   assert.equal(await page.locator('.comparison-bar').count(),0);
   // A large number of changes must be labelled incomplete, never "no differences".
   await page.locator('.row').getByText('PutRolePolicy',{exact:true}).first().click();
@@ -842,25 +851,25 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     state.rawBySeq[2]=JSON.stringify({eventID:'live-2',eventName:'PutRolePolicy',...Object.fromEntries(Array.from({length:1000},(_,i)=>[`change${i}`,i]))});
   });
   await page.locator('.row').getByText('PutRolePolicy',{exact:true}).nth(1).click();
-  await page.getByRole('button',{name:'Pin event A',exact:true}).click();
+  await page.getByRole('button',{name:'Add to comparison',exact:true}).click();
   await page.locator('.etbody').evaluate(el=>{el.scrollTop=0});await page.clock.runFor(100);
   await page.locator('.row').getByText('PutRolePolicy',{exact:true}).first().click();
-  await page.getByRole('button',{name:'Pin event B',exact:true}).click();
+  await page.getByRole('button',{name:'Add as second event',exact:true}).click();
   await page.getByRole('button',{name:'Compare events',exact:true}).click();
   await comparison.getByText('500 differences found · comparison incomplete',{exact:true}).waitFor();
   assert.ok(await comparison.locator('.comparison-change').count()<30,'comparison rendered every change');
   await comparison.getByRole('button',{name:'Close comparison',exact:true}).click();
-  await page.getByRole('button',{name:'Clear pins',exact:true}).click();
+  await page.getByRole('button',{name:'Clear comparison',exact:true}).click();
   // Sigma does not reuse validity after edits; requests cancel and suites share a snapshot.
   await page.goto('http://127.0.0.1:5181/?recovery');
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.getByRole('button',{name:'Hunt',exact:true}).click();
-   await page.getByRole('button',{name:'Rules',exact:true}).click();
+   await page.getByRole('tab',{name:'Rules',exact:true}).click();
   await page.getByRole('button',{name:'▶ Run',exact:true}).click();
-  await page.locator('.sg-pill.valid').getByText('✓ Ran · 1 matches',{exact:true}).waitFor();
+  await page.locator('.sg-pill.valid:visible').getByText('✓ Ran · 1 matches',{exact:true}).waitFor();
   await page.locator('.sigma .row').getByText('RunInstances',{exact:true}).click();
   await page.getByRole('region',{name:'Selection explanations',exact:true}).getByText('− filter_service: did not match',{exact:true}).waitFor();
-  await page.getByRole('button',{name:'{ } Raw JSON',exact:true}).click();
+  await openInspectorOriginal(page.locator('.sigma .event-inspector'));
   await page.getByRole('dialog',{name:'Raw JSON',exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.captureTest.rawSnapshot.generation),'fixture');
   await page.keyboard.press('Escape');
@@ -901,7 +910,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.screenshot({path:path.join(output,'sigma-suite.png'),fullPage:true});
   assert.ok(await page.locator('.sigma-suite').evaluate(el=>el.scrollWidth<=el.clientWidth),'suite spills at minimum width');
   await page.getByRole('button',{name:'Inspect results',exact:true}).first().click();
-  await page.locator('.sg-pill.valid').waitFor();
+  await page.locator('.sg-pill.valid:visible').waitFor();
   assert.equal(await page.evaluate(()=>window.captureTest.sigmaCalls.length),3,'opening suite results reran the rule');
   await page.getByRole('button',{name:'Rule suite',exact:true}).click();
   await page.evaluate(()=>window.captureTest.delaySuite=true);
@@ -912,7 +921,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('alert').getByText('Error: Suite storage unavailable',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
   // Manual analysis, snapshot drilldown, stale settings, raw evidence and cancellation.
-  await page.getByRole('button',{name:'Workbench',exact:true}).click();
+  await page.getByRole('button',{name:'Events',exact:true}).click();
    await page.getByRole('button',{name:'Summarize',exact:true}).click();
   await page.getByLabel('Compare previous window',{exact:true}).check();
   await page.getByRole('button',{name:'Run analysis',exact:true}).click();
@@ -948,33 +957,36 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByText('Service overview',{exact:true}).waitFor();
   assert.deepEqual(errors,[]);
   await page.getByRole('button',{name:'Hunt',exact:true}).click();
+  await page.getByRole('tab',{name:'Indicators',exact:true}).click();
   assert.ok(await page.getByRole('button',{name:'Run hunt',exact:true}).isDisabled());
-  await openIndicatorBulk(page);await page.getByLabel('Typed indicators',{exact:true}).fill('ip 192.0.2.1\narn arn:aws:s3:::evidence-bucket/audit/events.json');
+  await openIndicatorBulk(page);await page.locator('.hunt-view:visible').getByLabel('Typed indicators',{exact:true}).fill('ip 192.0.2.1\narn arn:aws:s3:::evidence-bucket/audit/events.json');
   await page.getByRole('button',{name:'Run hunt',exact:true}).click();
   await page.getByText('600 matched events · 900 events in scope',{exact:true}).waitFor();
-  assert.ok(await page.locator('.hunt-card').count()<20,'hunt rendered every result');
-  await page.getByRole('button',{name:'Original record',exact:true}).click();
+  assert.ok(await page.locator('.hunt-view:visible .hunt-card').count()<20,'hunt rendered every result');
+  await openInspectorOriginal(page.locator('.hunt-view:visible .event-inspector'));
   await page.getByRole('dialog',{name:'Raw JSON',exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.captureTest.rawSnapshot.generation),'fixture');
   await page.keyboard.press('Escape');
-  await page.getByRole('button',{name:'Investigate event',exact:true}).click();
+  await page.getByRole('button',{name:'Investigate',exact:true}).click();
   await page.getByRole('dialog',{name:'Event investigation',exact:true}).waitFor();
   assert.equal(await page.evaluate(()=>window.captureTest.investigationCalls.at(-1).snapshot.generation),'fixture');
   await page.getByRole('button',{name:'Close investigation',exact:true}).click();
-  await page.getByLabel('Hunt type',{exact:true}).selectOption('sequence');
+  await page.getByRole('tab',{name:'Event sequences',exact:true}).click();
   await page.getByLabel('Step A search',{exact:true}).fill('eventName="PutRolePolicy"');
   await page.getByLabel('Step B search',{exact:true}).fill('eventName="PutRolePolicy"');
-  await page.getByText('Inputs changed. Results below use the previous hunt; run again to apply changes.',{exact:true}).waitFor();
+  // Modes retain separate results; switching to Sequences must not reuse IOC matches.
+  assert.equal(await page.locator('.hunt-view:visible .hunt-card').count(),0,'sequence mode inherited indicator results');
   await page.getByRole('button',{name:'Run hunt',exact:true}).click();
   await page.getByText('1 sequence · 900 events in scope',{exact:true}).waitFor();
   await page.getByText('2 candidates for step A share the selected timestamp; a representative is shown.',{exact:true}).waitFor();
-  await page.getByRole('button',{name:'Original B',exact:true}).click();
+  await page.getByRole('button',{name:'Inspect step B',exact:true}).click();
+  await openInspectorOriginal(page.locator('.hunt-view:visible .event-inspector'));
   await page.getByRole('dialog',{name:'Raw JSON',exact:true}).waitFor();await page.keyboard.press('Escape');
-  await page.locator('.hunt-view').evaluate(el=>{el.scrollTop=0});
+  await page.locator('.hunt-view:visible').evaluate(el=>{el.scrollTop=0});
   await page.setViewportSize({width:1440,height:1000});
   await page.screenshot({path:path.join(output,'analysis-hunts.png'),fullPage:true});
   await page.setViewportSize({width:960,height:720});
-  assert.ok(await page.locator('.hunt-view').evaluate(el=>el.scrollWidth<=el.clientWidth),'hunt spills at minimum width');
+  assert.ok(await page.locator('.hunt-view:visible').evaluate(el=>el.scrollWidth<=el.clientWidth),'hunt spills at minimum width');
   await page.evaluate(()=>{window.captureTest.delayHunt=true});
   await page.getByRole('button',{name:'Run hunt',exact:true}).click();
   await page.getByRole('button',{name:'Cancel hunt',exact:true}).click();
@@ -994,7 +1006,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   },labeledArn);
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.locator('.row').getByText('RunInstances',{exact:true}).click();
-  await page.locator('.workbench-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
+  await page.locator('.workbench-body > .event-inspector').getByRole('tab',{name:'Fields',exact:true}).click();
   const accountField=page.locator('.ft-row').filter({has:page.getByText('recipientAccountId',{exact:true})});
   await accountField.getByText('111122223333',{exact:true}).waitFor();
   const parsedBeforeLabels=await page.evaluate(()=>window.captureTest.inspectorLoads);
@@ -1024,10 +1036,10 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.locator('.settings-head .icon-btn').click();
   await page.locator('.workbench-results .c-identity .alias-badge').getByText('Prod audit role',{exact:true}).waitFor();
   await accountField.getByText('Production account',{exact:true}).waitFor();
-  await page.getByRole('tab',{name:'Context',exact:true}).click();
-  const lineageLabel=page.locator('.ls-current .alias-badge');
+  await page.getByRole('tab',{name:'Overview',exact:true}).click();
+  const lineageLabel=workbenchInspector.locator('.eo-section[aria-label="Actor and session"] .alias-badge').filter({hasText:'Prod audit role'});
   await lineageLabel.getByText('Prod audit role',{exact:true}).waitFor();
-  assert.ok(await lineageLabel.evaluate(el=>{const badge=el.getBoundingClientRect(),node=el.closest('.ls-node').getBoundingClientRect();return badge.width>0&&badge.left>=node.left&&badge.right<=node.right}),'lineage label is clipped');
+  assert.ok(await lineageLabel.evaluate(el=>{const badge=el.getBoundingClientRect(),node=el.closest('.eo-section').getBoundingClientRect();return badge.width>0&&badge.left>=node.left&&badge.right<=node.right}),'recorded actor label is clipped');
   assert.equal(await page.evaluate(()=>window.captureTest.inspectorLoads),parsedBeforeLabels,'label changes reparsed an inspected event');
   await page.getByRole('tab',{name:'Original JSON',exact:true}).click();
   const labeledOriginal=await page.getByRole('tabpanel',{name:'Original JSON',exact:true}).locator('pre').textContent();
@@ -1050,7 +1062,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.getByRole('button',{name:'Remove label VPN egress',exact:true}).click();
   assert.equal(await page.locator('.alias-entry').getByText('VPN egress',{exact:true}).count(),0);
   await page.locator('.settings-head .icon-btn').click();
-  await page.getByRole('button',{name:'Workbench',exact:true}).click();
+  await page.getByRole('button',{name:'Events',exact:true}).click();
    await page.getByRole('button',{name:'Summarize',exact:true}).click();
   await page.getByRole('button',{name:'Run analysis',exact:true}).click();
   const labeledEntity=page.locator('.analysis-entity').filter({hasText:labeledArn});
@@ -1070,12 +1082,12 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.waitForFunction(()=>window.captureTest.searchCalls.at(-1)?.expr?.t==='and');
   const originalHuntScope=await page.evaluate(()=>window.captureTest.searchCalls.at(-1));
   await page.getByRole('button',{name:'Hunt',exact:true}).click();
-  await page.getByLabel('Use console filters',{exact:true}).check();
+  await page.locator('.hunt-view:visible').getByLabel('Hunt scope',{exact:true}).selectOption('workbench');
   const originalHuntIndicators='ip 192.0.2.1\narn arn:aws:s3:::evidence-bucket/audit/events.json';
   const revisedHuntIndicators='ip 198.51.100.10\narn arn:aws:s3:::evidence-bucket/audit/events.json';
-  await openIndicatorBulk(page);await page.getByLabel('Typed indicators',{exact:true}).fill(originalHuntIndicators);
-  await page.locator('summary').filter({hasText:/^Saved hunts \(0\)$/}).click();
-  await page.getByLabel('Hunt name',{exact:true}).fill('Scoped network triage');
+  await openIndicatorBulk(page);await page.locator('.hunt-view:visible').getByLabel('Typed indicators',{exact:true}).fill(originalHuntIndicators);
+  await page.locator('.hunt-view:visible summary').filter({hasText:/^Saved hunts \(0\)$/}).click();
+  await page.locator('.hunt-view:visible').getByLabel('Hunt name',{exact:true}).fill('Scoped network triage');
   await page.getByRole('button',{name:'Save new hunt',exact:true}).click();
   await page.waitForFunction(()=>JSON.parse(localStorage.getItem('cloudmon.savedHunts'))?.items?.length===1);
   const savedHunt=await page.evaluate(()=>JSON.parse(localStorage.getItem('cloudmon.savedHunts')).items[0]);
@@ -1093,27 +1105,29 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await page.waitForFunction(()=>window.captureTest.searchCalls.at(-1)?.expr?.value==='eu-west-1');
   const currentHuntScope=await page.evaluate(()=>window.captureTest.searchCalls.at(-1));
   await page.getByRole('button',{name:'Hunt',exact:true}).click();
-  await page.locator('summary').filter({hasText:/^Saved hunts \(1\)$/}).click();
-  await page.getByLabel('Saved hunt',{exact:true}).selectOption(savedHunt.id);
-  assert.equal(await page.getByLabel('Typed indicators',{exact:true}).inputValue(),'','selecting a saved hunt silently replaced the draft');
+  await page.locator('.hunt-view:visible summary').filter({hasText:/^Saved hunts \(1\)$/}).click();
+  await page.locator('.hunt-view:visible').getByLabel('Saved hunt',{exact:true}).selectOption(savedHunt.id);
+  assert.equal(await page.locator('.hunt-view:visible').getByLabel('Typed indicators',{exact:true}).inputValue(),'','selecting a saved hunt silently replaced the draft');
   assert.equal(await page.evaluate(()=>window.captureTest.huntCalls?.length||0),0,'selecting a saved hunt ran it');
   await page.getByRole('button',{name:'Load hunt',exact:true}).click();
-  await page.getByText('Scope: saved filters.',{exact:false}).waitFor();
-  assert.equal(await page.getByLabel('Typed indicators',{exact:true}).inputValue(),originalHuntIndicators);
+  await page.locator('.hunt-view:visible').getByLabel('Hunt scope',{exact:true}).locator('option[value="saved"]').waitFor({state:'attached'});
+  assert.equal(await page.locator('.hunt-view:visible').getByLabel('Hunt scope',{exact:true}).inputValue(),'saved');
+  assert.equal(await page.locator('.hunt-view:visible').getByLabel('Typed indicators',{exact:true}).inputValue(),originalHuntIndicators);
   assert.equal(await page.evaluate(()=>window.captureTest.huntCalls?.length||0),0,'loading a saved hunt ran it');
   await page.getByRole('button',{name:'Run hunt',exact:true}).click();
   await page.getByText('600 matched events · 900 events in scope',{exact:true}).waitFor();
   assert.deepEqual(await page.evaluate(()=>window.captureTest.huntCalls.at(-1).filter),originalHuntScope,'loaded hunt used the new console filters');
-  await page.getByRole('button',{name:'Use current console filters',exact:true}).click();
+  await page.getByRole('button',{name:'Use current event filters',exact:true}).click();
   await page.getByRole('button',{name:'Run hunt',exact:true}).click();
   await page.waitForFunction(()=>window.captureTest.huntCalls.length===2);
   assert.deepEqual(await page.evaluate(()=>window.captureTest.huntCalls.at(-1).filter),currentHuntScope,'explicit scope replacement did not use current console filters');
   await page.getByRole('button',{name:'Load hunt',exact:true}).click();
-  assert.equal(await page.locator('.hunt-card').count(),0,'loading retained old results');
-  await openIndicatorBulk(page);await page.getByLabel('Typed indicators',{exact:true}).fill(revisedHuntIndicators);
+  await page.locator('.hunt-view:visible .hunt-card').first().waitFor({state:'hidden'});
+  assert.equal(await page.locator('.hunt-view:visible .hunt-card').count(),0,'loading retained old results');
+  await openIndicatorBulk(page);await page.locator('.hunt-view:visible').getByLabel('Typed indicators',{exact:true}).fill(revisedHuntIndicators);
   await page.getByRole('button',{name:'Update saved hunt',exact:true}).click();
   await page.waitForFunction(value=>JSON.parse(localStorage.getItem('cloudmon.savedHunts')).items[0].config.indicatorText===value,revisedHuntIndicators);
-  await page.getByLabel('Hunt name',{exact:true}).fill('Production network review');
+  await page.locator('.hunt-view:visible').getByLabel('Hunt name',{exact:true}).fill('Production network review');
   await page.getByRole('button',{name:'Rename hunt',exact:true}).click();
   await page.waitForFunction(()=>JSON.parse(localStorage.getItem('cloudmon.savedHunts')).items[0].name==='Production network review');
   assert.deepEqual(await page.evaluate(()=>JSON.parse(localStorage.getItem('cloudmon.savedHunts')).items[0].config.filter),originalHuntScope,'updating or renaming changed the saved scope');
@@ -1131,16 +1145,17 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
       return state.savedHuntCancel(id);
     };
   });
-  await openIndicatorBulk(page);await page.getByLabel('Typed indicators',{exact:true}).fill(originalHuntIndicators);
+  await openIndicatorBulk(page);await page.locator('.hunt-view:visible').getByLabel('Typed indicators',{exact:true}).fill(originalHuntIndicators);
   await page.getByRole('button',{name:'Run hunt',exact:true}).click();
   await page.waitForFunction(()=>!!window.captureTest.finishSavedHunt);
   await page.getByRole('button',{name:'Load hunt',exact:true}).click();
   await page.waitForFunction(()=>window.captureTest.savedHuntCancelled===true);
-  assert.equal(await page.getByLabel('Typed indicators',{exact:true}).inputValue(),revisedHuntIndicators);
+  await page.waitForFunction(value=>document.querySelector('.hw-panel:not([hidden]) textarea[aria-label="Typed indicators"]').value===value,revisedHuntIndicators);
+  assert.equal(await page.locator('.hunt-view:visible').getByLabel('Typed indicators',{exact:true}).inputValue(),revisedHuntIndicators);
   assert.equal(await page.evaluate(()=>window.captureTest.huntCalls.length),3,'loading while busy launched another hunt');
   await page.evaluate(()=>window.captureTest.finishSavedHunt());
   await page.clock.runFor(100);
-  assert.equal(await page.locator('.hunt-card').count(),0,'a stale completion overwrote the newly loaded hunt');
+  assert.equal(await page.locator('.hunt-view:visible .hunt-card').count(),0,'a stale completion overwrote the newly loaded hunt');
   assert.equal(await page.getByRole('button',{name:'Cancel hunt',exact:true}).count(),0);
   assert.equal(await page.getByText('Hunt cancelled. Run again when ready.',{exact:true}).count(),0,'old cancellation feedback leaked into the loaded hunt');
   assert.ok(await page.getByRole('button',{name:'Run hunt',exact:true}).isEnabled());
@@ -1153,14 +1168,14 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.equal(clearedHuntScope.expr,null);assert.equal(clearedHuntScope.fromMs,0);assert.equal(clearedHuntScope.toMs,0);
   await page.getByRole('button',{name:'Load hunt',exact:true}).click();
   await page.setViewportSize({width:960,height:720});
-  await page.locator('.hunt-view').evaluate(el=>el.scrollTop=0);
+  await page.locator('.hunt-view:visible').evaluate(el=>el.scrollTop=0);
   await page.screenshot({path:path.join(output,'saved-hunts.png'),fullPage:true});
-  assert.ok(await page.locator('.hunt-view').evaluate(el=>el.scrollWidth<=el.clientWidth),'saved-hunt controls spill at minimum width');
+  assert.ok(await page.locator('.hunt-view:visible').evaluate(el=>el.scrollWidth<=el.clientWidth),'saved-hunt controls spill at minimum width');
   const deleteSavedHunt=page.waitForEvent('dialog').then(async dialog=>{assert.equal(dialog.type(),'confirm');await dialog.accept()});
   await page.getByRole('button',{name:'Delete hunt',exact:true}).click();
   await deleteSavedHunt;
   await page.waitForFunction(()=>JSON.parse(localStorage.getItem('cloudmon.savedHunts')).items.length===0);
-  assert.equal(await page.getByLabel('Saved hunt',{exact:true}).locator('option',{hasText:'Production network review'}).count(),0);
+  assert.equal(await page.locator('.hunt-view:visible').getByLabel('Saved hunt',{exact:true}).locator('option',{hasText:'Production network review'}).count(),0);
   assert.equal(await page.evaluate(()=>window.captureTest.huntCalls.length),4,'saved-hunt management triggered an extra run');
   // Ordered hunts retain every step, including saved five-step configurations.
   // Real matching/order semantics are covered by store tests; this exercises the UI contract.
@@ -1176,7 +1191,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await seedOrderedEvents();
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.getByRole('button',{name:'Hunt',exact:true}).click();
-  await page.getByLabel('Hunt type',{exact:true}).selectOption('sequence');
+  await page.getByRole('tab',{name:'Event sequences',exact:true}).click();
   for(const label of ['A','B'])assert.ok(await page.getByRole('button',{name:`Remove step ${label}`,exact:true}).isDisabled(),'the minimum sequence can lose a step');
   await page.getByLabel('Step A search',{exact:true}).fill(orderedQueries[0]);
   await page.getByLabel('Step B search',{exact:true}).fill(orderedQueries[1]);
@@ -1190,7 +1205,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.deepEqual(orderedRequest.steps.map(step=>step.value),orderedNames.slice(0,3),'request changed the order of sequence steps');
   assert.equal(orderedRequest.first,null);assert.equal(orderedRequest.second,null);
   assert.equal(orderedRequest.minutes,5);assert.equal(orderedRequest.group,'credential');
-  assert.equal(await page.locator('.hunt-detail section').count(),3,'three-step result lost a detail record');
+  assert.equal(await page.locator('.hunt-view:visible .hunt-step-picks button').count(),3,'three-step result lost a detail record');
   for(let i=3;i<5;i++){
     await page.getByRole('button',{name:'Add step',exact:true}).click();
     await page.getByLabel(`Step ${String.fromCharCode(65+i)} search`,{exact:true}).fill(orderedQueries[i]);
@@ -1203,8 +1218,8 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   assert.equal(await page.getByLabel('Step E search',{exact:true}).count(),0);
   await page.getByRole('button',{name:'Add step',exact:true}).click();
   for(let i=2;i<5;i++)await page.getByLabel(`Step ${String.fromCharCode(65+i)} search`,{exact:true}).fill(orderedQueries[i]);
-  await page.locator('summary').filter({hasText:/^Saved hunts \(0\)$/}).click();
-  await page.getByLabel('Hunt name',{exact:true}).fill('Five-step credential review');
+  await page.locator('.hunt-view:visible summary').filter({hasText:/^Saved hunts \(0\)$/}).click();
+  await page.locator('.hunt-view:visible').getByLabel('Hunt name',{exact:true}).fill('Five-step credential review');
   await page.getByRole('button',{name:'Save new hunt',exact:true}).click();
   await page.waitForFunction(()=>JSON.parse(localStorage.getItem('cloudmon.savedHunts')).items.length===1);
   const orderedSaved=await page.evaluate(()=>JSON.parse(localStorage.getItem('cloudmon.savedHunts')).items[0]);
@@ -1213,16 +1228,17 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await seedOrderedEvents();
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.getByRole('button',{name:'Hunt',exact:true}).click();
-  await page.locator('summary').filter({hasText:/^Saved hunts \(1\)$/}).click();
-  await page.getByLabel('Saved hunt',{exact:true}).selectOption(orderedSaved.id);
+  await page.locator('.hunt-view:visible summary').filter({hasText:/^Saved hunts \(1\)$/}).click();
+  await page.locator('.hunt-view:visible').getByLabel('Saved hunt',{exact:true}).selectOption(orderedSaved.id);
   await page.getByRole('button',{name:'Load hunt',exact:true}).click();
+  await page.waitForFunction(queries=>queries.every((query,i)=>document.querySelector(`.hw-panel:not([hidden]) input[aria-label="Step ${String.fromCharCode(65+i)} search"]`)?.value===query),orderedQueries);
   for(let i=0;i<5;i++)assert.equal(await page.getByLabel(`Step ${String.fromCharCode(65+i)} search`,{exact:true}).inputValue(),orderedQueries[i],'loading changed a saved sequence step');
   assert.equal(await page.getByLabel('Sequence interval',{exact:true}).inputValue(),'5');
   assert.equal(await page.evaluate(()=>window.captureTest.huntCalls?.length||0),0,'loading a longer sequence ran it');
-  await page.locator('summary').filter({hasText:/^Saved hunts \(1\)$/}).click();
+  await page.locator('.hunt-view:visible summary').filter({hasText:/^Saved hunts \(1\)$/}).click();
   await page.getByRole('button',{name:'Run hunt',exact:true}).click();
   await page.getByText('1 sequence · 900 events in scope',{exact:true}).waitFor();
-  assert.equal(await page.locator('.hunt-detail section').count(),5,'five-step result lost intermediate detail records');
+  assert.equal(await page.locator('.hunt-view:visible .hunt-step-picks button').count(),5,'five-step result lost intermediate detail records');
   await page.getByText('3 candidates for step C share the selected timestamp; a representative is shown.',{exact:true}).waitFor();
   orderedRequest=await page.evaluate(()=>window.captureTest.huntCalls.at(-1));
   assert.deepEqual(orderedRequest.steps.map(step=>step.value),orderedNames,'saved sequence request lost or reordered steps');
@@ -1232,12 +1248,13 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   // Each original and investigation stays on the returned snapshot after new evidence arrives.
   for(let i=0;i<5;i++){
     const letter=String.fromCharCode(65+i);
-    await page.getByRole('button',{name:`Original ${letter}`,exact:true}).click();
+    await page.getByRole('button',{name:`Inspect step ${letter}`,exact:true}).click();
+    await openInspectorOriginal(page.locator('.hunt-view:visible .event-inspector'));
     await page.getByRole('dialog',{name:'Raw JSON',exact:true}).waitFor();
     assert.equal(await page.evaluate(()=>window.captureTest.rawSeq),i+1);
     assert.deepEqual(await page.evaluate(()=>window.captureTest.rawSnapshot),orderedSnapshot,`original ${letter} used live evidence`);
     await page.keyboard.press('Escape');
-    await page.getByRole('button',{name:`Investigate ${letter}`,exact:true}).click();
+    await page.locator('.hunt-view:visible .event-inspector').getByRole('button',{name:'Investigate',exact:true}).click();
     await page.getByRole('dialog',{name:'Event investigation',exact:true}).waitFor();
     await page.waitForFunction(seq=>window.captureTest.investigationCalls?.at(-1)?.seq===seq,i+1);
     const investigationRequest=await page.evaluate(()=>window.captureTest.investigationCalls.at(-1));
@@ -1245,11 +1262,11 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
     await page.getByRole('button',{name:'Close investigation',exact:true}).click();
   }
   await page.setViewportSize({width:960,height:1200});
-  await page.locator('.hunt-view').evaluate(el=>el.scrollTop=0);
-  await page.locator('.hunt-detail').evaluate(el=>el.scrollTop=0);
+  await page.locator('.hunt-view:visible').evaluate(el=>el.scrollTop=0);
+  await page.locator('.hunt-view:visible .hunt-inspection').evaluate(el=>el.scrollTop=0);
   await page.screenshot({path:path.join(output,'ordered-sequences.png'),fullPage:true});
-  assert.ok(await page.locator('.hunt-view').evaluate(el=>el.scrollWidth<=el.clientWidth),'five-step hunt spills at minimum width');
-  assert.ok(await page.locator('.hunt-detail').evaluate(el=>el.scrollWidth<=el.clientWidth),'sequence details spill at minimum width');
+  assert.ok(await page.locator('.hunt-view:visible').evaluate(el=>el.scrollWidth<=el.clientWidth),'five-step hunt spills at minimum width');
+  assert.ok(await page.locator('.hunt-view:visible .hunt-inspection').evaluate(el=>el.scrollWidth<=el.clientWidth),'sequence details spill at minimum width');
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'sequence page has horizontal overflow');
 
   // Investigation exports use the displayed successful scope and invalidate native
@@ -1284,7 +1301,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   });
   await page.getByRole('button',{name:'Open saved evidence',exact:true}).click();
   await page.locator('.row').getByText('GetObject',{exact:true}).click();
-  await page.getByRole('button',{name:'Around this event',exact:true}).click();
+  await openRuleInvestigation(page,'GetObject');
   const reportDialog=page.getByRole('dialog',{name:'Event investigation',exact:true});
   const exportInvestigation=reportDialog.getByRole('button',{name:'Export investigation',exact:true});
   await reportDialog.getByText('520 events',{exact:true}).waitFor();
@@ -1344,7 +1361,7 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   await reportDialog.getByRole('button',{name:'Close investigation',exact:true}).click();
   await page.waitForFunction(()=>window.captureTest.reportCancelled.length===4);
   await page.evaluate(()=>window.captureTest.finishReport('/evidence/reports/closed-dialog.zip'));
-  await page.getByRole('button',{name:'Around this event',exact:true}).click();
+  await page.getByRole('button',{name:'Investigate',exact:true}).click();
   await reportDialog.getByText('520 events',{exact:true}).waitFor();
   assert.equal(await reportDialog.getByText('closed-dialog.zip',{exact:false}).count(),0,'reopened investigation inherited an old export completion');
   await reportDialog.getByRole('button',{name:'Close investigation',exact:true}).click();
@@ -1379,9 +1396,45 @@ async function checkStatusBar(page, expected='↑ 1 new event') {
   }
   assert.deepEqual(errors,[]);
   console.log(JSON.stringify({passed:['verified coverage','stale trail after region change','stale identity after profile change','unknown coverage warning','dedicated queue guidance','1024px layout','saved evidence stays offline','failed cleanup retains handles','cleanup preserves evidence','source variants and CSV provenance','raw export preserves large integers','export failure cancels output','explicit resume reuses capture','idle and duplicate batches avoid scans','slow tail requests coalesce without losing arrivals','aggregate refreshes never overlap','inspection stays anchored during capture','invalid search stays unapplied','failed search shows stale results and retries','clear resets unapplied draft'],errors}));
+ } catch(error) {
+  const failedPage=browser.contexts()[0]?.pages()[0];
+  if(failedPage){
+   await failedPage.screenshot({path:path.join(output,'failure.png'),fullPage:true}).catch(()=>{});
+   fs.writeFileSync(path.join(output,'failure.txt'),await failedPage.locator('body').innerText().catch(()=>''));
+  }
+  throw error;
  } finally {await browser.close();await server.close()}
 })().catch(e=>{console.error(e);process.exit(1)});
 
+async function revealReviewEvidence(page) {
+  const inspector=page.locator('.workbench-body > .event-inspector');
+  await inspector.getByRole('tab',{name:'Overview',exact:true}).click();
+  const disclosure=inspector.locator('details').filter({has:page.locator('summary').filter({hasText:/^Evidence & provenance$/})});
+  if(!await disclosure.evaluate(el=>el.open))await disclosure.locator('summary').click();
+}
+async function openReviewEvidence(page) {
+  await revealReviewEvidence(page);
+  await page.locator('.workbench-body > .event-inspector').getByRole('button',{name:'Sources & hashes',exact:true}).click();
+}
+async function checkSnapshotActions(page,disabled,message) {
+  await revealReviewEvidence(page);
+  const inspector=page.locator('.workbench-body > .event-inspector');
+  for(const name of ['Sources & hashes','Related events','Credential chain'])assert.equal(await inspector.getByRole('button',{name,exact:true}).isDisabled(),disabled,`${name}: ${message}`);
+  await inspector.getByRole('tab',{name:'Fields',exact:true}).click();
+}
+// The full investigation dialog remains available on Hunt results; Events now
+// opens contextual rows instead. Keep dialog/export coverage on its real entry.
+async function openRuleInvestigation(page,eventName) {
+  await page.getByRole('button',{name:'Hunt',exact:true}).click();
+  await page.getByRole('tab',{name:'Rules',exact:true}).click();
+  await page.getByRole('button',{name:'▶ Run',exact:true}).click();
+  await page.locator('.sigma .row').getByText(eventName,{exact:true}).click();
+  await page.getByRole('button',{name:'Investigate',exact:true}).click();
+}
+async function openInspectorOriginal(scope) {
+  await scope.getByRole('tab',{name:'Original JSON',exact:true}).click();
+  await scope.getByRole('button',{name:'Open full JSON',exact:true}).click();
+}
 async function openIndicatorBulk(page) {
   const choices=page.getByRole('button',{name:/^(Paste multiple indicators|Back to indicator list)$/});
   await choices.waitFor();

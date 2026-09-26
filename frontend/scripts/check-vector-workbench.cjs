@@ -48,7 +48,7 @@ async function repeatedNavigation(page) {
     for(let cycle=1;cycle<=10;cycle++) {
       await page.getByRole('button',{name:'Hunt',exact:true}).click();
       if(dwell) await page.waitForTimeout(dwell);
-      await page.getByRole('button',{name:'Workbench',exact:true}).click();
+      await page.getByRole('button',{name:'Events',exact:true}).click();
       await page.waitForTimeout(300);
       const label=`cycle ${cycle}, Hunt dwell ${dwell}ms`;
       assert.equal(await page.locator('.workbench-results .etbody').evaluate(el=>el.scrollTop),1040,`${label}: scroll offset drifted`);
@@ -76,14 +76,14 @@ async function repeatedNavigation(page) {
     await page.locator('input[type=file]').setInputFiles({name:'review-fixture.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({Records:records}))});
     await page.getByRole('button',{name:'Load dump',exact:true}).click();
     await page.locator('.workbench-results .row').first().waitFor();
-    assert.deepEqual(await page.locator('.tbar-views button').allTextContents(),['Workbench','Hunt'],'Only Workbench and Hunt should be primary destinations');
+    assert.deepEqual(await page.locator('.tbar-views button').allTextContents(),['Events','Hunt'],'Only Events and Hunt should be primary destinations');
     await page.locator('.workbench-results .etbody').evaluate(el => {el.scrollTop=700});
     await settle(page);
     const browsedRows=await visibleRows(page);
     assert.ok(browsedRows.length>2,'Scrolled table must expose real visible rows');
     const selectedSeq=browsedRows[2];
     await page.locator(`.workbench-results .row[data-event-seq="${selectedSeq}"] .c-time`).click();
-    await page.locator('.ei-heading h2').waitFor();
+    await page.locator('.ei-review-intro h2').waitFor();
     await page.getByRole('tab',{name:'Original JSON',exact:true}).click();
     await page.locator('.ei-source').waitFor();
     const selectedID=JSON.parse(await page.locator('.ei-source').textContent()).eventID;
@@ -97,7 +97,7 @@ async function repeatedNavigation(page) {
     assert.ok(rowsBefore.includes(selectedSeq),`Selection must be in the visible scroll window: ${JSON.stringify({selectedSeq,scrollBefore,rowsBefore})}`);
     await page.getByRole('button',{name:'Hunt',exact:true}).click();
     await openIndicatorBulk(page);await page.getByRole('textbox',{name:'Typed indicators',exact:true}).fill('ip 198.51.100.24');
-    await page.getByRole('button',{name:'Workbench',exact:true}).click();
+    await page.getByRole('button',{name:'Events',exact:true}).click();
     assert.equal(await page.locator('.qbar-input').inputValue(),draft,'Leaving Workbench must retain an unapplied query draft');
     await settle(page);
     assert.equal(JSON.parse(await page.locator('.ei-source').textContent()).eventID,selectedID,'Selected eventID changed after return');
@@ -107,7 +107,7 @@ async function repeatedNavigation(page) {
     assert.equal(await page.locator('.workbench-results .row[aria-selected="true"]').getAttribute('data-event-seq'),selectedSeq,'Selected seq changed after return');
     await page.getByRole('button',{name:'Hunt',exact:true}).click();
     assert.equal(await page.getByLabel('Typed indicators',{exact:true}).inputValue(),'ip 198.51.100.24','Hunt draft was lost');
-    await page.getByRole('button',{name:'Workbench',exact:true}).click();
+    await page.getByRole('button',{name:'Events',exact:true}).click();
     await repeatedNavigation(page);
     await page.getByRole('button',{name:'Hunt',exact:true}).click();
     // Retention is bounded to a dataset session; a replacement must not leave
@@ -116,12 +116,13 @@ async function repeatedNavigation(page) {
     const chooser = page.waitForEvent('filechooser');
     await page.getByRole('button',{name:'Open dataset…',exact:true}).click();
     await (await chooser).setFiles({name:'replacement.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify({Records:records.slice(0,2)}))});
-    await page.waitForFunction(()=>document.querySelector('.workbench-list-heading strong')?.textContent==='2 matches');
-    assert.match(await page.getByRole('button',{name:'Workbench',exact:true}).getAttribute('class'),/\bon\b/,'A new dataset must open in Workbench');
+    await page.waitForFunction(()=>document.querySelector('.workbench-list-heading strong')?.textContent==='2 events');
+    assert.match(await page.getByRole('button',{name:'Events',exact:true}).getAttribute('class'),/\bon\b/,'A new dataset must open in Workbench');
     assert.equal(await page.locator('.qbar-input').inputValue(),'','New dataset retained the previous unapplied query draft');
     await page.getByRole('button',{name:'Hunt',exact:true}).click();
+    await openIndicatorBulk(page);
     assert.equal(await page.getByLabel('Typed indicators',{exact:true}).inputValue(),'','New dataset retained the previous unsaved hunt session');
-    await page.getByRole('button',{name:'Workbench',exact:true}).click();
+    await page.getByRole('button',{name:'Events',exact:true}).click();
     assert.deepEqual(errors,[]);
     await page.screenshot({path:path.join(output,`navigation-${viewport.width}.png`)});
     console.log(`PASS ${viewport.width}×${viewport.height}: two destinations; review draft/selection/inspector/scroll and Hunt draft retention; clean new-dataset session.`);
