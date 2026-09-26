@@ -4,16 +4,16 @@
 
 ## Current checkpoint
 
-**ACTIVE PLAN — implementation authorized:** The user approved the [discoverability/flow direction](ui-reviews/discoverability-flow.md): “Ship it! Lets make it pretty.” Implement in the existing compact tool, preserving evidence/query engines and the uncommitted desktop readability polish. Parent owns shell, selected-event actions, comparison, shared checks/docs/commits. One bounded worker owns HuntWorkspace/HuntView/SigmaView/hunt-workspace.css and its new discovery check. No AWS, push, release or new backend scope.
+**CURRENT CHECKPOINT — implemented and verified:** The approved discoverability flow and desktop polish are complete. Focused actual-App checks, parent visual critique, bounded independent review and the production native build pass. See [implementation verification](ui-reviews/flow-implementation.md) for exact evidence and limits. Earlier persona/lineage work is historical; do not restart those audits. No AWS, backend, dependency, push or release changes.
 
 ### Discoverability / flow implementation
 
 - [x] FLOW-1/2: Events/Hunt navigation, distinct Data sources utility, Quick filters and grouped display controls.
 - [x] FLOW-3: consistent Related events / Credential chain actions, explicit value-filter purpose and anchored return scope.
 - [x] FLOW-4: purpose-first comparison labels and two-event selection progress without weakening original-source safeguards.
-- [ ] FLOW-5/6: approachable indicator input/examples, rule choice before YAML, explicit sequence starter and consistent scope/run feedback.
-- [ ] Actual-App screenshots at 1280/1440, one bounded critical review, focused checks and production native build.
-- [ ] Checked handoff and separate local commits for verified slices; no push/release.
+- [x] FLOW-5/6: approachable indicator type/value input and persistent examples; rule choice before optional YAML; explicit non-replacing sequence starter; truthful scope/run feedback. Actual-App discovery check passes with no automatic runs, retained drafts and explicit desktop-engine limitation in browser preview.
+- [x] Actual-App screenshots at 1280/1440, bounded independent production-diff/screenshot review with no blockers, focused discovery/Hunt/state/navigation/keyboard checks and final production native build. Browser fixtures/native compilation remain distinct from native-window E2E.
+- [x] Implementation committed as `cedecb8`; checked verification handoff included with this documentation commit. Worktree clean after final commit; no push/release.
 
 Earlier five persona fixes are committed. Desktop palette/type/target checks and native build already passed before this flow work; reuse that evidence and verify the integrated result rather than restarting broad audits.
 
@@ -40,7 +40,7 @@ Start **after completing and committing the current five-finding corrections**, 
 - [x] Read authoritative desktop-application UI/UX guidance and save cited notes locally. Cover readable typography/sizing, contrast, corner geometry, spacing/density, visual hierarchy, button/control placement and consistency, focus/keyboard behavior, and interaction feedback.
 - [x] Review actual CloudMon screens and representative interactions against those notes. Judge whether the app looks coherent and is pleasant to use; distinguish visual/ergonomic findings from backend correctness. Corner radius is a consistency/context choice, not an arbitrary universal rule.
 - [x] List concrete, evidenced improvements by impact. Preserve the compact desktop-tool direction, goal-free log browsing, right inspector, truthful scope and exact evidence.
-- [ ] Implement justified improvements in small committed slices. Provide before/after screenshots, a bounded adversarial visual check and focused workflow/build verification. No sprawling redesign or repeated broad test campaigns; keep the user updated and execution economical. No push/release authorization is implied.
+- [x] Implement justified readability/control improvements with the approved flow changes. Before/after actual-App screenshots, final eight-theme/two-viewport focused checks, adversarial visual review and native production build are recorded in [flow implementation verification](ui-reviews/flow-implementation.md). No push/release.
 
 ### Evidence-labeled connections and live resolver audit
 
