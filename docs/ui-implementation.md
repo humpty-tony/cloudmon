@@ -4,6 +4,16 @@
 
 ## Current checkpoint
 
+**RELEASE IN PROGRESS — native E2E passed; CI test maintenance before push.** The user authorized native E2E → README/cleanup → commit/push → merge to main → verify tagged release publication. No further UI redesign is planned.
+
+- [x] REL-1: Actual isolated Linux desktop import/browse/search/inspect/credential graph/Hunt/native export passed with 108 synthetic records, 5 indicator matches and an exported record equal to its original. No AWS reauthentication needed. See [native E2E verification](ui-reviews/native-e2e.md).
+- [x] REL-2a: README reviewed against the current Events/Hunt UI, explicit remote attribution, capture cleanup semantics and pinned build toolchain. Removed unsupported blanket performance/privacy and competitor claims; relative documentation links resolve.
+- [ ] REL-2b: Repair stale CI-only test assumptions and archive task-generated browser output outside the checkout; preserve user evidence and dependencies.
+- [ ] REL-3: Commit and push `feat/vector-workbench`; verify PR checks and merge into `main`.
+- [ ] REL-4: Push a new unused version tag on merged `main`; verify successful publish job plus downloaded release assets/checksums. Prior latest is `v0.3.0`; planned feature release is `v0.4.0`, subject to a fresh unused-tag check.
+
+### Completed hierarchy cleanup
+
 **COMPLETE — hierarchy cleanup implemented and verified:** Hunt now defaults to a removable indicator list with explicit bulk editing; scope/Run controls share a consistent toolbar; Rules headers are consolidated; inspector actions are content-sized; repeated help is reduced. Engines, evidence, drafts, saved configurations and truthful scope are preserved. No AWS, backend, dependency, push or release changes.
 
 - [x] HIER-1: Indicator list and explicit bulk alternative; consistent Hunt scope/Run toolbar; compact Rules header. Committed as `4a6d2aa`.

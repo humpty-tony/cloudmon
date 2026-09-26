@@ -1,136 +1,117 @@
 # CloudMon
 
-Process Monitor for AWS CloudTrail. Open a CloudTrail export, or stream live from a trail you own, and investigate API activity on your own machine: filter, pivot, correlate identities, and test detections, with no SIEM and no per-GB bill.
+A local, cloud-centric investigation workspace for AWS CloudTrail. Open exported logs and browse activity without needing a predefined hunt, or capture live from an existing trail. Follow recorded identities and credential relationships, inspect original evidence, and test indicators and detections on your own machine.
 
-https://github.com/user-attachments/assets/6e5f09d8-cb21-4fa1-a13d-0d47bed212e8
+CloudMon provides SIEM-style investigation tools without a separate log server. It is not a managed SIEM, continuous alerting service, or proof of who physically operated a credential.
 
-## The problem
+## Start with the logs
 
-When you need an answer out of CloudTrail (who assumed this role, what did this access key touch, what threw AccessDenied at 3am) every option is bad unless you already pay for a pipeline:
+1. **Open evidence.** Use **File → Open dataset…** or **Data sources…** to import CloudTrail files. Local imports need no AWS credentials. Saved evidence can be reopened offline.
+2. **Browse in Events.** Scan the event grid, narrow with facets and the time histogram, or enter a query and press **Search** / Enter. **Activity** and **Summarize** expose broader activity patterns without leaving the event workspace.
+3. **Inspect an event.** The right-hand inspector shows recorded context, fields and **Original JSON**. **Related events** opens a scoped contextual view; return to Events without losing your browsing context.
+4. **Follow credentials when useful.** **Credential chain** opens a connected graph of supported identity/credential relationships and the selected activity. Click nodes or connections for evidence. If ancestry is incomplete, **Resolve lineage dynamically** explicitly requests remote enrichment; simply opening the graph stays local.
+5. **Hunt deliberately.** **Hunt** contains **Indicators**, **Rules**, and **Event sequences**. Add typed indicators individually or choose **Paste multiple indicators**. Review scope before running. Rules evaluate the full evidence snapshot, not the Events filters.
+6. **Export evidence.** **File → Export loaded events…** exports loaded rows; **Export all matching events…** exports the complete applied search snapshot, beyond the loaded-row limit. Both produce re-importable CloudTrail JSON.
 
-- **The AWS console (Event History)** searches one region at a time, keeps 90 days, gives you five fixed filter fields, and has no free-text search, no correlation, and no way to follow an assumed-role chain. Fine for looking up a single event, useless for an investigation.
-- **CloudTrail Lake / Athena** means writing SQL and paying per scan. Good for scheduled analytics, painful for interactively poking at an incident.
-- **A SIEM** (Splunk, Datadog, Elastic, and friends) is the usual answer, and it works, but per-GB ingest pricing makes ad-hoc and research use absurd, on top of the infrastructure and pipeline you have to run. A solo responder, a small team, or a student looking at an exported log set is not going to stand one up for a one-off.
-- **Rolling your own log stack** (OpenSearch/Elastic, Grafana Loki, Quickwit) escapes the per-GB bill, but now you own the cluster: provisioning it, wiring up ingestion, sizing storage, and keeping it patched and alive. That is a permanent piece of infrastructure to babysit for what is usually a one-off look at a log set.
-- **grep and jq** over the raw JSON have no structure, no faceting, no identity correlation, and fall over past a few hundred megabytes.
+## Investigation tools
 
-The result is a gate: unless you already run a log pipeline, investigating your own CloudTrail means the console's crippled search or hand-rolled shell scripts.
+- **Search and facets:** field operators, boolean expressions, regex/contains/wildcards, time filtering, stable paging and snapshot-consistent aggregates. See [search semantics and limits](docs/search-correctness.md) and [filtered export](docs/query-snapshots.md).
+- **Event context:** surrounding activity, recorded resources and explicit relationship evidence. See [event investigation](docs/investigation-context.md) and [activity analysis](docs/activity-analysis.md).
+- **Credential lineage:** qualified STS links, recorded identity associations, explicit gaps/conflicts and selected-activity connections. A directory identity is not proof of credential issuance or a physical human. See [credential lineage](docs/credential-lineage.md) and [dynamic session attribution](docs/session-attribution.md).
+- **Original evidence and comparison:** inspect retained records and source observations; add two events to comparison without rounding large numbers. See [evidence and recovery](docs/evidence-recovery.md) and [record comparison](docs/event-comparison.md).
+- **IOC hunts:** IP/CIDR, access-key ID, event-ID and ARN matching, with visible scope and original records. See [investigation hunts](docs/investigation-hunts.md).
+- **Rules and sequences:** Sigma diagnostics, match explanations and suites of up to 25 rules; ordered sequences of two to five events tied to recorded principals/credentials. See [Sigma investigation](docs/sigma-investigation.md) and [ordered sequences](docs/ordered-sequences.md).
+- **Reusable local configuration:** [saved hunts](docs/saved-hunts.md) and [personal labels](docs/local-aliases.md). Loading a configuration does not automatically run it.
+- **Investigation reports:** ZIP exports with printable HTML, manifests, exact event JSON and retained source observations. See [report contents and limits](docs/investigation-reports.md).
+- **Desktop controls:** keyboard navigation, command palette, column presets/reordering/resizing, density, timezone and themes.
 
-## What CloudMon does
+## Data, privacy and live capture
 
-CloudMon removes that gate. It reads CloudTrail directly (a downloaded dump, or a live stream from a trail you already have) and gives you the exploration you would expect from a SIEM, running entirely on your laptop, offline, for free:
+CloudMon imports local JSON, CSV, NDJSON and gzip files, including downloaded S3 CloudTrail log objects and console Event History exports, individually or from folders. Imports replace the active dataset only after validation and commit.
 
-- a query language over supported event and identity fields ([semantics and limits](docs/search-correctness.md)),
-- facets, a time histogram, and live stats to pivot through millions of events,
-- [event investigation](docs/investigation-context.md) with surrounding-event timelines, resource correlations, and explicit relationship evidence,
-- [credential lineage](docs/credential-lineage.md) with qualified STS links, explicit gaps/conflicts, and snapshot-consistent expansion,
-- [original-record comparison](docs/event-comparison.md) with two pinned source copies and exact numeric evidence,
-- a Sigma testbench to write and validate detections against real data.
+Go/Wails connects the React UI to an embedded DuckDB engine. Evidence is stored and queried locally; the UI requests bounded row windows and aggregates instead of loading the entire dataset. Dataset size, query complexity and available resources still affect performance.
 
-Nothing leaves the host. It is for the people who do this work without a Splunk budget: detection engineers, incident responders, researchers, and anyone learning what CloudTrail actually contains.
+**Offline review does not need AWS.** Live capture and explicitly requested dynamic attribution do contact configured AWS or identity services. Optional attribution adapters support Identity Center, Entra ID and Vault; their configuration, evidence handling and coverage limits are documented in [session attribution](docs/session-attribution.md). Retained original records can contain sensitive data: protect the local evidence/cache and exported reports accordingly.
 
-## How it works
+**Live capture requires an existing trail logging in the chosen Region.** Select an authenticated profile, verify the caller, and explicitly start capture. CloudMon provisions its own EventBridge rule and SQS queue; it does not modify the trail. Stopping consumption or closing the app preserves saved evidence and resource handles. Resume explicitly, or choose **Remove infrastructure** to delete the rule and queue. Removal loses unread queued messages; AWS charges and queue retention can still apply while CloudMon is closed.
 
-- The backend is Go (via Wails), with DuckDB linked into the application. One persistent engine shares the saved evidence database between a serialized writer and a bounded pool of readers. No separate database installation or extracted executable is needed.
-- Ingested CloudTrail lands in an on-disk DuckDB table. DuckDB streams and queries from disk, so multi-gigabyte dumps stay memory-bounded.
-- The React front end never holds the whole dataset. It requests a window of rows plus aggregates (facets, histogram, stats) over the Wails bridge, so it stays responsive at any dataset size.
-- Live capture provisions one EventBridge rule and one SQS queue against a trail you already own, then polls the queue. It never modifies your trail, and it removes the rule and queue when you stop.
-
-## Features
-
-**Ingest**
-- Import CloudTrail exports fully offline, no AWS access needed: JSON, CSV, NDJSON, gzip, single files or whole folders, S3 log objects, and the console "Event history -> Download" exports.
-- Or capture live from an existing trail, streaming management events into a follow/pause tail.
-
-**Investigate**
-- Query language: field operators (`=`, `!=`, `~` regex, `:` contains, `*` `?` wildcards), boolean `and` / `or` / `not`, and parentheses.
-- Consistent search snapshots, stable paging during capture, and [complete filtered export](docs/query-snapshots.md) beyond the loaded-row limit.
-- Facet sidebar, a brushable time histogram, and a live stats bar (errors, principals, sources, regions, span).
-- Assumed-role lineage: trace an AssumeRole session back to the identity that started the chain, or open the full lineage graph.
-- [Personal labels](docs/local-aliases.md): local names for exact accounts, ARNs and source addresses, displayed alongside original evidence.
-- [Sigma investigation](docs/sigma-investigation.md): exact numeric matching, clear unsupported-rule diagnostics, cancellable snapshot runs, per-selection explanations, and suites of up to 25 rules.
-- Lenses: errors-only, hide read-only, and a tunable "sensitive API" highlight.
-
-**Operate**
-- Keyboard-first: `j`/`k`/`g`/`G` to move, `Enter` to expand, `/` to filter, `f` to pivot, `Ctrl+K` for the command palette.
-- Column presets, drag to reorder and resize, density, timezone, and themes.
-- Export the current selection back out as re-importable CloudTrail JSON.
+`scripts/gen-demo-events.ps1` can generate benign AWS API activity for an authorized live capture; see the script header before running it.
 
 ## Install
 
-Prebuilt binaries for Windows, Linux, and macOS are on the [releases page](https://github.com/humpty-tony/cloudmon/releases). Download the archive for your platform, verify it against `SHA256SUMS`, and extract it. The DuckDB engine is embedded. Windows uses WebView2; Linux requires compatible GTK 3 and WebKit2GTK 4.1 runtime libraries. See [downloads and tagged releases](docs/releases.md) for platform requirements and the release process.
+Prebuilt Windows, Linux and macOS archives are on the [releases page](https://github.com/humpty-tony/cloudmon/releases). Download the archive for your platform, verify it against `SHA256SUMS`, and extract it. DuckDB is embedded; no database server is needed.
 
-### Build from source
+- **Windows / amd64:** requires WebView2.
+- **Linux / amd64:** requires compatible GTK 3, WebKit2GTK 4.1 and C++ runtime libraries; the release build targets the Ubuntu 22.04 ABI baseline.
+- **macOS / universal:** Intel and Apple Silicon executable. macOS builds are not notarized, and Windows builds are not Authenticode-signed.
 
-CloudMon is built with Wails. Supported targets are **windows/amd64**, **linux/amd64**, and **macOS (universal: Intel and Apple Silicon)**. The native build matrix tests each supported operating system and verifies both architectures in the macOS executable.
+See [downloads, runtime requirements and tagged releases](docs/releases.md), including the Linux software-rendering fallback.
+
+## Build from source
+
+Build on the target operating system. Cross-compiling the embedded DuckDB dependencies requires a compatible C/C++ cross-toolchain.
 
 ### Prerequisites
-- Go 1.25+ (see `go.mod`)
-- Node.js 18+ and npm
-- Wails CLI v2: `go install github.com/wailsapp/wails/v2/cmd/wails@latest`
-- Linux only: GTK and WebKit2GTK dev packages, via `make deps` (or `sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev`)
-- A C/C++ compiler for the embedded DuckDB library: GCC on Linux, Xcode command-line tools on macOS, or MinGW-w64 GCC on Windows. CGO must be enabled.
 
-`wails doctor` verifies the toolchain.
+- Go 1.25+ (the module version is in `go.mod`).
+- Node.js 22 and npm, matching CI.
+- The pinned Wails CLI: `go install github.com/wailsapp/wails/v2/cmd/wails@v2.13.0`.
+- A C/C++ compiler with CGO enabled: GCC on Linux, Xcode command-line tools on macOS, or MinGW-w64 GCC on Windows.
+- Linux: GTK 3 and WebKit2GTK 4.1 development packages. On Debian/Ubuntu, `make deps` installs `libgtk-3-dev` and `libwebkit2gtk-4.1-dev`; other distributions need equivalent packages.
 
-### Build
+Run `wails doctor` to check the toolchain. Go fetches the pinned DuckDB driver and static libraries during the build.
 
-The Go module pins the DuckDB Go driver and its prebuilt static libraries. Go
-fetches them during the build; the old CLI download step is no longer needed.
-Build on the target OS (cross-compiling now requires a compatible C cross-compiler).
+### Commands
 
-- **Windows**: install a compatible [MinGW-w64 GCC toolchain](https://duckdb.org/docs/current/clients/go/troubleshoot), add `C:\msys64\ucrt64\bin` to `PATH`, and set `CGO_ENABLED=1`:
-  ```powershell
-  $env:CGO_ENABLED = '1'
-  $env:PATH = "C:\msys64\ucrt64\bin;$env:PATH"
-  wails build -platform windows/amd64
-  ```
-- **macOS** (on a Mac with Xcode command-line tools):
-  ```
-  wails build -platform darwin/universal
-  ```
-- **Linux** (with GCC and the GTK/WebKit packages above):
-  ```
-  make build
-  ```
+**Linux:**
 
-The binary is written to `build/bin/`. Run it directly, or use `wails dev` (`make dev` on Linux) for hot reload.
+```sh
+make build
+```
 
-## Usage
+**macOS:**
 
-- **Reuse hunt configurations.** Save named hunts on this device with a copy of their exact filter scope. Load deliberately and rerun against the current evidence. See [saved hunts](docs/saved-hunts.md).
-- **Hunt across evidence.** Use **Hunts** for bulk IP/CIDR, key-ID, event-ID and ARN searches, or correlate [two to five ordered events](docs/ordered-sequences.md) for the same recorded principal/credential within one complete-sequence window. Matches expose their source records, scope and limitations. See [investigation hunts](docs/investigation-hunts.md).
-- **Analyze activity.** Use **Analysis** for activity rankings, exact entity drilldowns, and comparisons against the preceding equal time window. Results explain scope, missing fields and evidence gaps; original records remain accessible. See [activity analysis](docs/activity-analysis.md).
-- **Import a dump.** Point CloudMon at a CloudTrail JSON/CSV export, an S3 log object, or a folder of logs. No credentials required.
-- **Capture live.** Pick an authenticated AWS profile and region, verify identity, and start. CloudMon provisions an EventBridge rule and SQS queue on your existing trail and streams events. Closing the app pauses consumption and preserves the local evidence and resource handles. Resume explicitly on the next launch, or use **Remove infrastructure** to delete the rule and queue; unread queued messages are lost on removal. AWS charges and queue retention still apply while CloudMon is closed. Needs a trail already logging in that region.
-- **Share an investigation.** Export the displayed context as a ZIP with a printable HTML report, manifest, exact event JSON and retained source observations. [Report exports](docs/investigation-reports.md) disclose snapshot, correlation and result-cap limits.
-- **Recover and inspect evidence.** Reopen saved evidence without AWS access. Expand an event and choose **Sources & hashes** to inspect original records, source locations, duplicate observations, and byte variants. Imports replace the dataset only after all input records validate and commit. See [evidence and recovery](docs/evidence-recovery.md).
-- **Generate demo activity.** `scripts/gen-demo-events.ps1` emits benign AWS API calls so a live capture has something to show. See the script header for options.
+```sh
+wails build -platform darwin/universal
+```
+
+**Windows**, with MinGW-w64 GCC available (adjust the path to your installation):
+
+```powershell
+$env:CGO_ENABLED = '1'
+$env:PATH = "C:\msys64\ucrt64\bin;$env:PATH"
+wails build -platform windows/amd64
+```
+
+Output is written to `build/bin/`. Use `make dev` on Linux or `wails dev` on macOS/Windows for hot reload. CI runs native builds, backend/frontend checks and package verification for each supported platform. Browser checks are distinct from native desktop E2E; the verified Linux import → browse → inspect/lineage → hunt → export smoke is recorded in [native E2E verification](docs/ui-reviews/native-e2e.md).
 
 ## AWS permissions
 
-Only live capture touches AWS; importing a dump is fully offline.
+**Local imports and offline review:** no AWS access or IAM permissions required.
 
-**Import a dump** needs no AWS access at all: it reads a local file, with no credentials or IAM permissions.
+**Live capture:** verifies the caller, checks the existing trail, and creates/consumes/removes its own capture resources. Scope resource permissions to the `cloudmon-*` rules and queues where the service permits:
 
-**Live capture** verifies the caller, checks that a trail is feeding the region, then creates, polls, and tears down its own EventBridge rule and SQS queue. Grant the profile these actions (you can scope them to the `cloudmon-*` rule and queue it creates):
-
-| Action | Why |
+| Actions | Purpose |
 | --- | --- |
-| `cloudtrail:DescribeTrails`, `cloudtrail:GetTrailStatus`, `cloudtrail:GetEventSelectors` | Preflight (read-only): confirm a trail is actively logging in the region |
-| `sqs:CreateQueue`, `sqs:GetQueueAttributes`, `sqs:GetQueueUrl`, `sqs:SetQueueAttributes` | Create/recover the queue and attach the policy that lets EventBridge deliver to it |
-| `events:PutRule`, `events:PutTargets` | Create the capture rule and point it at the queue |
-| `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:ChangeMessageVisibility` | Consume events and renew visibility until the local commit |
-| `events:RemoveTargets`, `events:DeleteRule`, `sqs:DeleteQueue` | Remove the rule and queue only through the explicit cleanup action |
+| `cloudtrail:DescribeTrails`, `cloudtrail:GetTrailStatus`, `cloudtrail:GetEventSelectors` | Read-only trail preflight |
+| `sqs:CreateQueue`, `sqs:GetQueueAttributes`, `sqs:GetQueueUrl`, `sqs:SetQueueAttributes` | Create/recover the queue and delivery policy |
+| `events:PutRule`, `events:PutTargets` | Create the capture rule and target |
+| `sqs:ReceiveMessage`, `sqs:DeleteMessage`, `sqs:ChangeMessageVisibility` | Consume and acknowledge committed events |
+| `events:RemoveTargets`, `events:DeleteRule`, `sqs:DeleteQueue` | Explicit infrastructure removal |
 
-`sts:GetCallerIdentity` is also called, to confirm who you are, but it needs no IAM grant (AWS allows it for any valid credentials). The connect screen lists this same set per mode before you start.
+Capture also calls `sts:GetCallerIdentity` to show the authenticated caller. The connection screen lists the required actions before starting.
+
+**Dynamic lineage resolution:** is separately opt-in. It can use CloudTrail history and configured identity-provider APIs rather than the capture queue. See [source configuration, credential handling and bounded coverage](docs/session-attribution.md); capture permissions alone do not imply every enrichment source is available.
 
 ## Project layout
-- `app.go`, `main.go` - Wails backend and bindings
-- `internal/store` - DuckDB-backed query engine (ingest, windows, aggregates, lineage, Sigma)
-- `internal/awsflow` - live capture (profiles, STS, EventBridge/SQS provisioning, polling)
-- `internal/ingest` - dump parsing (JSON/CSV/folders/gzip)
-- `frontend/src` - React/TypeScript UI
+
+- `app.go`, `main.go` — native application and Wails bindings.
+- `internal/store` — DuckDB evidence, search, aggregates, correlation, hunts and rules.
+- `internal/ingest` — local dump parsing.
+- `internal/awsflow` — profile selection, preflight, provisioning and capture.
+- `internal/attribution` — optional historical/identity-source enrichment.
+- `frontend/src` — React/TypeScript desktop UI.
+- `scripts/release.py`, `.github/workflows/build.yml` — versioning, platform packages and tagged publication.
 
 ## License
 
