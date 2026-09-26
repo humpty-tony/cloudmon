@@ -1,16 +1,24 @@
 # Session attribution in lineage
 
-Open an event → **View lineage** → **Sources & settings**, then **Search AWS history**.
+Open an event → **View lineage**. Local and saved evidence loads automatically. If
+credential ancestry is incomplete, click **Resolve lineage dynamically**. There is no
+per-lineage settings panel or separate source-run button. Completed lineages do not
+offer the fallback action; partial results preserve supported evidence and explain gaps.
+Optional **Show lookup details** reveals source coverage and failures.
+
 Opening lineage itself stays local. Remote lookup is explicit, cancellable, and does not
 append historical events to the browsing dataset, change its filters, or stop capture.
 
 ## Sources
 
-- **CloudTrail (primary):** selected AWS profile/default credential chain and Regions;
+- **CloudTrail (primary):** reuses the normal AWS connection (or saved capture profile
+  on startup), otherwise saved advanced config/default credentials, and configured Regions;
   defaults to the event Region plus `us-east-1`. Shows the account established by
   GetCallerIdentity, queried window and coverage outcome. Searches STS event history
   for exact returned access-key IDs, not just requests signed with that key.
-- **Identity Center:** configure its home Region. Uses recorded `onBehalfOf` store/user
+- **Identity Center:** infers the home Region from the selected profile's local SSO
+  configuration, including source-profile chains, unless explicitly configured.
+  Uses recorded `onBehalfOf` store/user
   identifiers with DescribeUser; does not infer identity from an SSO role name.
 - **Entra ID (optional):** tenant, Graph token environment-variable name, and explicitly
   attested exact role ARN/time-interval mappings. Verify the provider controls the

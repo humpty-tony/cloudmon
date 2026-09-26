@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"io"
 	"net/url"
 	"os"
@@ -44,7 +45,7 @@ func (a *App) GetAttributionSettings() (attribution.Config, error) {
 	}
 	raw, err := readAttributionFile(filepath.Join(dir, "settings.json"), 64<<10)
 	if errors.Is(err, os.ErrNotExist) {
-		return cfg, nil
+		return a.connectionAttributionSettings(cfg), nil
 	}
 	if err != nil {
 		return cfg, err
@@ -52,7 +53,60 @@ func (a *App) GetAttributionSettings() (attribution.Config, error) {
 	if err = json.Unmarshal(raw, &cfg); err != nil {
 		return cfg, fmt.Errorf("invalid attribution settings")
 	}
+	cfg = a.connectionAttributionSettings(cfg)
 	return cfg, validateAttributionSettings(cfg)
+}
+
+// Reuse the normal AWS connection; reading shared SSO config performs no network
+// requests and never starts a login, capture, credential process or provisioning.
+func (a *App) connectionAttributionSettings(cfg attribution.Config) attribution.Config {
+	a.mu.Lock()
+	connection := a.cfg
+	a.mu.Unlock()
+	if connection.Mode != "" && connection.Mode != "import-dump" {
+		cfg.AWSProfile = connection.Profile
+	} else if connection.Mode == "" {
+		a.capMu.Lock()
+		saved := a.capProfile
+		a.capMu.Unlock()
+		if saved != "" {
+			cfg.AWSProfile = saved
+		}
+	}
+	if cfg.IdentityCenterRegion != "" {
+		return cfg
+	}
+	profile := cfg.AWSProfile
+	if profile == "" {
+		profile = os.Getenv("AWS_PROFILE")
+	}
+	if profile == "" {
+		profile = os.Getenv("AWS_DEFAULT_PROFILE")
+	}
+	if profile == "" {
+		profile = "default"
+	}
+	shared, err := awsconfig.LoadSharedConfigProfile(context.Background(), profile, func(o *awsconfig.LoadSharedConfigOptions) {
+		// Region discovery needs config only, not the credentials file.
+		o.CredentialsFiles = []string{}
+		if file := os.Getenv("AWS_CONFIG_FILE"); file != "" {
+			o.ConfigFiles = []string{file}
+		}
+	})
+	if err != nil {
+		return cfg
+	}
+	for current, depth := &shared, 0; current != nil && depth < 12; current, depth = current.Source, depth+1 {
+		if current.SSOSession != nil && current.SSOSession.SSORegion != "" {
+			cfg.IdentityCenterRegion = current.SSOSession.SSORegion
+			break
+		}
+		if current.SSORegion != "" {
+			cfg.IdentityCenterRegion = current.SSORegion
+			break
+		}
+	}
+	return cfg
 }
 
 var attributionEnv = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]{0,127}$`)

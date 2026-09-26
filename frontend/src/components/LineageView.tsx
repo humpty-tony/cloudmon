@@ -71,7 +71,7 @@ export function LineageView(props: Props) {
 function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: Props) {
   const [nodes, setNodes] = useState<Map<string, GraphNode>>(new Map());
   const [edges, setEdges] = useState<GraphEdge[]>([]);
-  const [meta, setMeta] = useState<{ currentId: string; rootId: string; notes: string[] }>({ currentId: "", rootId: "", notes: [] });
+  const [meta, setMeta] = useState<{ currentId: string; rootId: string; notes: string[]; applicable:boolean }>({ currentId: "", rootId: "", notes: [],applicable:false });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
@@ -123,7 +123,7 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
   useEffect(() => {
     const request = ++generation.current;
     setLoading(true); setError(""); setExpSessions(new Set()); setExpEvents(new Set()); setBusy(new Set()); busyRef.current.clear();
-    setNodes(new Map()); setEdges([]); setMeta({currentId:"",rootId:"",notes:[]});
+    setNodes(new Map()); setEdges([]); setMeta({currentId:"",rootId:"",notes:[],applicable:false});
     snapshotRef.current = undefined;
     graphRef.current = {nodes:new Map(),edges:[]};
     didCenter.current = false;
@@ -137,7 +137,7 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
         graphRef.current = {nodes:new Map(t.nodes.map(n=>[n.id,n])),edges:t.edges};
         setNodes(new Map(t.nodes.map((n) => [n.id, n])));
         setEdges(t.edges);
-        setMeta({ currentId: t.currentId, rootId: t.rootId, notes: t.notes || [] });
+        setMeta({ currentId: t.currentId, rootId: t.rootId, notes: t.notes || [],applicable:t.applicable });
         setSelected(t.currentId || null);
         logInfo(`lineage graph opened seq=${seq} nodes=${t.nodes.length} edges=${t.edges.length}`);
       })
@@ -335,7 +335,7 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
     const t=value.graph;if(t.snapshot?.generation!==snapshotRef.current?.generation||t.snapshot?.maxSeq!==snapshotRef.current?.maxSeq)return;
     generation.current++;busyRef.current.clear();setBusy(new Set());setExpSessions(new Set());setExpEvents(new Set());
     graphRef.current={nodes:new Map(t.nodes.map(n=>[n.id,n])),edges:t.edges};
-    didCenter.current=false;setNodes(graphRef.current.nodes);setEdges(t.edges);setMeta({currentId:t.currentId,rootId:t.rootId,notes:t.notes??[]});setSelected(t.currentId||null);setAttribution(value);
+    didCenter.current=false;setNodes(graphRef.current.nodes);setEdges(t.edges);setMeta({currentId:t.currentId,rootId:t.rootId,notes:t.notes??[],applicable:t.applicable});setSelected(t.currentId||null);setAttribution(value);
   },[]);
 
   return createPortal(
@@ -354,7 +354,7 @@ function LineageContent({ seq, initialSnapshot, eventLabel, onClose, onPivot }: 
           <button ref={closeRef} className="lgv-close" onClick={onClose}>✕ Close</button>
         </div>
 
-        {!loading&&snapshotRef.current&&<LineageEnrichment key={`${seq}:${snapshotRef.current.generation}:${snapshotRef.current.maxSeq}`} seq={seq} snapshot={snapshotRef.current} report={attribution} onResult={applyAttribution}/>}
+        {!loading&&snapshotRef.current&&<LineageEnrichment key={`${seq}:${snapshotRef.current.generation}:${snapshotRef.current.maxSeq}`} seq={seq} snapshot={snapshotRef.current} unresolved={meta.applicable&&nodes.get(meta.rootId)?.kind!=="origin"} report={attribution} onResult={applyAttribution}/>}
         {meta.notes.length>0 && <div className="lgv-notes">{meta.notes.map((n,i)=><div key={i} className="lgv-note">{n}</div>)}</div>}
         {error && <div className="lgv-error" role="alert">{error} <button onClick={()=>setRetry(n=>n+1)}>Reload lineage</button></div>}
         {loading ? (

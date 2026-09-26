@@ -6,6 +6,15 @@
 
 **ACTIVE PLAN:** [Approved analyst-review tasks](analyst-review-tasks.md). The user approved the new mock and authorized shipping it in separately committed slices. Two narrow workers own facets and inspector; parent owns shared integration. Older pass numbering below is historical. Shipping first, focused checks only, one final integration pass.
 
+### Simplified dynamic lineage resolution
+
+- [x] Remove the per-lineage settings panel and individual source expanders from the main workflow.
+- [x] Show **Resolve lineage dynamically** only for applicable, incomplete credential ancestry; complete/local direct identities have no fallback action.
+- [x] Reuse the current AWS connection (saved capture on startup) and infer missing SSO home Region from local shared configuration. No login, provisioning or automatic remote lookup on open.
+- [x] Preserve cancellation, offline cache, original evidence, partial results and browse return. Source coverage is optional **Show lookup details** output, not per-source run controls.
+- [x] Focused native connection/cache tests, two-size actual-App smoke and native build pass. Before/after screenshots: `frontend/test-results/attribution/lineage-{unresolved,enriched}-1440.png` (synthetic provider responses through real native adapters/store).
+- [x] Bounded description-only UX/logic review found no blockers; this was not an independent implementation audit. Parent inspected the rendered unresolved state; focused checks and native build passed. Changes committed with this checklist. Capture remains untouched.
+
 ### Fira Code readability trial
 
 - [x] Bundle Fira Code locally with its license; retain sans-serif controls and literal evidence/query glyphs.
